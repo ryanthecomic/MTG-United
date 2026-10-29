@@ -105,20 +105,7 @@ namespace MTGUnited
             var trayCards = new List<CardData>();
             foreach (var c in s.Prompt.SelectableCardData)
                 if (!placements.ContainsKey(c.Id)) trayCards.Add(c);
-            trayBg.SetVisible(trayCards.Count > 0);
-            if (trayCards.Count > 0)
-            {
-                trayTitle.text = s.Prompt.Message;
-                float trayH = 200;
-                float w = trayH * 0.714f;
-                float spacing = Mathf.Min(w + 10, (1060 - w) / Mathf.Max(1, trayCards.Count - 1));
-                float total = spacing * (trayCards.Count - 1) + w;
-                float x = 850 - total / 2 + w / 2;
-                for (int i = 0; i < trayCards.Count; i++)
-                {
-                    placements[trayCards[i].Id] = new Placement { Data = trayCards[i], Pos = new Vector2(x + i * spacing, 590 + 120), Size = new Vector2(w, trayH), Order = 5000 + i };
-                }
-            }
+            gc.Tray.Render(s, trayCards);
 
             // ---------------------------------------------------------------- apply
             foreach (var kv in placements)

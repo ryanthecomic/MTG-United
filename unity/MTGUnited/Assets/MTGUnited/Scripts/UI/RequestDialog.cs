@@ -21,6 +21,8 @@ namespace MTGUnited
         int[] amounts;
         readonly List<Text> amountLabels = new List<Text>();
         InputField textInput;
+        List<string> allNames, suggestedNames;
+        RectTransform nameList;
         bool peeking;
 
         public bool IsOpen => gameObject.activeSelf;
@@ -69,6 +71,7 @@ namespace MTGUnited
             tiles.Clear();
             amountLabels.Clear();
             textInput = null;
+            nameList = null;
             foreach (Transform c in body) Destroy(c.gameObject);
             gameObject.SetActive(true);
             transform.SetAsLastSibling();
@@ -84,6 +87,7 @@ namespace MTGUnited
                 case "confirm": BuildConfirm(); break;
                 case "text": BuildText(); break;
                 case "distribute": BuildDistribute(); break;
+                case "name": BuildName(); break;
                 default:
                     title.text = "Unsupported question from Forge: " + req.Str("kind");
                     break;
@@ -123,7 +127,23 @@ namespace MTGUnited
                 v.childControlWidth = false; v.childForceExpandWidth = false;
             }
 
-            for (int i = 0; i < options.Count; i++)
+            // Big card lists (library searches): nonlands first, then lands, each A-Z. Answers still use Forge's indices.
+            var order = new List<int>();
+            for (int i = 0; i < options.Count; i++) order.Add(i);
+            if (anyCards && options.Count > 8)
+            {
+                System.Func<int, CardData> cardAt = i => CardData.From((options[i] as Dictionary<string, object>).Obj("card"));
+                order.Sort((a, b) =>
+                {
+                    var ca = cardAt(a); var cb = cardAt(b);
+                    bool la = ca != null && ca.IsLand, lb = cb != null && cb.IsLand;
+                    if (la != lb) return la ? 1 : -1;
+                    return string.Compare(ca?.Name ?? "", cb?.Name ?? "", System.StringComparison.OrdinalIgnoreCase);
+                });
+            }
+            tiles.AddRange(new (Image, Text)[options.Count]);
+
+            foreach (int i in order)
             {
                 var o = options[i] as Dictionary<string, object>;
                 int idx = i;
@@ -154,7 +174,7 @@ namespace MTGUnited
                 }
                 var badge = UIKit.Label("Badge", tile.transform, "", 34, Theme.Accent, TextAnchor.UpperRight, FontStyle.Bold).Outline(2);
                 badge.rectTransform.Stretch(6, 6, 10, 4);
-                tiles.Add((tile, badge));
+                tiles[idx] = (tile, badge);
             }
 
             if (reveal)
@@ -223,7 +243,7 @@ namespace MTGUnited
                 status.text = "Assigned " + total + " of " + amount;
                 confirm.interactable = total == amount;
             }
-            else
+            else if (kind != "name")
             {
                 status.text = "";
                 confirm.interactable = true;
@@ -315,6 +335,87 @@ namespace MTGUnited
             UpdateStatus();
         }
 
+        // ------------------------------------------------------------------ name a card
+
+        /// <summary>Search box over every card name; cards known in this game are listed before you type.</summary>
+        void BuildName()
+        {
+            confirm.SetVisible(false);
+            allNames = new List<string>();
+            foreach (var n in req.Arr("names")) allNames.Add(n.ToString());
+            suggestedNames = new List<string>();
+            foreach (var n in req.Arr("suggested")) suggestedNames.Add(n.ToString());
+            if (req.Int("min") == 0) { skip.SetVisible(true); UIKit.LabelOf(skip).text = "None"; }
+
+            textInput = UIKit.Input("Search", body, "Type a card name...", false, 24);
+            var ir = textInput.GetComponent<RectTransform>();
+            ir.anchorMin = new Vector2(0.2f, 1); ir.anchorMax = new Vector2(0.8f, 1); ir.pivot = new Vector2(0.5f, 1);
+            ir.sizeDelta = new Vector2(0, 58); ir.anchoredPosition = Vector2.zero;
+            textInput.onValueChanged.AddListener(_ => RefreshNames());
+            textInput.ActivateInputField();
+
+            var scroll = UIKit.Rect("Scroll", body).Stretch(0, 0, 0, 70);
+            var sr = scroll.gameObject.AddComponent<ScrollRect>();
+            scroll.gameObject.AddComponent<RectMask2D>();
+            nameList = UIKit.Rect("List", scroll);
+            nameList.anchorMin = new Vector2(0, 1); nameList.anchorMax = new Vector2(1, 1); nameList.pivot = new Vector2(0.5f, 1);
+            var grid = nameList.gameObject.AddComponent<GridLayoutGroup>();
+            grid.cellSize = new Vector2(400, 46);
+            grid.spacing = new Vector2(10, 8);
+            grid.childAlignment = TextAnchor.UpperCenter;
+            nameList.gameObject.AddComponent<ContentSizeFitter>().verticalFit = ContentSizeFitter.FitMode.PreferredSize;
+            sr.content = nameList; sr.horizontal = false; sr.scrollSensitivity = 40;
+            RefreshNames();
+        }
+
+        void RefreshNames()
+        {
+            if (nameList == null) return;
+            foreach (Transform c in nameList) Destroy(c.gameObject);
+            string q = textInput != null ? textInput.text.Trim() : "";
+            List<string> shown;
+            if (q.Length == 0)
+            {
+                shown = suggestedNames;
+                status.text = suggestedNames.Count > 0
+                    ? "Known in this game (your deck and cards you've seen). Type to search all " + allNames.Count + " names."
+                    : "Type to search all " + allNames.Count + " card names.";
+            }
+            else
+            {
+                // Known cards first, then names starting with the query, then names containing it.
+                string ql = q.ToLowerInvariant();
+                var known = new List<string>(); var starts = new List<string>(); var contains = new List<string>();
+                var knownSet = new HashSet<string>(suggestedNames);
+                foreach (var n in allNames)
+                {
+                    string nl = n.ToLowerInvariant();
+                    int at = nl.IndexOf(ql, System.StringComparison.Ordinal);
+                    if (at < 0) continue;
+                    if (knownSet.Contains(n)) known.Add(n);
+                    else if (at == 0) starts.Add(n);
+                    else contains.Add(n);
+                    if (starts.Count + contains.Count > 300) break;
+                }
+                shown = new List<string>(known);
+                shown.AddRange(starts);
+                shown.AddRange(contains);
+                if (shown.Count > 60) shown = shown.GetRange(0, 60);
+                status.text = shown.Count == 0 ? "No card named like \"" + q + "\"." : "Click a name to choose it.";
+            }
+
+            var knownNames = new HashSet<string>(suggestedNames);
+            foreach (var n in shown)
+            {
+                string name = n;
+                var b = UIKit.Button("Name", nameList, name, knownNames.Contains(name) ? new Color(0.30f, 0.24f, 0.12f) : Theme.PanelLight,
+                    () => { gc.Preview.Hide(); Respond(new Dictionary<string, object> { { "name", name } }); }, 17);
+                var pe = b.gameObject.AddComponent<PointerEvents>();
+                pe.OnEnter = () => gc.Preview.Show(new CardData { Name = name }, false);
+                pe.OnExit = () => gc.Preview.Hide();
+            }
+        }
+
         // ------------------------------------------------------------------ answers
 
         void Submit()
@@ -346,6 +447,7 @@ namespace MTGUnited
         {
             string kind = req.Str("kind");
             if (kind == "text") { Respond(new Dictionary<string, object> { { "text", null } }); return; }
+            if (kind == "name") { Respond(new Dictionary<string, object> { { "name", null } }); return; }
             if (kind == "order")
             {
                 // Keep the given order.

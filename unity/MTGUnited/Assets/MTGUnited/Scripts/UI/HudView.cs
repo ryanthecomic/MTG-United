@@ -78,7 +78,7 @@ namespace MTGUnited
             ((RectTransform)undo.transform).Place(1750, 20, 150, 48);
 
             // Turn banner + phase track across the middle of the board.
-            turnText = UIKit.Label("Turn", rt, "", 18, Theme.TextDim, TextAnchor.MiddleLeft, FontStyle.Bold);
+            turnText = UIKit.Label("Turn", rt, "", 18, Theme.TextDim, TextAnchor.MiddleLeft, FontStyle.Bold).Titled();
             turnText.rectTransform.Place(24, 556, 250, 36);
             float x = 280;
             float w = 1140f / Phases.Length;
@@ -110,7 +110,7 @@ namespace MTGUnited
             // Stack, right side above the prompt.
             stackBg = UIKit.Panel("Stack", rt, new Color(0.08f, 0.07f, 0.12f, 0.95f));
             stackBg.rectTransform.Place(1590, 372, 310, 220);
-            var title = UIKit.Label("Title", stackBg.transform, "STACK", 14, Theme.Accent, TextAnchor.UpperCenter, FontStyle.Bold);
+            var title = UIKit.Label("Title", stackBg.transform, "STACK", 14, Theme.Accent, TextAnchor.UpperCenter, FontStyle.Bold).Titled();
             title.rectTransform.Stretch(0, 0, 0, 6);
             stackList = UIKit.Rect("List", stackBg.transform).Stretch(8, 8, 8, 28);
             stackBg.gameObject.SetActive(false);

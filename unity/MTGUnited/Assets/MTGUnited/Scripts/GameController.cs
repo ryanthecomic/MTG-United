@@ -21,6 +21,7 @@ namespace MTGUnited
 
         public BoardView BoardView { get; private set; }
         public HudView Hud { get; private set; }
+        public SelectionTray Tray { get; private set; }
         public RequestDialog Dialog { get; private set; }
         public MainMenu Menu { get; private set; }
         public CardPreview Preview { get; private set; }
@@ -138,6 +139,7 @@ namespace MTGUnited
 
             BoardView = BoardView.Create(Board, this);
             Hud = HudView.Create(Board, this);
+            Tray = SelectionTray.Create(Board, this);
 
             OverlayLayer = UIKit.Rect("Overlays", canvasGo.transform).Stretch();
             ZoneViewer = ZoneViewer.Create(OverlayLayer, this);
@@ -155,6 +157,12 @@ namespace MTGUnited
 
         void Update()
         {
+            if (Bridge == null)
+            {
+                // Scripts were reloaded during Play mode (fields reset). Reconnect instead of failing every frame.
+                Bridge = new BridgeClient { Port = PlayerPrefs.GetInt("port", 7777) };
+                Debug.LogWarning("[MTGUnited] Scripts reloaded while playing; reconnecting to the bridge.");
+            }
             if (!Bridge.Connected && !Bridge.Connecting)
             {
                 reconnectTimer -= Time.unscaledDeltaTime;
@@ -207,6 +215,16 @@ namespace MTGUnited
                     Hud.Render(State);
                     ZoneViewer.Refresh(State);
                     MaybeAutoPay(State);
+                    break;
+                case "prompt":
+                    // The bridge couldn't package the full board this time; still show what Forge is asking for.
+                    if (State != null)
+                    {
+                        State.Prompt = PromptData.From(msg.Obj("prompt"), State);
+                        BoardView.Render(State);
+                        Hud.Render(State);
+                        MaybeAutoPay(State);
+                    }
                     break;
                 case "gameStarted":
                     InGame = true;

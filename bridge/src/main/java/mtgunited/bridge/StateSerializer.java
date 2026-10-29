@@ -49,14 +49,28 @@ final class StateSerializer {
         final JsonArray players = new JsonArray();
         for (final PlayerView p : snapshot(gv.getPlayers())) {
             if (p.getHasPriority()) { priority = p.getId(); }
-            players.add(player(p, gv));
+            try {
+                players.add(player(p, gv));
+            } catch (final RuntimeException ex) {
+                // Never let one bad object stop the whole update; send what we can.
+                gui.logOnce("Serializing player " + p.getName(), ex);
+                final JsonObject minimal = new JsonObject();
+                minimal.addProperty("id", p.getId());
+                minimal.addProperty("name", p.getName());
+                minimal.addProperty("life", p.getLife());
+                players.add(minimal);
+            }
         }
         o.addProperty("priorityPlayer", priority);
         o.add("players", players);
 
         final JsonArray stack = new JsonArray();
         for (final StackItemView si : snapshot(gv.getStack())) {
-            stack.add(stackItem(si));
+            try {
+                stack.add(stackItem(si));
+            } catch (final RuntimeException ex) {
+                gui.logOnce("Serializing stack item", ex);
+            }
         }
         o.add("stack", stack);
         o.add("combat", combat(gv.getCombat()));
@@ -149,6 +163,20 @@ final class StateSerializer {
     }
 
     JsonObject card(final CardView c) {
+        try {
+            return cardUnsafe(c);
+        } catch (final RuntimeException ex) {
+            gui.logOnce("Serializing card " + c.getId(), ex);
+            final JsonObject o = new JsonObject();
+            o.addProperty("id", c.getId());
+            o.addProperty("hidden", true);
+            o.addProperty("name", "Card");
+            o.addProperty("zone", c.getZone() == null ? "" : c.getZone().name());
+            return o;
+        }
+    }
+
+    private JsonObject cardUnsafe(final CardView c) {
         final JsonObject o = new JsonObject();
         o.addProperty("id", c.getId());
         final boolean visible = gui.mayView(c);
@@ -178,6 +206,7 @@ final class StateSerializer {
         }
 
         final CardStateView st = c.getCurrentState();
+        gui.noteSeen(st.getName());
         o.addProperty("name", st.getName());
         o.addProperty("oracleName", c.getOracleName());
         o.addProperty("set", st.getSetCode());

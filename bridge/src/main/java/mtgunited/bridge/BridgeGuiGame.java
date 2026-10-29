@@ -7,6 +7,7 @@ import forge.LobbyPlayer;
 import forge.deck.CardPool;
 import forge.game.GameEntityView;
 import forge.game.GameView;
+import forge.game.card.CardFaceView;
 import forge.game.card.CardView;
 import forge.game.phase.PhaseType;
 import forge.game.player.DelayedReveal;
@@ -22,6 +23,7 @@ import forge.localinstance.skin.FSkinProp;
 import forge.player.PlayerZoneUpdate;
 import forge.trackable.TrackableCollection;
 import forge.trackable.TrackableTypes;
+import forge.game.zone.ZoneType;
 import forge.util.FSerializableFunction;
 import forge.util.ITriggerEvent;
 
@@ -54,6 +56,9 @@ public final class BridgeGuiGame extends AbstractGuiGame {
         return t;
     });
     private final AtomicBoolean flushScheduled = new AtomicBoolean(false);
+
+    /** Names of every card the player has legitimately seen this game (theirs, or shown face up). */
+    private final Set<String> seenNames = ConcurrentHashMap.newKeySet();
 
     private final AtomicInteger nextRequestId = new AtomicInteger(1);
     private final Map<Integer, CompletableFuture<JsonObject>> pending = new ConcurrentHashMap<>();
@@ -94,6 +99,7 @@ public final class BridgeGuiGame extends AbstractGuiGame {
         if (!conn.isConnected()) { return; }
         final GameView gv = getGameView();
         if (gv == null) { return; }
+        RuntimeException last = null;
         for (int attempt = 0; attempt < 3; attempt++) {
             try {
                 final JsonObject msg = new JsonObject();
@@ -103,15 +109,60 @@ public final class BridgeGuiGame extends AbstractGuiGame {
                 conn.send(msg);
                 return;
             } catch (final RuntimeException ex) {
-                // The game thread changed something while we were reading it; try again.
-                Log.debug("State snapshot retry: " + ex);
+                // Usually the game thread changed something while we were reading it; try again.
+                last = ex;
                 try { Thread.sleep(10); } catch (final InterruptedException ie) { Thread.currentThread().interrupt(); return; }
             }
         }
-        markDirty();
+        // Still failing: log it, and at least send the prompt so the player is never left on a stale message.
+        logOnce("State snapshot failed", last);
+        try {
+            final JsonObject p = new JsonObject();
+            p.addProperty("t", "prompt");
+            p.add("prompt", promptJson());
+            conn.send(p);
+        } catch (final RuntimeException ex) {
+            logOnce("Prompt snapshot failed", ex);
+        }
+        if (flushScheduled.compareAndSet(false, true)) {
+            sync.schedule(this::flushNow, 250, TimeUnit.MILLISECONDS);
+        }
     }
 
+    private final Set<String> loggedErrors = ConcurrentHashMap.newKeySet();
+
+    /** Logs an exception with its stack trace the first time a given failure is seen. */
+    void logOnce(final String what, final Throwable ex) {
+        if (ex == null) { return; }
+        final StackTraceElement top = ex.getStackTrace().length > 0 ? ex.getStackTrace()[0] : null;
+        if (loggedErrors.add(what + ex.getClass().getName() + top)) {
+            Log.error(what + ": " + ex, ex);
+        }
+    }
+
+    /** Forge's visibility check can fail for a card that is mid-move; fall back to the plain rule instead of throwing. */
+    @Override
+    public boolean mayView(final CardView c) {
+        try {
+            return super.mayView(c);
+        } catch (final RuntimeException ex) {
+            logOnce("mayView", ex);
+            try {
+                return c.canBeShownToAny(getLocalPlayers());
+            } catch (final RuntimeException ex2) {
+                return false;
+            }
+        }
+    }
+
+    private String lastLoggedPrompt = "";
+
     private JsonObject promptJson() {
+        final String summary = promptMessage.replace('\n', ' ') + " [" + (okEnabled ? okLabel : "-") + " / " + (cancelEnabled ? cancelLabel : "-") + "]";
+        if (!summary.equals(lastLoggedPrompt)) {
+            lastLoggedPrompt = summary;
+            Log.info(">> prompt: " + summary);
+        }
         final JsonObject p = new JsonObject();
         p.addProperty("message", promptMessage);
         p.addProperty("card", promptCardId);
@@ -153,6 +204,7 @@ public final class BridgeGuiGame extends AbstractGuiGame {
         pending.put(id, future);
         pendingMessages.put(id, body);
         flushNow(); // make sure the board the question refers to is on screen first
+        Log.info(">> request #" + id + " " + kind + ": " + (body.has("title") ? body.get("title").getAsString() : ""));
         conn.send(body);
         try {
             return future.get();
@@ -168,6 +220,7 @@ public final class BridgeGuiGame extends AbstractGuiGame {
     /** A {@code response} message arrived from the client. Runs on the socket thread, never on the EDT. */
     void onResponse(final JsonObject msg) {
         final int id = msg.get("id").getAsInt();
+        Log.info("<< response #" + id);
         final CompletableFuture<JsonObject> f = pending.get(id);
         if (f == null) {
             Log.warn("Response for unknown request " + id);
@@ -234,9 +287,70 @@ public final class BridgeGuiGame extends AbstractGuiGame {
         return out;
     }
 
+    void noteSeen(final String name) {
+        if (name != null && !name.isEmpty()) { seenNames.add(name); }
+    }
+
+    @Override
+    public void resetForNewMatch() {
+        super.resetForNewMatch();
+        seenNames.clear();
+    }
+
+    /**
+     * "Name a card" (Demonic Consultation, Pithing Needle...) lists every card face in Magic. Instead of tens of
+     * thousands of options, send plain names plus the ones known in this game, and let the client search.
+     */
+    private <T> List<T> chooseName(final String message, final int min, final List<T> choices) {
+        final List<String> names = new ArrayList<>(choices.size());
+        final java.util.Map<String, Integer> index = new java.util.HashMap<>();
+        for (int i = 0; i < choices.size(); i++) {
+            final String n = String.valueOf(choices.get(i));
+            names.add(n);
+            index.putIfAbsent(n, i);
+        }
+        // Everything in my own deck counts as known, wherever it is now.
+        final PlayerView mine = me;
+        if (mine != null) {
+            for (final ZoneType z : new ZoneType[] {ZoneType.Library, ZoneType.Hand, ZoneType.Battlefield, ZoneType.Graveyard,
+                    ZoneType.Exile, ZoneType.Command}) {
+                for (final CardView c : StateSerializer.snapshot(mine.getCards(z))) {
+                    if (c.getOwner() != null && c.getOwner().getId() == mine.getId() && c.getCurrentState() != null) {
+                        noteSeen(c.getCurrentState().getName());
+                    }
+                }
+            }
+        }
+        final JsonArray suggested = new JsonArray();
+        final List<String> known = new ArrayList<>(seenNames);
+        java.util.Collections.sort(known);
+        for (final String n : known) {
+            if (index.containsKey(n)) { suggested.add(n); }
+        }
+        final JsonObject body = new JsonObject();
+        body.addProperty("title", message);
+        body.addProperty("min", min);
+        final JsonArray all = new JsonArray();
+        names.forEach(all::add);
+        body.add("names", all);
+        body.add("suggested", suggested);
+        final JsonObject resp = request("name", body);
+        final List<T> result = new ArrayList<>();
+        final JsonElement chosen = resp.get("name");
+        if (chosen != null && !chosen.isJsonNull()) {
+            final Integer i = index.get(chosen.getAsString());
+            if (i != null) { result.add(choices.get(i)); }
+        }
+        if (result.isEmpty() && min > 0) { result.add(choices.get(0)); }
+        return result;
+    }
+
     @Override
     public <T> List<T> getChoices(final String message, final int min, final int max, final List<T> choices, final List<T> selected, final FSerializableFunction<T, String> display) {
         if (choices == null || choices.isEmpty()) { return new ArrayList<>(); }
+        if (min >= 0 && max <= 1 && choices.get(0) instanceof CardFaceView) {
+            return chooseName(message, min, choices);
+        }
         final JsonObject body = new JsonObject();
         body.addProperty("title", message);
         body.addProperty("min", min);

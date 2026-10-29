@@ -157,7 +157,7 @@ namespace MTGUnited
             pr.anchorMin = pr.anchorMax = new Vector2(0.5f, 0.5f);
             pr.sizeDelta = new Vector2(1400, 640);
             panel.gameObject.AddComponent<PointerEvents>(); // swallow clicks so they don't close the viewer
-            v.title = UIKit.Label("Title", panel.transform, "", 26, Theme.Text, TextAnchor.UpperCenter, FontStyle.Bold);
+            v.title = UIKit.Label("Title", panel.transform, "", 26, Theme.Text, TextAnchor.UpperCenter, FontStyle.Bold).Titled();
             v.title.rectTransform.Stretch(0, 0, 0, 14);
             var scroll = UIKit.Rect("Scroll", panel.transform).Stretch(20, 70, 20, 60);
             var sr = scroll.gameObject.AddComponent<ScrollRect>();
@@ -233,7 +233,7 @@ namespace MTGUnited
             var pr = panel.rectTransform;
             pr.anchorMin = pr.anchorMax = new Vector2(0.5f, 0.5f);
             pr.sizeDelta = new Vector2(700, 340);
-            g.title = UIKit.Label("Title", panel.transform, "", 64, Theme.Accent, TextAnchor.UpperCenter, FontStyle.Bold).Outline(2);
+            g.title = UIKit.Label("Title", panel.transform, "", 64, Theme.Accent, TextAnchor.UpperCenter, FontStyle.Bold).Outline(2).Titled();
             g.title.rectTransform.Stretch(0, 0, 0, 30);
             g.sub = UIKit.Label("Sub", panel.transform, "", 22, Theme.Text, TextAnchor.MiddleCenter);
             g.sub.rectTransform.Stretch(20, 120, 20, 120);

@@ -1,4 +1,5 @@
 using UnityEngine;
+using UnityEngine.UI;
 using UnityEngine.Video;
 
 namespace MTGUnited
@@ -13,11 +14,23 @@ namespace MTGUnited
         static bool loaded;
         static Texture2D tableBg, cardBack, cursor;
         static VideoClip menuVideo;
+        static Font titleFont;
+        const string PreferredTitleFont = "NightGeorgia (DEMO)";
 
         public static Texture2D TableBackground { get { Load(); return tableBg; } }
         public static Texture2D CardBack { get { Load(); return cardBack; } }
         public static Texture2D CursorTexture { get { Load(); return cursor; } }
         public static VideoClip MenuVideo { get { Load(); return menuVideo; } }
+
+        /// <summary>First font file (.ttf/.otf) found in Resources/Visuals/Fonts, used for titles. Null if none.</summary>
+        public static Font TitleFont { get { Load(); return titleFont; } }
+
+        /// <summary>Switches a label to the title font when one is installed; otherwise leaves it unchanged.</summary>
+        public static Text Titled(this Text t)
+        {
+            if (TitleFont != null) { t.font = TitleFont; t.fontStyle = FontStyle.Normal; }
+            return t;
+        }
 
         static void Load()
         {
@@ -26,6 +39,13 @@ namespace MTGUnited
             tableBg = Resources.Load<Texture2D>(Root + "Images/BG_Table");
             cardBack = Resources.Load<Texture2D>(Root + "Images/sleeve_weathered_cardback");
             menuVideo = Resources.Load<VideoClip>(Root + "Videos/TableBG");
+            // Preferred title font by file name (without extension); otherwise the first font in the folder.
+            titleFont = Resources.Load<Font>(Root + "Fonts/" + PreferredTitleFont);
+            if (titleFont == null)
+            {
+                var fonts = Resources.LoadAll<Font>(Root + "Fonts");
+                if (fonts != null && fonts.Length > 0) titleFont = fonts[0];
+            }
             var cur = Resources.Load<Texture2D>(Root + "Images/Cursor32");
             if (cur != null) cursor = MakeReadable(cur);
             if (cardBack != null) { cardBack.wrapMode = TextureWrapMode.Clamp; }

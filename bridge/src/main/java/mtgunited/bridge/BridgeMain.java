@@ -62,6 +62,7 @@ public final class BridgeMain {
         }
         System.setProperty("java.awt.headless", "true");
         isolateForgeUserData(new File(forgeGui));
+        Log.toFile(new File(new File(forgeGui).getAbsoluteFile().getParentFile(), "mtgunited-data" + File.separator + "bridge.log"));
 
         guiBase = new BridgeGuiBase(new File(forgeGui).getAbsolutePath());
         GuiBase.setInterface(guiBase);
@@ -142,6 +143,7 @@ public final class BridgeMain {
 
     /** Player actions. Always run on the bridge EDT, as Forge expects. */
     private static void handleAction(final String t, final JsonObject msg) {
+        Log.info("<< " + t + (msg.has("id") ? " " + msg.get("id") : "") + (msg.has("color") ? " " + msg.get("color") : ""));
         final IGameController c = gui.controller();
         if (c == null) {
             Log.warn("Action '" + t + "' ignored: no game in progress");
@@ -202,6 +204,9 @@ public final class BridgeMain {
             final String playerName = msg.has("name") ? msg.get("name").getAsString() : "Player";
             final int opponents = msg.has("opponents") ? Math.max(1, Math.min(5, msg.get("opponents").getAsInt())) : 3;
             final String aiDeckMode = msg.has("aiDecks") ? msg.get("aiDecks").getAsString() : "precon";
+            // fast: plain heuristic AI. normal: adds simulation for spell choices. strong: Forge's maximum
+            // (simulates mulligans, attacks and plays; slow with several opponents).
+            final String aiStrength = msg.has("aiStrength") ? msg.get("aiStrength").getAsString() : "normal";
             final List<String> commanders = new ArrayList<>();
             if (msg.has("commanders") && msg.get("commanders").isJsonArray()) {
                 for (final JsonElement e : msg.getAsJsonArray("commanders")) {
@@ -230,6 +235,7 @@ public final class BridgeMain {
 
             final ForgePreferences prefs = FModel.getPreferences();
             prefs.setPref(FPref.PLAYER_NAME, playerName);
+            prefs.setPref(FPref.MATCH_AI_FLAT_MONTE_CARLO, !"fast".equals(aiStrength));
 
             final List<RegisteredPlayer> players = new ArrayList<>();
             final RegisteredPlayer human = RegisteredPlayer.forCommander(myDeck);
@@ -255,6 +261,14 @@ public final class BridgeMain {
             match = hm;
             Log.info("Starting Commander game: " + playerName + " (" + myDeck.getName() + ") vs " + aiNames);
             hm.startMatch(rules, EnumSet.of(GameType.Commander), players, Map.<RegisteredPlayer, IGuiGame>of(human, gui), null);
+            // HostedMatch always turns on maximum AI strength on desktop. The game thread is still dealing and
+            // shuffling at this point, so this takes effect before the AI's first decision (its mulligan).
+            final Game started = hm.getGame();
+            if (started != null) {
+                started.AI_FLAT_MONTE_CARLO = !"fast".equals(aiStrength);
+                started.AI_FLAT_MONTE_CARLO_MAX = "strong".equals(aiStrength);
+            }
+            Log.info("AI strength: " + aiStrength);
         } catch (final Exception ex) {
             Log.error("Could not start game", ex);
             final JsonObject err = new JsonObject();

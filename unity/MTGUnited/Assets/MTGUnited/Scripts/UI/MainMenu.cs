@@ -42,6 +42,8 @@ namespace MTGUnited
 
         int opponents;
         string aiDecks;
+        string aiStrength;
+        readonly Dictionary<string, Image> strengthBtns = new Dictionary<string, Image>();
         string selectedDeckId;
         bool connected;
 
@@ -55,6 +57,7 @@ namespace MTGUnited
             m.root = bg;
             m.opponents = PlayerPrefs.GetInt("opponents", 3);
             m.aiDecks = PlayerPrefs.GetString("aiDecks", "precon");
+            m.aiStrength = PlayerPrefs.GetString("aiStrength", "normal");
             m.selectedDeckId = PlayerPrefs.GetString("selectedDeck", "");
             m.decks = DeckStore.LoadAll();
             m.Build();
@@ -148,7 +151,7 @@ namespace MTGUnited
             accent.rectTransform.sizeDelta = new Vector2(0, 2); accent.rectTransform.anchoredPosition = Vector2.zero;
             accent.raycastTarget = false;
 
-            var logo = UIKit.Label("Logo", bar.transform, "MTG UNITED", 40, Theme.Accent, TextAnchor.MiddleLeft, FontStyle.Bold).Outline(2);
+            var logo = UIKit.Label("Logo", bar.transform, "MTG UNITED", 40, Theme.Accent, TextAnchor.MiddleLeft, FontStyle.Bold).Outline(2).Titled();
             logo.rectTransform.Place(40, 26, 360, 56);
             var sub = UIKit.Label("Sub", bar.transform, "COMMANDER  ·  FORGE ENGINE", 13, Theme.TextDim, TextAnchor.MiddleLeft);
             sub.rectTransform.Place(42, 8, 360, 22);
@@ -164,7 +167,7 @@ namespace MTGUnited
                 var hit = tab.gameObject.AddComponent<Image>();
                 hit.color = Color.clear;
                 tab.gameObject.AddComponent<PointerEvents>().OnClick = () => SelectTab(id);
-                var lbl = UIKit.Label("Label", tab, labels[i], 26, Theme.TextDim, TextAnchor.MiddleCenter, FontStyle.Bold);
+                var lbl = UIKit.Label("Label", tab, labels[i], 26, Theme.TextDim, TextAnchor.MiddleCenter, FontStyle.Bold).Titled();
                 lbl.rectTransform.Stretch(0, 8, 0, 0);
                 var underline = UIKit.Panel("Underline", tab, Theme.Accent);
                 underline.rectTransform.anchorMin = new Vector2(0.2f, 0); underline.rectTransform.anchorMax = new Vector2(0.8f, 0);
@@ -206,9 +209,9 @@ namespace MTGUnited
             var page = UIKit.Rect("Home", parent).Stretch();
 
             var hero = Card(page, 60, 430, 980, 470);
-            var kicker = UIKit.Label("Kicker", hero, "WELCOME BACK", 16, Theme.Accent, TextAnchor.UpperLeft, FontStyle.Bold);
+            var kicker = UIKit.Label("Kicker", hero, "WELCOME BACK", 16, Theme.Accent, TextAnchor.UpperLeft, FontStyle.Bold).Titled();
             kicker.rectTransform.Stretch(40, 0, 40, 36);
-            var title = UIKit.Label("Title", hero, "Gather your pod.", 64, Theme.Text, TextAnchor.UpperLeft, FontStyle.Bold).Outline(2);
+            var title = UIKit.Label("Title", hero, "Gather your pod.", 64, Theme.Text, TextAnchor.UpperLeft, FontStyle.Bold).Outline(2).Titled();
             title.rectTransform.Stretch(38, 0, 40, 62);
             var body = UIKit.Label("Body", hero,
                 "Full Commander rules from the Forge engine, against up to five AI opponents.\n\n" +
@@ -219,7 +222,7 @@ namespace MTGUnited
             body.rectTransform.Stretch(40, 40, 40, 160);
 
             var bridge = Card(page, 60, 150, 980, 250);
-            var bTitle = UIKit.Label("Title", bridge, "FORGE BRIDGE", 16, Theme.Accent, TextAnchor.UpperLeft, FontStyle.Bold);
+            var bTitle = UIKit.Label("Title", bridge, "FORGE BRIDGE", 16, Theme.Accent, TextAnchor.UpperLeft, FontStyle.Bold).Titled();
             bTitle.rectTransform.Stretch(40, 0, 40, 30);
             launcherText = UIKit.Label("Status", bridge, "", 17, Theme.TextDim, TextAnchor.UpperLeft);
             launcherText.rectTransform.Stretch(40, 80, 40, 66);
@@ -236,7 +239,7 @@ namespace MTGUnited
 
             // Deck grid (left)
             var gridCard = Card(page, 40, 30, 1100, 920);
-            var gTitle = UIKit.Label("Title", gridCard, "YOUR DECKS", 18, Theme.Accent, TextAnchor.UpperLeft, FontStyle.Bold);
+            var gTitle = UIKit.Label("Title", gridCard, "YOUR DECKS", 18, Theme.Accent, TextAnchor.UpperLeft, FontStyle.Bold).Titled();
             gTitle.rectTransform.Stretch(30, 0, 30, 24);
             var scroll = UIKit.Rect("Scroll", gridCard).Stretch(24, 24, 24, 64);
             var sr = scroll.gameObject.AddComponent<ScrollRect>();
@@ -252,7 +255,7 @@ namespace MTGUnited
 
             // Editor (right)
             var ed = Card(page, 1160, 330, 720, 620);
-            deckEditorTitle = UIKit.Label("Title", ed, "EDIT DECK", 18, Theme.Accent, TextAnchor.UpperLeft, FontStyle.Bold);
+            deckEditorTitle = UIKit.Label("Title", ed, "EDIT DECK", 18, Theme.Accent, TextAnchor.UpperLeft, FontStyle.Bold).Titled();
             deckEditorTitle.rectTransform.Stretch(30, 0, 30, 24);
             FieldLabel(ed, "Name", 540);
             deckNameInput = UIKit.Input("Name", ed, "Deck name", false, 20);
@@ -386,7 +389,7 @@ namespace MTGUnited
         {
             var page = UIKit.Rect("Profile", parent).Stretch();
             var card = Card(page, 60, 300, 980, 600);
-            var t = UIKit.Label("Title", card, "PROFILE", 18, Theme.Accent, TextAnchor.UpperLeft, FontStyle.Bold);
+            var t = UIKit.Label("Title", card, "PROFILE", 18, Theme.Accent, TextAnchor.UpperLeft, FontStyle.Bold).Titled();
             t.rectTransform.Stretch(40, 0, 40, 30);
 
             FieldLabel(card, "Player name", 500);
@@ -451,15 +454,15 @@ namespace MTGUnited
 
         void BuildPlayCluster(RectTransform frame)
         {
-            var panel = Card(frame, 1450, 150, 430, 330);
+            var panel = Card(frame, 1450, 150, 430, 380);
 
-            var mode = UIKit.Label("Mode", panel, "COMMANDER", 16, Theme.Accent, TextAnchor.UpperLeft, FontStyle.Bold);
+            var mode = UIKit.Label("Mode", panel, "COMMANDER", 16, Theme.Accent, TextAnchor.UpperLeft, FontStyle.Bold).Titled();
             mode.rectTransform.Stretch(24, 0, 24, 18);
             modeText = mode;
 
             // Selected deck row
             var deckRow = UIKit.Panel("DeckRow", panel, new Color(1, 1, 1, 0.05f));
-            deckRow.rectTransform.Place(18, 186, 394, 100);
+            deckRow.rectTransform.Place(18, 236, 394, 100);
             deckRow.gameObject.AddComponent<PointerEvents>().OnClick = () => SelectTab("decks");
             var artRt = UIKit.Rect("Art", deckRow.transform);
             artRt.Place(8, 8, 120, 84);
@@ -479,24 +482,37 @@ namespace MTGUnited
 
             // Opponents stepper
             oppText = UIKit.Label("Opp", panel, "", 18, Theme.Text, TextAnchor.MiddleLeft, FontStyle.Bold);
-            oppText.rectTransform.Place(24, 128, 200, 44);
+            oppText.rectTransform.Place(24, 178, 200, 44);
             var minus = UIKit.Button("Minus", panel, "−", Theme.Secondary, () => { opponents = Mathf.Max(1, opponents - 1); RefreshPlayCluster(); }, 24);
-            ((RectTransform)minus.transform).Place(300, 130, 50, 40);
+            ((RectTransform)minus.transform).Place(300, 180, 50, 40);
             var plus = UIKit.Button("Plus", panel, "+", Theme.Secondary, () => { opponents = Mathf.Min(5, opponents + 1); RefreshPlayCluster(); }, 24);
-            ((RectTransform)plus.transform).Place(360, 130, 50, 40);
+            ((RectTransform)plus.transform).Place(360, 180, 50, 40);
 
             // AI decks toggle
             aiText = UIKit.Label("AiLabel", panel, "AI DECKS", 14, Theme.TextDim, TextAnchor.MiddleLeft, FontStyle.Bold);
-            aiText.rectTransform.Place(24, 84, 120, 36);
+            aiText.rectTransform.Place(24, 134, 120, 36);
             var precon = UIKit.Button("Precon", panel, "PRECONS", Theme.Secondary, () => { aiDecks = "precon"; RefreshPlayCluster(); }, 15);
-            ((RectTransform)precon.transform).Place(150, 84, 125, 36);
+            ((RectTransform)precon.transform).Place(150, 134, 125, 36);
             aiPreconBtn = precon.GetComponent<Image>();
             var random = UIKit.Button("Random", panel, "RANDOM", Theme.Secondary, () => { aiDecks = "random"; RefreshPlayCluster(); }, 15);
-            ((RectTransform)random.transform).Place(285, 84, 125, 36);
+            ((RectTransform)random.transform).Place(285, 134, 125, 36);
             aiRandomBtn = random.GetComponent<Image>();
 
+            // AI strength: Strong is Forge's maximum (simulates mulligans and combat) and is slow in big pods.
+            var strengthLbl = UIKit.Label("StrengthLabel", panel, "AI SKILL", 14, Theme.TextDim, TextAnchor.MiddleLeft, FontStyle.Bold);
+            strengthLbl.rectTransform.Place(24, 90, 120, 36);
+            string[] ids = { "fast", "normal", "strong" };
+            string[] labels = { "FAST", "NORMAL", "STRONG" };
+            for (int i = 0; i < ids.Length; i++)
+            {
+                string id = ids[i];
+                var b = UIKit.Button("Skill " + id, panel, labels[i], Theme.Secondary, () => { aiStrength = id; RefreshPlayCluster(); }, 14);
+                ((RectTransform)b.transform).Place(150 + i * 88, 90, 82, 36);
+                strengthBtns[id] = b.GetComponent<Image>();
+            }
+
             statusText = UIKit.Label("Status", panel, "", 14, Theme.Danger, TextAnchor.UpperLeft);
-            statusText.rectTransform.Place(24, 10, 390, 70);
+            statusText.rectTransform.Place(24, 8, 390, 76);
 
             // The big button.
             playButton = UIKit.Button("Play", frame, "PLAY", Theme.Accent, OnPlay, 52);
@@ -507,6 +523,7 @@ namespace MTGUnited
             shineImg.texture = UIKit.Gradient(new Color(1, 1, 1, 0.28f), new Color(1, 1, 1, 0f));
             shineImg.raycastTarget = false;
             UIKit.LabelOf(playButton).color = new Color(0.16f, 0.07f, 0.01f);
+            UIKit.LabelOf(playButton).Titled();
         }
 
         void RefreshPlayCluster()
@@ -517,6 +534,8 @@ namespace MTGUnited
             oppText.text = "OPPONENTS   " + opponents;
             aiPreconBtn.color = aiDecks == "precon" ? Theme.Accent : Theme.Secondary;
             aiRandomBtn.color = aiDecks == "random" ? Theme.Accent : Theme.Secondary;
+            PlayerPrefs.SetString("aiStrength", aiStrength);
+            foreach (var kv in strengthBtns) kv.Value.color = kv.Key == aiStrength ? Theme.Accent : Theme.Secondary;
 
             var deck = FindDeck(selectedDeckId);
             if (deck == null)
@@ -615,6 +634,7 @@ namespace MTGUnited
                 { "name", PlayerPrefs.GetString("playerName", "Player") },
                 { "opponents", opponents },
                 { "aiDecks", aiDecks },
+                { "aiStrength", aiStrength },
             });
         }
 

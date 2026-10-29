@@ -19,6 +19,7 @@ namespace MTGUnited
         RectTransform manaRow;
         readonly List<Button> manaButtons = new List<Button>();
         int lastLife = int.MinValue;
+        Button gyButton, exButton;
         float lifePulse;
 
         public RectTransform Rect => (RectTransform)transform;
@@ -68,8 +69,19 @@ namespace MTGUnited
                 p.nameText.horizontalOverflow = HorizontalWrapMode.Overflow;
                 p.infoText = UIKit.Label("Info", p.bg.transform, "", 14, Theme.TextDim, TextAnchor.LowerLeft);
                 p.infoText.rectTransform.anchorMin = new Vector2(0, 0); p.infoText.rectTransform.anchorMax = new Vector2(0.72f, 0.5f);
-                p.infoText.rectTransform.offsetMin = new Vector2(14, 8); p.infoText.rectTransform.offsetMax = new Vector2(0, 0);
+                p.infoText.rectTransform.offsetMin = new Vector2(14, 8); p.infoText.rectTransform.offsetMax = new Vector2(-150, 0);
                 p.infoText.supportRichText = true;
+                p.infoText.resizeTextForBestFit = true; p.infoText.resizeTextMinSize = 9; p.infoText.resizeTextMaxSize = 14;
+
+                // Graveyard / exile viewers for this opponent (to the left of the life total).
+                p.gyButton = UIKit.Button("Graveyard", p.bg.transform, "GY", Theme.Secondary, () => gc.ZoneViewer.Open(p.playerId, "Graveyard"), 13);
+                var gr = (RectTransform)p.gyButton.transform;
+                gr.anchorMin = gr.anchorMax = new Vector2(0.72f, 0); gr.pivot = new Vector2(1, 0);
+                gr.sizeDelta = new Vector2(70, 28); gr.anchoredPosition = new Vector2(-78, 8);
+                p.exButton = UIKit.Button("Exile", p.bg.transform, "EX", Theme.Secondary, () => gc.ZoneViewer.Open(p.playerId, "Exile"), 13);
+                var er = (RectTransform)p.exButton.transform;
+                er.anchorMin = er.anchorMax = new Vector2(0.72f, 0); er.pivot = new Vector2(1, 0);
+                er.sizeDelta = new Vector2(70, 28); er.anchoredPosition = new Vector2(-4, 8);
             }
             return p;
         }
@@ -90,8 +102,8 @@ namespace MTGUnited
             if (pd.Poison > 0) sb.Append("  ·  <color=#9be37a>Poison ").Append(pd.Poison).Append("</color>");
             if (!me)
             {
-                sb.Append("  ·  GY ").Append(pd.GraveyardSize);
-                if (pd.ExileSize > 0) sb.Append("  ·  Exile ").Append(pd.ExileSize);
+                UIKit.LabelOf(gyButton).text = "GY " + pd.GraveyardSize;
+                UIKit.LabelOf(exButton).text = "EX " + pd.ExileSize;
                 // Commander damage this opponent has taken from my commander(s).
                 foreach (var cd in pd.CommanderDamage)
                     if (cd.FromPlayer == s.Me) sb.Append("  ·  <color=#ffb380>Cmdr ").Append(cd.Damage).Append("</color>");
