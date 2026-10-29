@@ -34,6 +34,8 @@ namespace MTGUnited
         Image counterBadge; Text counterText;
         Image tagBadge; Text tagText;
         Image dim;
+        Image shadow;
+        float lastWidth = -1;
         string imageKeyShown;
         bool initialized;
         float glowPulse;
@@ -56,12 +58,16 @@ namespace MTGUnited
             rt.anchorMin = rt.anchorMax = Vector2.zero;
             rt.pivot = new Vector2(0.5f, 0.5f);
 
+            shadow = UIKit.AddShadow(rt, 14, new Vector2(3, -7), 0.65f);
+
             glow = UIKit.Panel("Glow", rt, Color.clear);
             glow.rectTransform.Stretch(-7, -7, -7, -7);
             glow.raycastTarget = false;
 
+            // The frame's rounded shape masks everything inside it, so card art gets real rounded corners.
             frame = UIKit.Panel("Frame", rt, new Color(0.2f, 0.2f, 0.22f));
             frame.rectTransform.Stretch();
+            frame.gameObject.AddComponent<Mask>().showMaskGraphic = true;
             // Raycast target for clicks/hover.
             var pe = frame.gameObject.AddComponent<PointerEvents>();
             pe.OnClick = () => Clicked?.Invoke(this);
@@ -106,6 +112,15 @@ namespace MTGUnited
             var emblem = UIKit.Label("Emblem", inner.transform, "MTG\nUNITED", 14, new Color(1f, 0.85f, 0.55f, 0.9f), TextAnchor.MiddleCenter, FontStyle.Bold);
             emblem.rectTransform.Stretch();
             emblem.resizeTextForBestFit = true; emblem.resizeTextMinSize = 6; emblem.resizeTextMaxSize = 30;
+            if (GameArt.CardBack != null)
+            {
+                // Real card back from Resources/Visuals replaces the generated one.
+                inner.gameObject.SetActive(false);
+                var backArt = UIKit.Rect("BackArt", back.transform).Stretch();
+                var raw = backArt.gameObject.AddComponent<RawImage>();
+                raw.texture = GameArt.CardBack;
+                raw.raycastTarget = false;
+            }
             back.gameObject.SetActive(false);
 
             dim = UIKit.Panel("Dim", frame.transform, new Color(0, 0, 0, 0.35f));
@@ -247,6 +262,7 @@ namespace MTGUnited
             float z = Mathf.LerpAngle(rt.localEulerAngles.z, TargetRotation, k);
             rt.localEulerAngles = new Vector3(0, 0, z);
             rt.localScale = Vector3.Lerp(rt.localScale, Vector3.one * scale, k);
+            UpdateCorners();
 
             glowPulse += Time.unscaledDeltaTime * 3f;
             Color gc;
@@ -262,6 +278,19 @@ namespace MTGUnited
             if (highlight == Highlight.Selectable || highlight == Highlight.Playable)
                 gc.a = 0.55f + 0.35f * Mathf.Sin(glowPulse);
             glow.color = gc;
+        }
+
+        void UpdateCorners()
+        {
+            float w = rt.sizeDelta.x;
+            if (Mathf.Abs(w - lastWidth) < 0.5f) return;
+            lastWidth = w;
+            // Rounded sprite corners are 16 px; scale them to about 5% of the card width.
+            float mult = Mathf.Max(0.3f, 16f / Mathf.Max(1f, w * 0.055f));
+            frame.pixelsPerUnitMultiplier = mult;
+            back.pixelsPerUnitMultiplier = mult;
+            glow.pixelsPerUnitMultiplier = mult * 0.6f;
+            frame.SetVerticesDirty();
         }
 
         static string ShortCounter(string name, int n)

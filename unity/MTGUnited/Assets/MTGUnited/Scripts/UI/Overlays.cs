@@ -253,6 +253,7 @@ namespace MTGUnited
             transform.SetAsLastSibling();
             string myName = s?.MePlayer?.Name;
             bool won = winner != null && myName != null && winner == myName;
+            if (winner != null) PlayerStats.Record(won);
             title.text = won ? "VICTORY" : "DEFEAT";
             title.color = won ? Theme.Accent : Theme.Danger;
             sub.text = winner == null ? "The game is over." : (won ? "You won the pod!" : "Winner: " + winner);

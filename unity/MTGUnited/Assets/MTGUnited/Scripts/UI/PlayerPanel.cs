@@ -163,7 +163,13 @@ namespace MTGUnited
             var rt = UIKit.Rect("Piles", parent);
             var v = rt.gameObject.AddComponent<PilesView>();
             v.gc = gc;
-            v.libText = v.Pile(rt, "Library", 340, out _, null);
+            v.libText = v.Pile(rt, "Library", 340, out var libTop, null);
+            if (GameArt.CardBack != null)
+            {
+                libTop.texture = GameArt.CardBack;
+                libTop.color = Color.white;
+                libTop.enabled = true;
+            }
             v.gyText = v.Pile(rt, "Graveyard", 170, out v.gyTop, () => { if (v.player != null) gc.ZoneViewer.Open(v.player.Id, "Graveyard"); });
             v.exText = v.Pile(rt, "Exile", 0, out v.exTop, () => { if (v.player != null) gc.ZoneViewer.Open(v.player.Id, "Exile"); });
             return v;

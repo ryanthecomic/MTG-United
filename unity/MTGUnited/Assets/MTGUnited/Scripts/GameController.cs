@@ -61,6 +61,7 @@ namespace MTGUnited
             AutoPayMana = PlayerPrefs.GetInt("autoPay", 1) == 1;
 
             EnsureCamera();
+            GameArt.ApplyCursor();
             EnsureEventSystem();
             gameObject.AddComponent<CardImageCache>();
             Launcher = gameObject.AddComponent<BridgeLauncher>();
@@ -112,8 +113,22 @@ namespace MTGUnited
             // Background fills the whole screen; the board is a fixed 1920x1080 space centred inside it.
             var bg = UIKit.Rect("Background", canvasGo.transform).Stretch();
             var raw = bg.gameObject.AddComponent<RawImage>();
-            raw.texture = UIKit.Gradient(Theme.BgTop, Theme.BgBottom);
             raw.raycastTarget = false;
+            if (GameArt.TableBackground != null)
+            {
+                // Table art from Resources/Visuals, slightly darkened so cards stay readable on top of it.
+                raw.texture = GameArt.TableBackground;
+                bg.gameObject.AddComponent<AspectRatioFitter>().aspectMode = AspectRatioFitter.AspectMode.EnvelopeParent;
+                bg.GetComponent<AspectRatioFitter>().aspectRatio = GameArt.TableBackground.width / (float)GameArt.TableBackground.height;
+                var shade = UIKit.Rect("Shade", canvasGo.transform).Stretch();
+                var shadeImg = shade.gameObject.AddComponent<RawImage>();
+                shadeImg.texture = UIKit.Gradient(new Color(0, 0, 0, 0.25f), new Color(0, 0, 0, 0.45f));
+                shadeImg.raycastTarget = false;
+            }
+            else
+            {
+                raw.texture = UIKit.Gradient(Theme.BgTop, Theme.BgBottom);
+            }
 
             Board = UIKit.Rect("Board", canvasGo.transform);
             Board.anchorMin = Board.anchorMax = new Vector2(0.5f, 0.5f);

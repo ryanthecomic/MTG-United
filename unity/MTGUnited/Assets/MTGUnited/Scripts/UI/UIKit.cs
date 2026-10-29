@@ -69,11 +69,38 @@ namespace MTGUnited
             get
             {
                 if (font != null) return font;
+                font = OsFont("Segoe UI", "Helvetica Neue", "Arial");
+                if (font != null) return font;
                 try { font = Resources.GetBuiltinResource<Font>("LegacyRuntime.ttf"); } catch { }
                 if (font == null) { try { font = Resources.GetBuiltinResource<Font>("Arial.ttf"); } catch { } }
                 if (font == null) font = Font.CreateDynamicFontFromOSFont(new[] { "Segoe UI", "Arial", "Helvetica" }, 16);
                 return font;
             }
+        }
+
+        static Font heading;
+        static bool headingTried;
+
+        /// <summary>Condensed display font for titles, buttons and numbers (Bahnschrift ships with Windows 10+).</summary>
+        public static Font Heading
+        {
+            get
+            {
+                if (!headingTried) { headingTried = true; heading = OsFont("Bahnschrift SemiBold", "Bahnschrift", "Segoe UI Semibold"); }
+                return heading;
+            }
+        }
+
+        static Font OsFont(params string[] names)
+        {
+            try
+            {
+                var installed = new System.Collections.Generic.HashSet<string>(Font.GetOSInstalledFontNames());
+                foreach (var n in names)
+                    if (installed.Contains(n)) return Font.CreateDynamicFontFromOSFont(n, 32);
+            }
+            catch { }
+            return null;
         }
 
         public static Sprite White
@@ -112,6 +139,65 @@ namespace MTGUnited
                 rounded = Sprite.Create(t, new Rect(0, 0, size, size), new Vector2(0.5f, 0.5f), 100, 0, SpriteMeshType.FullRect, new Vector4(r, r, r, r));
                 return rounded;
             }
+        }
+
+        static Sprite softShadow;
+
+        /// <summary>Blurred rounded rectangle used as a drop shadow under cards and panels.</summary>
+        public static Sprite SoftShadow
+        {
+            get
+            {
+                if (softShadow != null) return softShadow;
+                const int size = 96, r = 40;
+                var t = new Texture2D(size, size, TextureFormat.RGBA32, false);
+                for (int y = 0; y < size; y++)
+                for (int x = 0; x < size; x++)
+                {
+                    float dx = Mathf.Max(0, Mathf.Max(r - x - 0.5f, x + 0.5f - (size - r)));
+                    float dy = Mathf.Max(0, Mathf.Max(r - y - 0.5f, y + 0.5f - (size - r)));
+                    float d = Mathf.Sqrt(dx * dx + dy * dy) / r;     // 0 inside, 1 at the edge
+                    float a = Mathf.Clamp01(1f - d);
+                    t.SetPixel(x, y, new Color(0, 0, 0, a * a));
+                }
+                t.Apply();
+                t.wrapMode = TextureWrapMode.Clamp;
+                softShadow = Sprite.Create(t, new Rect(0, 0, size, size), new Vector2(0.5f, 0.5f), 100, 0, SpriteMeshType.FullRect, new Vector4(r, r, r, r));
+                return softShadow;
+            }
+        }
+
+        /// <summary>
+        /// Adds a soft drop shadow behind a rect. If the target draws something itself, the shadow becomes a sibling
+        /// placed just before it (a child would render on top of the target's own graphic); otherwise it becomes the
+        /// target's first child. Call after the target has its final position.
+        /// </summary>
+        public static Image AddShadow(Transform target, float spread = 18, Vector2? offset = null, float alpha = 0.6f)
+        {
+            var o = offset ?? new Vector2(4, -8);
+            var trt = (RectTransform)target;
+            bool asSibling = target.GetComponent<Graphic>() != null && target.parent != null;
+            var sh = Rect("Shadow", asSibling ? target.parent : target);
+            var img = sh.gameObject.AddComponent<Image>();
+            img.sprite = SoftShadow;
+            img.type = Image.Type.Sliced;
+            img.color = new Color(0, 0, 0, alpha);
+            img.raycastTarget = false;
+            if (asSibling)
+            {
+                sh.SetSiblingIndex(target.GetSiblingIndex());
+                sh.anchorMin = trt.anchorMin; sh.anchorMax = trt.anchorMax; sh.pivot = trt.pivot;
+                sh.sizeDelta = trt.sizeDelta + new Vector2(spread * 2, spread * 2);
+                sh.anchoredPosition = trt.anchoredPosition + o + new Vector2((trt.pivot.x - 0.5f) * spread * 2, (trt.pivot.y - 0.5f) * spread * 2);
+            }
+            else
+            {
+                sh.SetAsFirstSibling();
+                sh.anchorMin = Vector2.zero; sh.anchorMax = Vector2.one;
+                sh.offsetMin = new Vector2(-spread + o.x, -spread + o.y);
+                sh.offsetMax = new Vector2(spread + o.x, spread + o.y);
+            }
+            return img;
         }
 
         public static RectTransform Rect(string name, Transform parent)
@@ -153,12 +239,14 @@ namespace MTGUnited
         {
             var rt = Rect(name, parent);
             var t = rt.gameObject.AddComponent<Text>();
-            t.font = Font;
+            // Bold text uses the display font, which already has the weight built in.
+            bool useHeading = style == FontStyle.Bold && Heading != null;
+            t.font = useHeading ? Heading : Font;
             t.text = text;
             t.fontSize = size;
             t.color = color;
             t.alignment = anchor;
-            t.fontStyle = style;
+            t.fontStyle = useHeading ? FontStyle.Normal : style;
             t.raycastTarget = false;
             t.horizontalOverflow = HorizontalWrapMode.Wrap;
             t.verticalOverflow = VerticalWrapMode.Truncate;
