@@ -1,0 +1,24 @@
+# Forge checkout and build tools fetched by scripts/setup.ps1
+/forge/
+/.tools/
+
+# Java build output
+/bridge/target/
+
+# Unity generated folders
+/unity/MTGUnited/[Ll]ibrary/
+/unity/MTGUnited/[Tt]emp/
+/unity/MTGUnited/[Oo]bj/
+/unity/MTGUnited/[Bb]uild/
+/unity/MTGUnited/[Bb]uilds/
+/unity/MTGUnited/[Ll]ogs/
+/unity/MTGUnited/[Uu]ser[Ss]ettings/
+/unity/MTGUnited/*.csproj
+/unity/MTGUnited/*.sln
+/unity/MTGUnited/.vs/
+/unity/MTGUnited/.idea/
+
+# OS / editor noise
+.DS_Store
+Thumbs.db
+__pycache__/
