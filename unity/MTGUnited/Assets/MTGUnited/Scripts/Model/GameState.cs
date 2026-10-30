@@ -165,6 +165,10 @@ namespace MTGUnited
         public string Loyalty, Defense;
         public int AttachedTo = -1, AttachedToPlayer = -1;
         public Dictionary<string, int> Counters = new Dictionary<string, int>();
+        public HashSet<string> Keywords = new HashSet<string>();
+
+        /// <summary>Forge keyword names, e.g. "FLYING", "LIFELINK" (only the ones the client animates).</summary>
+        public bool HasKeyword(string k) => Keywords.Contains(k);
 
         public static CardData From(Dictionary<string, object> d)
         {
@@ -213,6 +217,7 @@ namespace MTGUnited
             };
             var counters = d.Obj("counters");
             if (counters != null) foreach (var kv in counters) c.Counters[kv.Key] = (int)(double)kv.Value;
+            foreach (var k in d.Arr("keywords")) if (k != null) c.Keywords.Add(k.ToString());
             return c;
         }
 

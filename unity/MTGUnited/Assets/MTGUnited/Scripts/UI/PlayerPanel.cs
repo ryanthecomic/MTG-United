@@ -92,10 +92,21 @@ namespace MTGUnited
             nameText.text = (pd.Id == s.ActivePlayer ? "▶ " : "") + pd.ShortName + (pd.HasLost ? "  (out)" : "");
             if (pd.Life != lastLife)
             {
-                if (lastLife != int.MinValue) lifePulse = 1f;
+                if (lastLife != int.MinValue)
+                {
+                    // Life change (section 5.4): the number rolls to the new value; damage flashes red and
+                    // shakes, gain glows gold. All within the 400 ms budget.
+                    lifeRollFrom = displayedLife;
+                    lifeRollStart = Motion.Now;
+                    bool loss = pd.Life < lastLife;
+                    lifeFlashColor = loss ? Theme.Danger : new Color(1f, 0.82f, 0.35f);
+                    lifeFlashStart = Motion.Now;
+                    if (loss) Impact();
+                }
+                else displayedLife = pd.Life;
                 lastLife = pd.Life;
             }
-            lifeText.text = pd.Life.ToString();
+            lowLife = pd.Life <= 5 && !pd.HasLost;
 
             var sb = new StringBuilder();
             sb.Append("Hand ").Append(pd.HandSize).Append("  ·  Library ").Append(pd.LibrarySize);
@@ -121,8 +132,8 @@ namespace MTGUnited
 
             bool targetable = s.Prompt.TargetPlayers.Contains(pd.Id);
             bool chosen = s.Prompt.ChosenPlayers.Contains(pd.Id);
-            ring.color = chosen ? Theme.Chosen : targetable ? Theme.Selectable : pd.HasPriority ? new Color(1f, 1f, 1f, 0.25f) : Color.clear;
-            bg.color = pd.HasLost ? new Color(0.2f, 0.08f, 0.08f, 0.9f) : Theme.Panel;
+            ringState = chosen ? 2 : targetable ? 1 : pd.HasPriority ? 3 : 0;
+            currentBg = pd.HasLost ? new Color(0.2f, 0.08f, 0.08f, 0.9f) : Theme.Panel;
         }
 
         void RenderMana(PlayerData pd)
@@ -149,15 +160,69 @@ namespace MTGUnited
             }
         }
 
+        // Life roll / flash / shake state.
+        float displayedLife, lifeRollFrom, lifeRollStart = -10f, lifeFlashStart = -10f, shakeStart = -10f;
+        Color lifeFlashColor;
+        bool lowLife;
+        Vector2 restPos; bool restKnown;
+
+        /// <summary>Player hit (combat impact or life loss): the nameplate shakes briefly.</summary>
+        public void Impact()
+        {
+            shakeStart = Motion.Now;
+        }
+
         void Update()
         {
-            if (lifePulse > 0)
+            float now = Motion.Now;
+
+            // Number rolls to its new value.
+            float rollT = Mathf.Clamp01((now - lifeRollStart) / Motion.Travel);
+            displayedLife = Mathf.Lerp(lifeRollFrom, lastLife, Easing.Eval(Ease.Out, rollT));
+            if (rollT >= 1f) displayedLife = lastLife;
+            if (lastLife != int.MinValue) lifeText.text = Mathf.RoundToInt(displayedLife).ToString();
+
+            // Flash: pop and tint, fading over the budget.
+            float ft = Mathf.Clamp01((now - lifeFlashStart) / Motion.Budget);
+            float flashAmt = 1f - Easing.Eval(Ease.Out, ft);
+            lifeText.transform.localScale = Vector3.one * (1f + 0.2f * flashAmt);
+            Color baseColor = Theme.Life;
+            if (lowLife)
             {
-                lifePulse = Mathf.Max(0, lifePulse - Time.unscaledDeltaTime * 1.5f);
-                lifeText.transform.localScale = Vector3.one * (1f + 0.25f * lifePulse);
-                lifeText.color = Color.Lerp(Theme.Life, Theme.Danger, lifePulse);
+                // At 5 life or less the total gains a slow red heartbeat glow.
+                float beat = Mathf.Pow(Mathf.Max(0f, Mathf.Sin(now * Mathf.PI * 1.2f)), 6f);
+                baseColor = Color.Lerp(Theme.Life, Theme.Danger, 0.35f + 0.5f * beat);
+            }
+            lifeText.color = Color.Lerp(baseColor, lifeFlashColor, flashAmt);
+            bg.color = Color.Lerp(currentBg, new Color(lifeFlashColor.r * 0.5f, lifeFlashColor.g * 0.2f, lifeFlashColor.b * 0.2f, 0.95f),
+                flashAmt * (lifeFlashColor.g < 0.5f ? 0.6f : 0f));
+
+            // Shake (impact duration), amplitude decays.
+            var r = (RectTransform)bg.transform;
+            float st = (now - shakeStart) / Motion.Impact;
+            if (st >= 0f && st < 1f)
+            {
+                float k = 1f - st;
+                r.anchoredPosition = new Vector2(Mathf.Sin(now * 95f), Mathf.Cos(now * 81f)) * 6f * k;
+            }
+            else r.anchoredPosition = Vector2.zero;
+
+            // Same highlight language as cards: eligible = pulsing amber (1.2 s), selected = gold.
+            switch (ringState)
+            {
+                case 2: ring.color = new Color(1f, 0.835f, 0.29f); break;
+                case 1:
+                    var c = new Color(0.96f, 0.65f, 0.14f);
+                    c.a = Mathf.Lerp(0.4f, 1f, 0.5f + 0.5f * Mathf.Sin(now * Mathf.PI * 2f / 1.2f));
+                    ring.color = c; break;
+                case 3: ring.color = new Color(1f, 1f, 1f, 0.25f); break;
+                default: ring.color = Color.clear; break;
             }
         }
+
+        int ringState;
+
+        Color currentBg = Theme.Panel;
     }
 
     /// <summary>My library, graveyard and exile piles on the right of my battlefield.</summary>

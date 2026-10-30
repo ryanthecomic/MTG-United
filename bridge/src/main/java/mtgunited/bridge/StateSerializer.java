@@ -11,6 +11,7 @@ import forge.game.card.CardView;
 import forge.game.card.CardView.CardStateView;
 import forge.game.card.CounterType;
 import forge.game.combat.CombatView;
+import forge.game.keyword.Keyword;
 import forge.game.phase.PhaseType;
 import forge.game.player.PlayerView;
 import forge.game.spellability.StackItemView;
@@ -27,6 +28,10 @@ import java.util.List;
  */
 final class StateSerializer {
     private final BridgeGuiGame gui;
+    private static final Keyword[] ANIMATED_KEYWORDS = {
+        Keyword.FLYING, Keyword.VIGILANCE, Keyword.LIFELINK, Keyword.DEATHTOUCH, Keyword.TRAMPLE,
+        Keyword.FIRST_STRIKE, Keyword.DOUBLE_STRIKE, Keyword.INDESTRUCTIBLE, Keyword.MENACE, Keyword.REACH,
+    };
 
     StateSerializer(final BridgeGuiGame gui) {
         this.gui = gui;
@@ -224,6 +229,12 @@ final class StateSerializer {
         o.addProperty("isArtifact", st.isArtifact());
         o.addProperty("isEnchantment", st.isEnchantment());
         o.addProperty("isBattle", st.isBattle());
+        // Keywords the client animates (combat poses, impact colours).
+        final JsonArray kw = new JsonArray();
+        for (final Keyword k : ANIMATED_KEYWORDS) {
+            if (st.hasKeyword(k)) { kw.add(k.name()); }
+        }
+        o.add("keywords", kw);
         if (st.isCreature() || st.isVehicle()) {
             o.addProperty("power", st.getPower());
             o.addProperty("toughness", st.getToughness());
