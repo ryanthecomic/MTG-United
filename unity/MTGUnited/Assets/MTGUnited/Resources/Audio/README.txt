@@ -5,7 +5,7 @@ in this folder named exactly after the effect:
 
 UiClick, Popup, Draw, LandPlay, Cast, Resolve, Ability, Tap, Untap, Die, Exile, Discard,
 ToLibrary, Token, Counter, Attack, Impact, LifeLoss, LifeGain, Priority, TurnStart,
-Victory, Defeat
+Victory, Defeat, DrawMany (3+ cards drawn at once)
 
 e.g. "Impact.wav". A file named "Music" loops quietly in the background.
 Keep effects short (under 0.4 s) so they match the animations.

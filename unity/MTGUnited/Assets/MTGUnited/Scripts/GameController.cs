@@ -279,7 +279,8 @@ namespace MTGUnited
         void MaybeAutoPay(GameState s)
         {
             var p = s.Prompt;
-            if (!AutoPayMana || !p.OkEnabled || p.OkLabel != "Auto") { lastAutoPayPrompt = null; return; }
+            // Never auto-pay a cost asked for during resolution: that is a "may pay" choice, not casting a spell.
+            if (!AutoPayMana || !p.OkEnabled || p.OkLabel != "Auto" || p.DuringResolution) { lastAutoPayPrompt = null; return; }
             string key = p.Message + "|" + s.Stack.Count + "|" + s.Turn;
             if (key == lastAutoPayPrompt) return;
             lastAutoPayPrompt = key;

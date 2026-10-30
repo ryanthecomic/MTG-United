@@ -286,6 +286,8 @@ namespace MTGUnited
         public int CardId = -1;
         public string OkLabel = "", CancelLabel = "";
         public bool OkEnabled, CancelEnabled, OkFocused;
+        /// <summary>Forge is asking for a payment while something resolves (optional cost such as Mana Vault's {4}).</summary>
+        public bool DuringResolution;
         public HashSet<int> SelectableCards = new HashSet<int>();
         public List<CardData> SelectableCardData = new List<CardData>();
         public HashSet<int> ActionableCards = new HashSet<int>();
@@ -308,6 +310,13 @@ namespace MTGUnited
             var cancel = d.Obj("cancel");
             p.CancelLabel = cancel.Str("label");
             p.CancelEnabled = cancel.Bool("enabled");
+            p.DuringResolution = d.Bool("duringResolution");
+            if (p.DuringResolution && p.OkLabel == "Auto")
+            {
+                // An optional payment: make the choice explicit. "Pay" still sends OK, which auto-pays in Forge.
+                p.OkLabel = "Pay";
+                if (p.CancelEnabled) p.CancelLabel = "Don't pay";
+            }
             var sel = d.Obj("selection");
             if (sel != null)
             {

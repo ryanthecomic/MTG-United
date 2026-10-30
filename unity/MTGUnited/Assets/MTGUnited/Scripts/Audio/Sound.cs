@@ -7,7 +7,7 @@ namespace MTGUnited
     public enum Sfx
     {
         UiClick, Draw, LandPlay, Cast, Resolve, Ability, Tap, Untap, Die, Exile, Discard, ToLibrary, Token,
-        Counter, Attack, Impact, LifeLoss, LifeGain, Priority, TurnStart, Victory, Defeat, Popup,
+        Counter, Attack, Impact, LifeLoss, LifeGain, Priority, TurnStart, Victory, Defeat, Popup, DrawMany,
     }
 
     /// <summary>
@@ -101,6 +101,38 @@ namespace MTGUnited
             instance.PlayClip(Sfx.Cast, instance.castByColour[idx], 0.9f, 1f);
         }
 
+        // ------------------------------------------------------------------ draws
+        // Forge sends an opening hand (or "draw three") as several quick updates. Draws are gathered for a
+        // moment, then either played one by one with a little gap, or, for 3+ cards, as a single riffle.
+        int pendingDraws;
+        float lastDrawAt;
+        readonly Queue<float> drawTimes = new Queue<float>();
+        const float GatherWindow = 0.12f, DrawGap = 0.09f, DrawVolume = 0.45f;
+
+        /// <summary>Report cards drawn; the sound is decided once the burst is over.</summary>
+        public static void QueueDraw(int count)
+        {
+            if (instance == null || !Enabled || count <= 0) return;
+            instance.pendingDraws += count;
+            instance.lastDrawAt = Time.unscaledTime;
+        }
+
+        void Update()
+        {
+            float now = Time.unscaledTime;
+            if (pendingDraws > 0 && now - lastDrawAt >= GatherWindow)
+            {
+                if (pendingDraws >= 3) PlayClip(Sfx.DrawMany, clips[Sfx.DrawMany], 0.6f, 1f);
+                else for (int i = 0; i < pendingDraws; i++) drawTimes.Enqueue(now + i * DrawGap);
+                pendingDraws = 0;
+            }
+            while (drawTimes.Count > 0 && drawTimes.Peek() <= now)
+            {
+                drawTimes.Dequeue();
+                if (Enabled) PlayClip(Sfx.Draw, clips[Sfx.Draw], DrawVolume, 1f);
+            }
+        }
+
         void PlayClip(Sfx s, AudioClip clip, float volume, float pitch)
         {
             if (clip == null) return;
@@ -130,7 +162,8 @@ namespace MTGUnited
             {
                 case Sfx.UiClick: return Clip(s, 0.05f, (t, i) => Tone(t, 1150, 0.02f) * 0.35f + Noise() * Env(t, 0.002f, 0.01f) * 0.15f);
                 case Sfx.Popup: return Clip(s, 0.12f, (t, i) => Tone(t, Lerp(600, 900, t / 0.12f), 0.08f) * 0.3f);
-                case Sfx.Draw: return Whoosh(s, 0.26f, 900, 3200, 0.45f);
+                case Sfx.Draw: return Whoosh(s, 0.22f, 900, 3000, 0.4f);
+                case Sfx.DrawMany: return Riffle(s, 0.38f);
                 case Sfx.ToLibrary: return Whoosh(s, 0.22f, 2600, 700, 0.35f);
                 case Sfx.Discard: return Whoosh(s, 0.12f, 2500, 5000, 0.4f);
                 case Sfx.LandPlay: return Thud(s, 0.24f, 85, 48, 0.9f, 0.25f);
@@ -214,6 +247,21 @@ namespace MTGUnited
                 float v = 0;
                 foreach (var (at, f) in pips) if (t >= at) v += Tone(t - at, f, 0.06f) * 0.15f;
                 return v;
+            });
+        }
+
+        /// <summary>Several cards dealt at once: a quick run of soft card flicks over a light whoosh.</summary>
+        static AudioClip Riffle(Sfx s, float len)
+        {
+            const int flicks = 9;
+            return Clip(s, len, (t, i) =>
+            {
+                float p = t / len;
+                float slot = len * 0.8f / flicks;
+                float local = t % slot;
+                float flick = t < len * 0.8f ? Mathf.Exp(-local / 0.006f) : 0f;
+                return BandNoise(0.35f) * flick * 0.5f
+                     + LowPass(Noise(), 0.12f) * Mathf.Sin(Mathf.PI * p) * 0.18f;
             });
         }
 

@@ -112,6 +112,7 @@ namespace MTGUnited
             content.anchorMin = new Vector2(0, 1); content.anchorMax = new Vector2(1, 1); content.pivot = new Vector2(0.5f, 1);
             content.gameObject.AddComponent<ContentSizeFitter>().verticalFit = ContentSizeFitter.FitMode.PreferredSize;
             sr.content = content; sr.horizontal = false; sr.scrollSensitivity = 40;
+            UIKit.AddScrollbar(sr);
 
             if (anyCards)
             {
@@ -365,6 +366,7 @@ namespace MTGUnited
             grid.childAlignment = TextAnchor.UpperCenter;
             nameList.gameObject.AddComponent<ContentSizeFitter>().verticalFit = ContentSizeFitter.FitMode.PreferredSize;
             sr.content = nameList; sr.horizontal = false; sr.scrollSensitivity = 40;
+            UIKit.AddScrollbar(sr);
             RefreshNames();
         }
 

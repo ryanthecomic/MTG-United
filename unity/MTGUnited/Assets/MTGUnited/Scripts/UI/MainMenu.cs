@@ -253,6 +253,7 @@ namespace MTGUnited
             grid.padding = new RectOffset(6, 6, 6, 6);
             deckGrid.gameObject.AddComponent<ContentSizeFitter>().verticalFit = ContentSizeFitter.FitMode.PreferredSize;
             sr.content = deckGrid; sr.horizontal = false; sr.scrollSensitivity = 40;
+            UIKit.AddScrollbar(sr);
 
             // Editor (right)
             var ed = Card(page, 1160, 330, 720, 620);

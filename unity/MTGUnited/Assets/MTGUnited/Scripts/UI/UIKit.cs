@@ -262,6 +262,49 @@ namespace MTGUnited
             return t;
         }
 
+        /// <summary>
+        /// Adds a visible, draggable vertical scrollbar on the right edge of a ScrollRect (hidden when everything fits).
+        /// The content is narrowed so nothing sits under the bar.
+        /// </summary>
+        public static Scrollbar AddScrollbar(ScrollRect sr, float width = 12f)
+        {
+            var host = (RectTransform)sr.transform;
+            var track = Panel("Scrollbar", host, new Color(1f, 1f, 1f, 0.06f));
+            var tr = track.rectTransform;
+            tr.anchorMin = new Vector2(1, 0); tr.anchorMax = new Vector2(1, 1); tr.pivot = new Vector2(1, 0.5f);
+            tr.sizeDelta = new Vector2(width, -8); tr.anchoredPosition = new Vector2(-2, 0);
+            tr.SetAsLastSibling();
+
+            var area = Rect("Sliding Area", tr).Stretch(1, 2, 1, 2);
+            var handle = Panel("Handle", area, Color.white);
+            handle.rectTransform.Stretch();
+
+            var sb = track.gameObject.AddComponent<Scrollbar>();
+            sb.handleRect = handle.rectTransform;
+            sb.targetGraphic = handle;
+            sb.direction = Scrollbar.Direction.BottomToTop;
+            var cb = sb.colors;
+            cb.normalColor = new Color(0.62f, 0.58f, 0.5f, 0.75f);
+            cb.highlightedColor = new Color(0.97f, 0.65f, 0.25f, 0.95f);
+            cb.pressedColor = new Color(1f, 0.75f, 0.35f, 1f);
+            cb.selectedColor = cb.normalColor;
+            cb.colorMultiplier = 1f;
+            cb.fadeDuration = 0.08f;
+            sb.colors = cb;
+
+            sr.verticalScrollbar = sb;
+            sr.verticalScrollbarVisibility = ScrollRect.ScrollbarVisibility.AutoHide;
+
+            if (sr.content != null)
+            {
+                // Leave room for the bar: shrink the content's width and keep it left-aligned.
+                float gap = width + 8f;
+                sr.content.sizeDelta = new Vector2(-gap, sr.content.sizeDelta.y);
+                sr.content.anchoredPosition = new Vector2(-gap / 2f, sr.content.anchoredPosition.y);
+            }
+            return sb;
+        }
+
         public static Button Button(string name, Transform parent, string label, Color color, UnityAction onClick, int fontSize = 22)
         {
             var img = Panel(name, parent, color);

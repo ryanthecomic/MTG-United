@@ -60,6 +60,7 @@ namespace MTGUnited
             t.scroll.horizontal = false;
             t.scroll.scrollSensitivity = 60;
             t.scroll.movementType = ScrollRect.MovementType.Clamped;
+            UIKit.AddScrollbar(t.scroll, 14f);
 
             bg.gameObject.SetActive(false);
             return t;
@@ -111,7 +112,7 @@ namespace MTGUnited
             float y = 0;
             y = Section("Nonlands", nonlands, y);
             y = Section("Lands", lands, y);
-            content.sizeDelta = new Vector2(0, y + 10);
+            content.sizeDelta = new Vector2(content.sizeDelta.x, y + 10);   // keep the width reserved for the scrollbar
             scroll.verticalNormalizedPosition = 1f;
         }
 

@@ -176,7 +176,22 @@ public final class BridgeGuiGame extends AbstractGuiGame {
         cancel.addProperty("enabled", cancelEnabled);
         p.add("cancel", cancel);
         p.add("selection", serializer.selection(getSelection()));
+        // A cost asked for while something is resolving (Mana Vault's "you may pay {4}", unless costs, ward...)
+        // is a choice, not a cast: the client must not auto-pay it.
+        p.addProperty("duringResolution", isStackResolving());
         return p;
+    }
+
+    private boolean isStackResolving() {
+        try {
+            final IGameController c = controller();
+            if (c instanceof forge.game.player.PlayerController pc && pc.getGame() != null) {
+                return pc.getGame().getStack().isResolving();
+            }
+        } catch (final RuntimeException ex) {
+            logOnce("resolving", ex);
+        }
+        return false;
     }
 
     private void sendEvent(final String type, final JsonObject body) {

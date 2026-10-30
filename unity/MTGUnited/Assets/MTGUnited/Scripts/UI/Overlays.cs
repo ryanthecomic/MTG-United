@@ -203,6 +203,7 @@ namespace MTGUnited
             sr.content = v.content;
             sr.horizontal = false;
             sr.scrollSensitivity = 40;
+            UIKit.AddScrollbar(sr);
             var close = UIKit.Button("Close", panel.transform, "Close", Theme.Secondary, v.Close, 20);
             var cr = (RectTransform)close.transform;
             cr.anchorMin = cr.anchorMax = new Vector2(0.5f, 0); cr.sizeDelta = new Vector2(200, 46); cr.anchoredPosition = new Vector2(0, 36);

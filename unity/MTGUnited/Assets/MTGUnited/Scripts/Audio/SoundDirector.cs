@@ -1,5 +1,6 @@
 using System.Collections.Generic;
 using System.Linq;
+using UnityEngine;
 
 namespace MTGUnited
 {
@@ -19,7 +20,7 @@ namespace MTGUnited
             var p = prev;
             prev = s;
             if (p == null || s == null || p.Me != s.Me) return;
-            if (s.Mulligan || p.Mulligan) { if (HandGrew(p, s)) Sound.Play(Sfx.Draw, 0.8f); return; }
+            if (s.Mulligan || p.Mulligan) { Sound.QueueDraw(Drawn(p, s)); return; }
 
             var played = new HashSet<Sfx>();
             void Once(Sfx sfx, float vol = 1f) { if (played.Add(sfx)) Sound.Play(sfx, vol); }
@@ -74,7 +75,7 @@ namespace MTGUnited
                 && !played.Contains(Sfx.Die) && !played.Contains(Sfx.Exile))
                 Once(Sfx.Resolve, 0.55f);   // instants / sorceries / abilities resolving get a lighter thump
 
-            if (HandGrew(p, s)) Once(Sfx.Draw, 0.8f);
+            Sound.QueueDraw(Drawn(p, s));
 
             // Life totals.
             foreach (var pl in s.Players)
@@ -89,10 +90,12 @@ namespace MTGUnited
                 Once(Sfx.Priority, 0.6f);
         }
 
-        static bool HandGrew(GameState p, GameState s)
+        /// <summary>Cards I drew between two states (hand grew and library shrank).</summary>
+        static int Drawn(GameState p, GameState s)
         {
             var a = p.MePlayer; var b = s.MePlayer;
-            return a != null && b != null && b.HandSize > a.HandSize && b.LibrarySize < a.LibrarySize;
+            if (a == null || b == null || b.HandSize <= a.HandSize || b.LibrarySize >= a.LibrarySize) return 0;
+            return Mathf.Min(b.HandSize - a.HandSize, a.LibrarySize - b.LibrarySize);
         }
 
         static int CounterTotal(CardData d)
