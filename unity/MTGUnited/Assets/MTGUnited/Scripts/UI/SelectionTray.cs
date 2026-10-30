@@ -12,7 +12,9 @@ namespace MTGUnited
     /// </summary>
     public class SelectionTray : MonoBehaviour
     {
-        const float CellW = 150, CellH = 210, Gap = 12, Width = 1540;
+        // Centred on the board, but kept clear of the prompt and buttons on the right (they start at x = 1590).
+        const float HeaderH = 72;
+        const float CellW = 150, CellH = 210, Gap = 12, Width = 1220, Height = 840, Left = 960 - Width / 2, Bottom = 540 - Height / 2;
 
         GameController gc;
         RectTransform panel, content;
@@ -26,13 +28,19 @@ namespace MTGUnited
         public static SelectionTray Create(RectTransform board, GameController gc)
         {
             var bg = UIKit.Panel("SelectionTray", board, new Color(0.04f, 0.05f, 0.08f, 0.95f));
-            bg.rectTransform.Place(24, 200, Width, 830);
+            bg.rectTransform.Place(Left, Bottom, Width, Height);
             var t = bg.gameObject.AddComponent<SelectionTray>();
             t.gc = gc;
             t.panel = bg.rectTransform;
 
             t.title = UIKit.Label("Title", bg.transform, "", 22, Theme.Selectable, TextAnchor.UpperLeft, FontStyle.Bold);
-            t.title.rectTransform.Stretch(24, 0, 200, 16);
+            // Fixed header band at the top; long prompts shrink to fit instead of spilling into the card grid.
+            var tr0 = t.title.rectTransform;
+            tr0.anchorMin = new Vector2(0, 1); tr0.anchorMax = new Vector2(1, 1); tr0.pivot = new Vector2(0.5f, 1);
+            tr0.offsetMin = new Vector2(24, -HeaderH + 8); tr0.offsetMax = new Vector2(-200, -12);
+            t.title.alignment = TextAnchor.MiddleLeft;
+            t.title.verticalOverflow = VerticalWrapMode.Truncate;
+            t.title.resizeTextForBestFit = true; t.title.resizeTextMinSize = 12; t.title.resizeTextMaxSize = 22;
             t.title.Titled();
 
             t.toggle = UIKit.Button("Toggle", bg.transform, "View board", Theme.Secondary, t.ToggleCollapsed, 16);
@@ -41,7 +49,7 @@ namespace MTGUnited
             tr.sizeDelta = new Vector2(160, 40); tr.anchoredPosition = new Vector2(-16, -12);
             t.toggleLabel = UIKit.LabelOf(t.toggle);
 
-            var view = UIKit.Rect("Scroll", bg.transform).Stretch(16, 16, 16, 64);
+            var view = UIKit.Rect("Scroll", bg.transform).Stretch(16, 16, 16, HeaderH + 4);
             view.gameObject.AddComponent<RectMask2D>();
             // A transparent graphic so the mouse wheel scrolls anywhere in the panel, not just over cards.
             view.gameObject.AddComponent<Image>().color = Color.clear;
@@ -69,7 +77,10 @@ namespace MTGUnited
             }
             if (!gameObject.activeSelf) { gameObject.SetActive(true); collapsed = false; }
             transform.SetAsLastSibling();
-            title.text = string.IsNullOrEmpty(s.Prompt.Message) ? "Choose a card" : s.Prompt.Message.Trim();
+            // Forge's prompts are often "Card (id)\n-\nInstruction"; show them on one line.
+            string msg = string.IsNullOrEmpty(s.Prompt.Message) ? "Choose a card" : s.Prompt.Message.Trim();
+            msg = System.Text.RegularExpressions.Regex.Replace(msg, @"\s*\n\s*-?\s*\n?\s*", "  \u2014  ");
+            title.text = msg;
 
             // Only rebuild when the offered cards change, so the scroll position survives picks.
             string key = string.Join(",", cards.Select(c => c.Id).OrderBy(i => i));
@@ -141,8 +152,8 @@ namespace MTGUnited
         void ApplyCollapsed()
         {
             scroll.gameObject.SetActive(!collapsed);
-            panel.sizeDelta = new Vector2(Width, collapsed ? 64 : 830);
-            panel.anchoredPosition = new Vector2(24 + Width / 2f, collapsed ? 1030 - 32 : 200 + 415);
+            panel.sizeDelta = new Vector2(Width, collapsed ? HeaderH : Height);
+            panel.anchoredPosition = new Vector2(Left + Width / 2f, collapsed ? Bottom + Height - HeaderH / 2f : Bottom + Height / 2f);
             toggleLabel.text = collapsed ? "Show cards" : "View board";
         }
     }

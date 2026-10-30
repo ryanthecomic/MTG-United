@@ -27,6 +27,7 @@ namespace MTGUnited
         Text deckTitle, deckSub, modeText, oppText, aiText, statusText, launcherText;
         RawImage deckArt;
         Button playButton, launchButton;
+        RectTransform playCluster;   // deck summary + PLAY; only shown on the Home tab
         Image aiPreconBtn, aiRandomBtn;
 
         // Decks page
@@ -454,7 +455,8 @@ namespace MTGUnited
 
         void BuildPlayCluster(RectTransform frame)
         {
-            var panel = Card(frame, 1450, 150, 430, 380);
+            playCluster = UIKit.Rect("PlayCluster", frame).Stretch();
+            var panel = Card(playCluster, 1450, 150, 430, 380);
 
             var mode = UIKit.Label("Mode", panel, "COMMANDER", 16, Theme.Accent, TextAnchor.UpperLeft, FontStyle.Bold).Titled();
             mode.rectTransform.Stretch(24, 0, 24, 18);
@@ -515,7 +517,7 @@ namespace MTGUnited
             statusText.rectTransform.Place(24, 8, 390, 76);
 
             // The big button.
-            playButton = UIKit.Button("Play", frame, "PLAY", Theme.Accent, OnPlay, 52);
+            playButton = UIKit.Button("Play", playCluster, "PLAY", Theme.Accent, OnPlay, 52);
             ((RectTransform)playButton.transform).Place(1450, 30, 430, 108);
             UIKit.AddShadow(playButton.transform, 26, new Vector2(0, -10), 0.75f);
             var shine = UIKit.Rect("Shine", playButton.transform).Stretch(4, 54, 4, 4);
@@ -579,6 +581,7 @@ namespace MTGUnited
                 kv.Value.bar.SetVisible(on);
             }
             foreach (var kv in pages) kv.Value.gameObject.SetActive(kv.Key == id);
+            if (playCluster != null) playCluster.gameObject.SetActive(id == "home");
             if (id == "profile") RefreshProfile();
         }
 
@@ -602,6 +605,7 @@ namespace MTGUnited
 
         public void ShowErrors(List<string> errors)
         {
+            SelectTab("home");   // errors are shown under the play panel
             statusText.color = Theme.Danger;
             statusText.text = string.Join("\n", errors.Count > 3 ? errors.GetRange(0, 3) : errors) + (errors.Count > 3 ? "\n(+" + (errors.Count - 3) + " more)" : "");
             if (errors.Count > 3) gc.Toasts.Show(string.Join("\n", errors.GetRange(0, Mathf.Min(10, errors.Count))), true);
