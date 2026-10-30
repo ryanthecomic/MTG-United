@@ -14,19 +14,23 @@ namespace MTGUnited
     public class BoardView : MonoBehaviour
     {
         // Board regions (bottom-left origin, 1920x1080 space).
-        const float MyFieldLeft = 280, MyFieldRight = 1420;
+        const float MyFieldLeft = 280;
+        // The battlefield gives way when the HUD on the right is scaled up (Options > interface size).
+        static float MyFieldRight => 1420f - Mathf.Max(0f, UiScale.Value - 1f) * 480f;
         const float MyCreatureRowY = 470, MyOtherRowY = 300;
         const float MyCardH = 150;
         const float HandY = 70, HandCardH = 220;
-        const float OppBandBottom = 600, OppHeaderH = 76;
+        const float OppBandBottom = 600, OppHeaderH = 96, OppPanelW = 380;
+        const float MyCommanderH = 180;
 
-        // Where things fly to / from.
-        static readonly Vector2 MyLibraryPos = new Vector2(1495, 457);
-        static readonly Vector2 MyGraveyardPos = new Vector2(1495, 287);
-        static readonly Vector2 MyExilePos = new Vector2(1495, 117);
-        static readonly Vector2 MyPortraitPos = new Vector2(140, 120);
+        // Where things fly to / from (these move with the scaled HUD).
+        static readonly Vector2 HudCorner = new Vector2(1910, 10), MyCorner = new Vector2(10, 10);
+        static Vector2 MyLibraryPos => UiScale.About(new Vector2(1495, 457), HudCorner);
+        static Vector2 MyGraveyardPos => UiScale.About(new Vector2(1495, 287), HudCorner);
+        static Vector2 MyExilePos => UiScale.About(new Vector2(1495, 117), HudCorner);
+        static Vector2 MyPortraitPos => UiScale.About(new Vector2(140, 120), MyCorner);
         static readonly Vector2 MyHandOrigin = new Vector2(850, 40);
-        static readonly Vector2 StackPos = new Vector2(1745, 482);
+        static Vector2 StackPos => UiScale.About(new Vector2(1745, 482), HudCorner);
 
         GameController gc;
         RectTransform root, zoneLayer, cardLayer, panelLayer;
@@ -60,6 +64,7 @@ namespace MTGUnited
 
             bv.myPiles = PilesView.Create(bv.panelLayer, gc);
             bv.myPiles.Rect.Place(1440, 40, 120, 500);
+            UiScaled.Add(bv.myPiles, HudCorner);
             return bv;
         }
 
@@ -88,13 +93,17 @@ namespace MTGUnited
             {
                 var myPanel = PanelFor(me, true);
                 myPanel.Rect.Place(20, 20, 240, 200);
+                UiScaled.Add(myPanel, MyCorner);
                 myPanel.Render(me, s, true);
                 panelCenters[me.Id] = MyPortraitPos;
                 myPiles.Render(me, s);
+                myFieldBg.rectTransform.Place(MyFieldLeft - 10, 215, MyFieldRight - MyFieldLeft + 20, 340);
 
                 LayoutHand(me.Hand, placements);
                 LayoutField(me, MyFieldLeft, MyFieldRight, MyCreatureRowY, MyOtherRowY, MyCardH, placements, false);
-                LayoutRow(me.Command, 30, 230, 90, 126, placements, 0, false);
+                // Commander sits just above my nameplate.
+                float cmdY = 10 + 210 * UiScale.Value + 8;
+                LayoutRow(me.Command, 24, cmdY, MyCommanderH * 0.714f, MyCommanderH, placements, 0, false);
             }
 
             // ---------------------------------------------------------------- opponents
@@ -109,17 +118,22 @@ namespace MTGUnited
                 bg.rectTransform.Place(x0 + 6, OppBandBottom, colW - 12, 1080 - OppBandBottom - 6);
                 bg.color = p.Id == s.ActivePlayer ? new Color(1f, 0.8f, 0.4f, 0.06f) : new Color(1f, 1f, 1f, 0.03f);
 
+                // Nameplate centred at the top of the opponent's column, scaled from that top-centre point.
+                float headerH = OppHeaderH * UiScale.Value;
+                float pw = Mathf.Min(OppPanelW, colW - 24);
                 var panel = PanelFor(p, false);
-                panel.Rect.Place(x0 + 12, 1080 - OppHeaderH - 8, colW - 24, OppHeaderH);
+                panel.Rect.Place(x0 + colW / 2f - pw / 2f, 1080 - OppHeaderH - 8, pw, OppHeaderH);
+                UiScaled.Add(panel, new Vector2(x0 + colW / 2f, 1072));
                 panel.Render(p, s, false);
-                panelCenters[p.Id] = new Vector2(x0 + colW / 2f, 1080 - OppHeaderH / 2f - 8);
+                panelCenters[p.Id] = new Vector2(x0 + colW / 2f, 1072 - headerH / 2f);
 
                 float cardH = Mathf.Clamp(colW / 5.6f, 70, 150);
-                float fieldTop = 1080 - OppHeaderH - 16;
+                float fieldTop = 1080 - headerH - 16;
                 float otherY = fieldTop - cardH * 0.55f - 4;
                 float creatureY = otherY - cardH - 18;
-                float cmdW = cardH * 0.62f;
-                LayoutRow(p.Command, x0 + 12, otherY - cardH * 0.45f, cmdW, cardH * 0.9f, placements, 0, false);
+                // Commander: a larger card at the top-left of the column.
+                float cmdH = Mathf.Min(cardH * 1.3f, fieldTop - OppBandBottom - 10), cmdW = cmdH * 0.714f;
+                LayoutRow(p.Command, x0 + 12, fieldTop - cmdH, cmdW, cmdH, placements, 0, false);
                 LayoutField(p, x0 + 18 + cmdW + 8, x0 + colW - 14, creatureY, otherY, cardH, placements, true);
             }
 
@@ -156,6 +170,7 @@ namespace MTGUnited
                 {
                     cv = CardView.Create(cardLayer, kv.Key);
                     cv.Clicked = c => gc.ClickCard(c.CardId);
+                    cv.RightClicked = c => { HidePreview(); gc.Inspector.Show(c.Data); };
                     cv.HoverStart = OnHoverStart;
                     cv.HoverEnd = OnHoverEnd;
                     cards[kv.Key] = cv;
@@ -359,6 +374,7 @@ namespace MTGUnited
                 {
                     // Impact: both cards flash, the target shakes. Deathtouch hits in sickly green-black.
                     Color? tint = deathtouch ? new Color(0.35f, 0.75f, 0.3f) : (Color?)null;
+                    Sound.Play(Sfx.Impact, blocker != null ? 0.9f : 1f, deathtouch ? 0.8f : 1f);
                     if (blocker != null && blocker != null && !blocker.IsExiting) { blocker.Hit(attackerView.Data?.Power ?? 1, tint); attackerView.Hit(blocker.Data?.Power ?? 0); }
                     else if (defenderId >= 0 && panels.TryGetValue(defenderId, out var dp)) dp.Impact();
                 });
@@ -404,10 +420,10 @@ namespace MTGUnited
         {
             DrawCombatLines();
 
-            // Large preview: after 500 ms for hand cards (design doc), quickly for others.
+            // Large preview after the hover delay; right-click opens the full-size inspector instead.
             if (hoverCandidate != null && !previewShown && hoverCandidate.Data != null)
             {
-                float wait = hoverCandidate.Data.Zone == "Hand" ? 0.5f : 0.15f;
+                float wait = UiScale.PreviewDelay;   // Options > card preview delay (1.5 s by default)
                 if (Motion.Now - hoverSince >= wait)
                 {
                     previewShown = true;

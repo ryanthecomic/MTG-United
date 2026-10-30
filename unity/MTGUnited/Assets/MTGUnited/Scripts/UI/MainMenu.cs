@@ -39,7 +39,7 @@ namespace MTGUnited
 
         // Profile page
         InputField nameInput;
-        Text statsText, autoPayLabel;
+        Text statsText;
 
         int opponents;
         string aiDecks;
@@ -157,14 +157,14 @@ namespace MTGUnited
             var sub = UIKit.Label("Sub", bar.transform, "COMMANDER  ·  FORGE ENGINE", 13, Theme.TextDim, TextAnchor.MiddleLeft);
             sub.rectTransform.Place(42, 8, 360, 22);
 
-            string[] ids = { "home", "decks", "profile" };
-            string[] labels = { "HOME", "DECKS", "PROFILE" };
-            float x = 640;
+            string[] ids = { "home", "decks", "profile", "options" };
+            string[] labels = { "HOME", "DECKS", "PROFILE", "OPTIONS" };
+            float x = 500;
             for (int i = 0; i < ids.Length; i++)
             {
                 string id = ids[i];
                 var tab = UIKit.Rect("Tab " + id, bar.transform);
-                tab.Place(x, 0, 200, 92);
+                tab.Place(x, 0, 180, 92);
                 var hit = tab.gameObject.AddComponent<Image>();
                 hit.color = Color.clear;
                 tab.gameObject.AddComponent<PointerEvents>().OnClick = () => SelectTab(id);
@@ -175,7 +175,7 @@ namespace MTGUnited
                 underline.rectTransform.sizeDelta = new Vector2(0, 5); underline.rectTransform.anchoredPosition = new Vector2(0, 6);
                 underline.raycastTarget = false;
                 tabs[id] = (lbl, underline);
-                x += 210;
+                x += 190;
             }
 
             // Connection pill
@@ -406,15 +406,8 @@ namespace MTGUnited
             statsText = UIKit.Label("Stats", card, "", 26, Theme.Text, TextAnchor.UpperLeft, FontStyle.Bold);
             statsText.rectTransform.Place(32, 250, 900, 160);
 
-            var autoPay = UIKit.Button("AutoPay", card, "", Theme.Secondary, null, 18);
-            ((RectTransform)autoPay.transform).Place(30, 120, 400, 52);
-            autoPayLabel = UIKit.LabelOf(autoPay);
-            autoPay.onClick.AddListener(() =>
-            {
-                gc.AutoPayMana = !gc.AutoPayMana;
-                PlayerPrefs.SetInt("autoPay", gc.AutoPayMana ? 1 : 0);
-                RefreshProfile();
-            });
+            var opts = UIKit.Button("Options", card, "OPTIONS (SIZE, SOUND, AUTO-PAY)", Theme.Secondary, () => gc.Options.Open(), 16);
+            ((RectTransform)opts.transform).Place(30, 120, 400, 52);
 
             var clear = UIKit.Button("ClearCache", card, "CLEAR CARD IMAGE CACHE", Theme.Secondary, ClearImageCache, 16);
             ((RectTransform)clear.transform).Place(450, 120, 400, 52);
@@ -423,6 +416,7 @@ namespace MTGUnited
                 PlayerPrefs.SetInt("statGames", 0); PlayerPrefs.SetInt("statWins", 0); RefreshProfile();
             }, 16);
             ((RectTransform)resetStats.transform).Place(30, 50, 400, 52);
+
             RefreshProfile();
             return page;
         }
@@ -432,7 +426,6 @@ namespace MTGUnited
             int g = PlayerStats.Games, w = PlayerStats.Wins;
             string rate = g > 0 ? Mathf.RoundToInt(100f * w / g) + "%" : "—";
             statsText.text = "GAMES  " + g + "        WINS  <color=#f7a540>" + w + "</color>        LOSSES  " + PlayerStats.Losses + "        WIN RATE  " + rate;
-            autoPayLabel.text = "AUTO-PAY MANA: " + (gc.AutoPayMana ? "ON" : "OFF");
         }
 
         void RefreshProfileChip()
@@ -573,6 +566,7 @@ namespace MTGUnited
 
         void SelectTab(string id)
         {
+            if (id == "options") { gc.Options.Open(); return; }   // a pop-up, not a page
             currentTab = id;
             foreach (var kv in tabs)
             {

@@ -152,7 +152,7 @@ namespace MTGUnited
                 if (cardJson != null)
                 {
                     var cd = CardData.From(cardJson);
-                    tile = CardTile.Create(content, cd, 170, 238, () => Toggle(idx), c => { if (c != null) gc.Preview.Show(c, false); else gc.Preview.Hide(); });
+                    tile = CardTile.Create(content, cd, 170, 238, () => Toggle(idx), c => { if (c != null) gc.Preview.Request(c, false); else gc.Preview.Hide(); });
                     // Extra text (e.g. which ability) under the card name when it differs from the card.
                     string label = o.Str("label");
                     if (!string.IsNullOrEmpty(label) && label != cd.Name)
@@ -260,7 +260,7 @@ namespace MTGUnited
             if (cardJson != null)
             {
                 var cd = CardData.From(cardJson);
-                var tile = CardTile.Create(body, cd, 220, 308, null, c => { if (c != null) gc.Preview.Show(c, false); else gc.Preview.Hide(); });
+                var tile = CardTile.Create(body, cd, 220, 308, null, c => { if (c != null) gc.Preview.Request(c, false); else gc.Preview.Hide(); });
                 tile.rectTransform.anchorMin = tile.rectTransform.anchorMax = new Vector2(0.5f, 0.5f);
                 tile.rectTransform.anchoredPosition = new Vector2(-300, 0);
                 x = 150;
@@ -411,7 +411,7 @@ namespace MTGUnited
                 var b = UIKit.Button("Name", nameList, name, knownNames.Contains(name) ? new Color(0.30f, 0.24f, 0.12f) : Theme.PanelLight,
                     () => { gc.Preview.Hide(); Respond(new Dictionary<string, object> { { "name", name } }); }, 17);
                 var pe = b.gameObject.AddComponent<PointerEvents>();
-                pe.OnEnter = () => gc.Preview.Show(new CardData { Name = name }, false);
+                pe.OnEnter = () => gc.Preview.Request(new CardData { Name = name }, false);
                 pe.OnExit = () => gc.Preview.Hide();
             }
         }

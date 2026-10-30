@@ -132,7 +132,7 @@ namespace MTGUnited
                 var c = list[i];
                 int id = c.Id;
                 var tile = CardTile.Create(content, c, CellW, CellH, () => gc.ClickCard(id),
-                    cd => { if (cd != null) gc.Preview.Show(cd, false); else gc.Preview.Hide(); });
+                    cd => { if (cd != null) gc.Preview.Request(cd, false); else gc.Preview.Hide(); });
                 var tr = tile.rectTransform;
                 tr.anchorMin = tr.anchorMax = new Vector2(0, 1); tr.pivot = new Vector2(0, 1);
                 tr.anchoredPosition = new Vector2(8 + (i % cols) * (CellW + Gap), -(y + (i / cols) * (CellH + Gap)));

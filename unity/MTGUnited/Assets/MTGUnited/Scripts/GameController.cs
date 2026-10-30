@@ -25,6 +25,8 @@ namespace MTGUnited
         public RequestDialog Dialog { get; private set; }
         public MainMenu Menu { get; private set; }
         public CardPreview Preview { get; private set; }
+        public CardInspector Inspector { get; private set; }
+        public OptionsPanel Options { get; private set; }
         public Toasts Toasts { get; private set; }
         public ZoneViewer ZoneViewer { get; private set; }
         public GameOverPanel GameOver { get; private set; }
@@ -65,6 +67,7 @@ namespace MTGUnited
             GameArt.ApplyCursor();
             EnsureEventSystem();
             gameObject.AddComponent<CardImageCache>();
+            Sound.Create(gameObject);
             Launcher = gameObject.AddComponent<BridgeLauncher>();
 
             Bridge = new BridgeClient { Port = PlayerPrefs.GetInt("port", 7777) };
@@ -146,6 +149,7 @@ namespace MTGUnited
             Dialog = RequestDialog.Create(OverlayLayer, this);
             GameOver = GameOverPanel.Create(OverlayLayer, this);
             Menu = MainMenu.Create(OverlayLayer, this);
+            Options = OptionsPanel.Create(OverlayLayer, this);
             Toasts = Toasts.Create(OverlayLayer);
 
             // Hover preview sits above everything, in the same 1920x1080 space as the board.
@@ -153,6 +157,7 @@ namespace MTGUnited
             top.anchorMin = top.anchorMax = new Vector2(0.5f, 0.5f);
             top.sizeDelta = new Vector2(1920, 1080);
             Preview = CardPreview.Create(top);
+            Inspector = CardInspector.Create(top);
         }
 
         void Update()
@@ -186,7 +191,12 @@ namespace MTGUnited
         void HandleKeys()
         {
 #if ENABLE_LEGACY_INPUT_MANAGER
-            if (!InGame || Menu.IsOpen || Dialog.IsOpen) return;
+            if (Input.GetKeyDown(KeyCode.Escape))
+            {
+                if (Inspector != null && Inspector.IsOpen) { Inspector.Hide(); return; }
+                if (Options != null && Options.IsOpen) { Options.Close(); return; }
+            }
+            if (!InGame || Menu.IsOpen || Dialog.IsOpen || (Options != null && Options.IsOpen)) return;
             if (EventSystem.current != null && EventSystem.current.currentSelectedGameObject != null
                 && EventSystem.current.currentSelectedGameObject.GetComponent<InputField>() != null) return;
             if (Input.GetKeyDown(KeyCode.Space) || Input.GetKeyDown(KeyCode.Return)) Hud.PressPrimary();
@@ -210,6 +220,7 @@ namespace MTGUnited
                     break;
                 case "state":
                     State = GameState.FromMessage(msg);
+                    SoundDirector.OnState(State);
                     if (State.Me >= 0 && !State.GameOver && !InGame) { InGame = true; Menu.Hide(); }
                     BoardView.Render(State);
                     Hud.Render(State);
@@ -228,12 +239,14 @@ namespace MTGUnited
                     break;
                 case "gameStarted":
                     InGame = true;
+                    SoundDirector.Reset();
                     GameOver.Hide();
                     Menu.Hide();
                     Dialog.Close();
                     Toasts.Show("Game started. Good luck!");
                     break;
                 case "request":
+                    Sound.Play(Sfx.Popup, 0.7f);
                     Dialog.Open(msg);
                     break;
                 case "message":

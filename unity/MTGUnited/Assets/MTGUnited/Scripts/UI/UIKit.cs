@@ -273,6 +273,7 @@ namespace MTGUnited
             colors.disabledColor = new Color(0.45f, 0.45f, 0.45f, 0.6f);
             colors.colorMultiplier = 1.2f;
             b.colors = colors;
+            b.onClick.AddListener(() => Sound.Play(Sfx.UiClick, 0.6f));
             if (onClick != null) b.onClick.AddListener(onClick);
             var t = Label("Label", img.transform, label, fontSize, Theme.Text, TextAnchor.MiddleCenter, FontStyle.Bold);
             t.rectTransform.Stretch(8, 4, 8, 4);

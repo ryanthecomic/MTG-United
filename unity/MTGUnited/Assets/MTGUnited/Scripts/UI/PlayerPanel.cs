@@ -60,28 +60,35 @@ namespace MTGUnited
             }
             else
             {
-                p.lifeText = UIKit.Label("Life", p.bg.transform, "40", 44, Theme.Life, TextAnchor.MiddleRight, FontStyle.Bold).Outline(2);
-                p.lifeText.rectTransform.anchorMin = new Vector2(0.72f, 0); p.lifeText.rectTransform.anchorMax = new Vector2(1, 1);
-                p.lifeText.rectTransform.offsetMin = new Vector2(0, 0); p.lifeText.rectTransform.offsetMax = new Vector2(-14, 0);
-                p.nameText = UIKit.Label("Name", p.bg.transform, "", 20, Theme.Text, TextAnchor.UpperLeft, FontStyle.Bold);
-                p.nameText.rectTransform.anchorMin = new Vector2(0, 0.5f); p.nameText.rectTransform.anchorMax = new Vector2(0.72f, 1);
-                p.nameText.rectTransform.offsetMin = new Vector2(14, 0); p.nameText.rectTransform.offsetMax = new Vector2(0, -6);
-                p.nameText.horizontalOverflow = HorizontalWrapMode.Overflow;
-                p.infoText = UIKit.Label("Info", p.bg.transform, "", 14, Theme.TextDim, TextAnchor.LowerLeft);
-                p.infoText.rectTransform.anchorMin = new Vector2(0, 0); p.infoText.rectTransform.anchorMax = new Vector2(0.72f, 0.5f);
-                p.infoText.rectTransform.offsetMin = new Vector2(14, 8); p.infoText.rectTransform.offsetMax = new Vector2(-150, 0);
+                // Compact nameplate like the player's own: a big life badge on the left, name and counts beside it.
+                var badge = UIKit.Panel("LifeBadge", p.bg.transform, new Color(0f, 0f, 0f, 0.3f));
+                badge.raycastTarget = false;
+                var brt = badge.rectTransform;
+                brt.anchorMin = new Vector2(0, 0); brt.anchorMax = new Vector2(0, 1);
+                brt.pivot = new Vector2(0, 0.5f);
+                brt.sizeDelta = new Vector2(118, -12); brt.anchoredPosition = new Vector2(6, 0);
+                p.lifeText = UIKit.Label("Life", badge.transform, "40", 58, Theme.Life, TextAnchor.MiddleCenter, FontStyle.Bold).Outline(2);
+                p.lifeText.rectTransform.Stretch();
+
+                p.nameText = UIKit.Label("Name", p.bg.transform, "", 20, Theme.Text, TextAnchor.MiddleLeft, FontStyle.Bold);
+                p.nameText.rectTransform.anchorMin = new Vector2(0, 0.62f); p.nameText.rectTransform.anchorMax = new Vector2(1, 1);
+                p.nameText.rectTransform.offsetMin = new Vector2(136, 0); p.nameText.rectTransform.offsetMax = new Vector2(-10, -6);
+                p.nameText.resizeTextForBestFit = true; p.nameText.resizeTextMinSize = 12; p.nameText.resizeTextMaxSize = 20;
+                p.infoText = UIKit.Label("Info", p.bg.transform, "", 14, Theme.TextDim, TextAnchor.MiddleLeft);
+                p.infoText.rectTransform.anchorMin = new Vector2(0, 0.36f); p.infoText.rectTransform.anchorMax = new Vector2(1, 0.64f);
+                p.infoText.rectTransform.offsetMin = new Vector2(136, 0); p.infoText.rectTransform.offsetMax = new Vector2(-10, 0);
                 p.infoText.supportRichText = true;
                 p.infoText.resizeTextForBestFit = true; p.infoText.resizeTextMinSize = 9; p.infoText.resizeTextMaxSize = 14;
 
-                // Graveyard / exile viewers for this opponent (to the left of the life total).
+                // Graveyard / exile viewers under the name.
                 p.gyButton = UIKit.Button("Graveyard", p.bg.transform, "GY", Theme.Secondary, () => gc.ZoneViewer.Open(p.playerId, "Graveyard"), 13);
                 var gr = (RectTransform)p.gyButton.transform;
-                gr.anchorMin = gr.anchorMax = new Vector2(0.72f, 0); gr.pivot = new Vector2(1, 0);
-                gr.sizeDelta = new Vector2(70, 28); gr.anchoredPosition = new Vector2(-78, 8);
+                gr.anchorMin = gr.anchorMax = new Vector2(0, 0); gr.pivot = new Vector2(0, 0);
+                gr.sizeDelta = new Vector2(78, 28); gr.anchoredPosition = new Vector2(136, 10);
                 p.exButton = UIKit.Button("Exile", p.bg.transform, "EX", Theme.Secondary, () => gc.ZoneViewer.Open(p.playerId, "Exile"), 13);
                 var er = (RectTransform)p.exButton.transform;
-                er.anchorMin = er.anchorMax = new Vector2(0.72f, 0); er.pivot = new Vector2(1, 0);
-                er.sizeDelta = new Vector2(70, 28); er.anchoredPosition = new Vector2(-4, 8);
+                er.anchorMin = er.anchorMax = new Vector2(0, 0); er.pivot = new Vector2(0, 0);
+                er.sizeDelta = new Vector2(78, 28); er.anchoredPosition = new Vector2(222, 10);
             }
             return p;
         }

@@ -123,18 +123,17 @@ namespace MTGUnited
             ingameMenu.Place(1640, 790, 270, 226);
             MenuButton("Concede", 0, () => { gc.Send("concede"); ToggleMenu(); });
             MenuButton("Alpha strike (attack with all)", 1, () => { gc.Send("alphaStrike"); ToggleMenu(); });
-            var autoPay = MenuButton(AutoPayLabel(), 2, null);
-            autoPay.onClick.AddListener(() =>
-            {
-                gc.AutoPayMana = !gc.AutoPayMana;
-                PlayerPrefs.SetInt("autoPay", gc.AutoPayMana ? 1 : 0);
-                UIKit.LabelOf(autoPay).text = AutoPayLabel();
-            });
+            MenuButton("Options", 2, () => { ToggleMenu(); gc.Options.Open(); });
             MenuButton("Back to main menu", 3, () => { ToggleMenu(); gc.Menu.Show(); });
             ingameMenu.gameObject.SetActive(false);
+
+            // UI scale: the right-hand column grows from the bottom-right corner, the menu from the top-right.
+            var bottomRight = new Vector2(1910, 10);
+            foreach (var c in new Component[] { promptBg, secondary, primary, endTurn, undo, stackBg }) UiScaled.Add(c, bottomRight);
+            UiScaled.Add(menuButton, new Vector2(1912, 1072));
+            UiScaled.Add(ingameMenu, new Vector2(1912, 1072));
         }
 
-        string AutoPayLabel() => "Auto-pay mana: " + (gc.AutoPayMana ? "ON" : "OFF");
 
         Button MenuButton(string label, int row, UnityEngine.Events.UnityAction onClick)
         {
@@ -246,8 +245,9 @@ namespace MTGUnited
                 int id = item.Id;
                 var src = item.Source;
                 pe.OnClick = () => gc.ClickStack(id);
-                pe.OnEnter = () => { if (src != null) gc.Preview.Show(src, false); };
+                pe.OnEnter = () => { if (src != null) gc.Preview.Request(src, false); };
                 pe.OnExit = () => gc.Preview.Hide();
+                pe.OnRightClick = () => { if (src != null) gc.Inspector.Show(src); };
                 stackRows.Add(row.gameObject);
             }
         }

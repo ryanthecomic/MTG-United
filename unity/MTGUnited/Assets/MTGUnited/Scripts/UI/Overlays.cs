@@ -30,13 +30,35 @@ namespace MTGUnited
             return p;
         }
 
+        // Delayed hover preview (Options > card preview delay, 1.5 s by default).
+        CardData pending; bool pendingRight; float pendingSince;
+        PreviewTimer timer;
+
+        /// <summary>Shows the preview after the hover delay, unless the pointer leaves first (Hide).</summary>
+        public void Request(CardData c, bool onRight)
+        {
+            if (c == null || c.Hidden) { Hide(); return; }
+            if (UiScale.PreviewDelay <= 0f) { Show(c, onRight); return; }
+            pending = c; pendingRight = onRight; pendingSince = Time.unscaledTime;
+            if (timer == null) { timer = transform.parent.gameObject.AddComponent<PreviewTimer>(); timer.Preview = this; }
+        }
+
+        internal void Tick()
+        {
+            if (pending == null || Time.unscaledTime - pendingSince < UiScale.PreviewDelay) return;
+            var c = pending; pending = null;
+            Show(c, pendingRight);
+        }
+
         public void Show(CardData c, bool onRight)
         {
             if (c == null || c.Hidden) { Hide(); return; }
+            pending = null;
             showing = c;
             gameObject.SetActive(true);
             transform.SetAsLastSibling();
-            rt.Place(onRight ? 1590 - 360 : 290, 250, 340, 476);
+            float s = UiScale.Value, w = 340 * s, h = 476 * s;
+            rt.Place(onRight ? 1570 - w : 290, Mathf.Max(20, 488 - h / 2f), w, h);
             art.enabled = false;
             text.text = "<b>" + c.Name + "</b>   " + CardView.ManaText(c.ManaCost) + "\n<i>" + c.TypeLine + "</i>\n\n" + c.Text
                         + (c.HasPT ? "\n\n<b>" + c.Power + "/" + c.Toughness + "</b>" : "");
@@ -54,9 +76,17 @@ namespace MTGUnited
 
         public void Hide()
         {
+            pending = null;
             showing = null;
             gameObject.SetActive(false);
         }
+    }
+
+    /// <summary>Drives the preview delay while the (inactive) preview itself can't update.</summary>
+    public class PreviewTimer : MonoBehaviour
+    {
+        public CardPreview Preview;
+        void Update() { if (Preview != null) Preview.Tick(); }
     }
 
     /// <summary>Short-lived notifications at the top of the screen.</summary>
@@ -127,6 +157,7 @@ namespace MTGUnited
                 CardImageCache.Instance.Get(c.Name, c.Set, tex => { if (art != null) { art.texture = tex; art.enabled = true; } });
             var pe = frame.gameObject.AddComponent<PointerEvents>();
             pe.OnClick = () => onClick?.Invoke();
+            pe.OnRightClick = () => { if (c != null) CardInspector.Instance?.Show(c); };
             if (onHover != null)
             {
                 pe.OnEnter = () => onHover(c);
@@ -206,7 +237,7 @@ namespace MTGUnited
             for (int i = list.Count - 1; i >= 0; i--)
             {
                 var c = list[i];
-                var tile = CardTile.Create(content, c, 160, 224, () => gc.ClickCard(c.Id), cd => { if (cd != null) gc.Preview.Show(cd, false); else gc.Preview.Hide(); });
+                var tile = CardTile.Create(content, c, 160, 224, () => gc.ClickCard(c.Id), cd => { if (cd != null) gc.Preview.Request(cd, false); else gc.Preview.Hide(); });
                 bool playable = s.Prompt.ActionableCards.Contains(c.Id) || s.Prompt.SelectableCards.Contains(c.Id);
                 if (playable)
                 {
@@ -254,6 +285,7 @@ namespace MTGUnited
             string myName = s?.MePlayer?.Name;
             bool won = winner != null && myName != null && winner == myName;
             if (winner != null) PlayerStats.Record(won);
+            Sound.Play(won ? Sfx.Victory : Sfx.Defeat);
             title.text = won ? "VICTORY" : "DEFEAT";
             title.color = won ? Theme.Accent : Theme.Danger;
             sub.text = winner == null ? "The game is over." : (won ? "You won the pod!" : "Winner: " + winner);
