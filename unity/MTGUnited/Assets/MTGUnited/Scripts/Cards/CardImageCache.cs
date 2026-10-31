@@ -71,22 +71,24 @@ namespace MTGUnited
             {
                 var (key, name, set) = queue.Dequeue();
                 Texture2D tex = null;
+                byte[] bytes = null;
                 // Try the exact printing first, then any printing of the card.
                 if (!string.IsNullOrEmpty(set))
                 {
-                    yield return Download(Url(name, set), t => tex = t);
+                    yield return Download(Url(name, set), (t, b) => { tex = t; bytes = b; });
                     yield return new WaitForSecondsRealtime(MinSecondsBetweenRequests);
                 }
                 if (tex == null)
                 {
-                    yield return Download(Url(name, null), t => tex = t);
+                    yield return Download(Url(name, null), (t, b) => { tex = t; bytes = b; });
                     yield return new WaitForSecondsRealtime(MinSecondsBetweenRequests);
                 }
 
                 if (tex != null)
                 {
                     memory[key] = tex;
-                    try { File.WriteAllBytes(Path.Combine(diskDir, SafeFileName(key) + ".jpg"), tex.EncodeToJPG(90)); }
+                    // Save the downloaded file as-is (no re-encode).
+                    try { if (bytes != null) File.WriteAllBytes(Path.Combine(diskDir, SafeFileName(key) + ".jpg"), bytes); }
                     catch (Exception ex) { Debug.LogWarning("[MTGUnited] Could not cache image: " + ex.Message); }
                     if (waiting.TryGetValue(key, out var cbs)) foreach (var cb in cbs) cb(tex);
                 }
@@ -106,7 +108,7 @@ namespace MTGUnited
             return url;
         }
 
-        static IEnumerator Download(string url, Action<Texture2D> done)
+        static IEnumerator Download(string url, Action<Texture2D, byte[]> done)
         {
             using (var req = UnityWebRequestTexture.GetTexture(url, false))
             {
@@ -116,16 +118,30 @@ namespace MTGUnited
                 if (req.result == UnityWebRequest.Result.Success)
                 {
                     var t = DownloadHandlerTexture.GetContent(req);
-                    if (t != null) { Prepare(t); done(t); }
+                    var raw = req.downloadHandler.data;
+                    if (t != null) { Prepare(t); done(t, raw); }
                 }
             }
         }
 
+        /// <summary>
+        /// Card images are compressed on the GPU (about 1/6 of the memory) and their CPU copy is dropped, so even a
+        /// deck builder full of cards stays light.
+        /// </summary>
         static void Prepare(Texture2D t)
         {
             t.wrapMode = TextureWrapMode.Clamp;
             t.filterMode = FilterMode.Trilinear;
             t.anisoLevel = 4;
+            try
+            {
+                if (t.isReadable && t.width % 4 == 0 && t.height % 4 == 0)
+                {
+                    t.Compress(true);
+                    t.Apply(false, true);
+                }
+            }
+            catch (Exception ex) { Debug.LogWarning("[MTGUnited] Could not compress card image: " + ex.Message); }
         }
 
         static string SafeFileName(string s)

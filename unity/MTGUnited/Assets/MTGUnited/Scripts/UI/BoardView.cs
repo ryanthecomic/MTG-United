@@ -16,19 +16,24 @@ namespace MTGUnited
         // Board regions (bottom-left origin, 1920x1080 space).
         const float MyFieldLeft = 280;
         // The battlefield gives way when the HUD on the right is scaled up (Options > interface size).
-        static float MyFieldRight => 1420f - Mathf.Max(0f, UiScale.Value - 1f) * 480f;
-        const float MyCreatureRowY = 470, MyOtherRowY = 300;
-        const float MyCardH = 150;
-        const float HandY = 70, HandCardH = 220;
-        const float OppBandBottom = 600, OppHeaderH = 96, OppPanelW = 380;
+        // (Library, graveyard and exile now sit in my nameplate, so the field runs up to the HUD column.)
+        static float MyFieldRight => 1560f - Mathf.Max(0f, UiScale.Value - 1f) * 480f;
+        // Card sizes follow Options > card size; the two battlefield rows re-space around them.
+        static float MyCardH => 150f * UiScale.CardScale;
+        static float MyOtherRowY => 223f + MyCardH / 2f;
+        static float MyCreatureRowY => MyOtherRowY + MyCardH + 18f;
+        static float HandCardH => 220f * UiScale.CardScale;
+        static float HandY => 70f + (HandCardH - 220f) * 0.25f;
+        const float HandLeft = 410;   // clear of my nameplate
+        const float OppBandBottom = 600, OppHeaderH = 118, OppPanelW = 400;
         const float MyCommanderH = 180;
 
         // Where things fly to / from (these move with the scaled HUD).
         static readonly Vector2 HudCorner = new Vector2(1910, 10), MyCorner = new Vector2(10, 10);
-        static Vector2 MyLibraryPos => UiScale.About(new Vector2(1495, 457), HudCorner);
-        static Vector2 MyGraveyardPos => UiScale.About(new Vector2(1495, 287), HudCorner);
-        static Vector2 MyExilePos => UiScale.About(new Vector2(1495, 117), HudCorner);
-        static Vector2 MyPortraitPos => UiScale.About(new Vector2(140, 120), MyCorner);
+        Vector2 MyLibraryPos => ZonePos(last?.Me ?? -1, "Library");
+        Vector2 MyGraveyardPos => ZonePos(last?.Me ?? -1, "Graveyard");
+        Vector2 MyExilePos => ZonePos(last?.Me ?? -1, "Exile");
+        static Vector2 MyPortraitPos => UiScale.About(new Vector2(200, 100), MyCorner);
         static readonly Vector2 MyHandOrigin = new Vector2(850, 40);
         static Vector2 StackPos => UiScale.About(new Vector2(1745, 482), HudCorner);
 
@@ -39,7 +44,6 @@ namespace MTGUnited
         readonly Dictionary<int, PlayerPanel> panels = new Dictionary<int, PlayerPanel>();
         readonly Dictionary<int, Vector2> panelCenters = new Dictionary<int, Vector2>();
         readonly List<Image> zoneBackgrounds = new List<Image>();
-        PilesView myPiles;
         Image myFieldBg;
 
         GameState prev, last;
@@ -62,9 +66,6 @@ namespace MTGUnited
             bv.myFieldBg.rectTransform.Place(MyFieldLeft - 10, 215, MyFieldRight - MyFieldLeft + 20, 340);
             bv.myFieldBg.raycastTarget = false;
 
-            bv.myPiles = PilesView.Create(bv.panelLayer, gc);
-            bv.myPiles.Rect.Place(1440, 40, 120, 500);
-            UiScaled.Add(bv.myPiles, HudCorner);
             return bv;
         }
 
@@ -92,49 +93,51 @@ namespace MTGUnited
             if (me != null)
             {
                 var myPanel = PanelFor(me, true);
-                myPanel.Rect.Place(20, 20, 240, 200);
+                myPanel.SetColor(Theme.PlayerColor(s.Players.IndexOf(me)));
+                myPanel.MoveTo(16, 16, 370, 168, true);
                 UiScaled.Add(myPanel, MyCorner);
                 myPanel.Render(me, s, true);
                 panelCenters[me.Id] = MyPortraitPos;
-                myPiles.Render(me, s);
                 myFieldBg.rectTransform.Place(MyFieldLeft - 10, 215, MyFieldRight - MyFieldLeft + 20, 340);
 
                 LayoutHand(me.Hand, placements);
                 LayoutField(me, MyFieldLeft, MyFieldRight, MyCreatureRowY, MyOtherRowY, MyCardH, placements, false);
-                // Commander sits just above my nameplate.
-                float cmdY = 10 + 210 * UiScale.Value + 8;
-                LayoutRow(me.Command, 24, cmdY, MyCommanderH * 0.714f, MyCommanderH, placements, 0, false);
+                // Commanders aren't drawn on the table: right-click a nameplate to see (and cast) them.
             }
 
             // ---------------------------------------------------------------- opponents
             int n = Mathf.Max(1, opps.Count);
-            float colW = 1920f / n;
+            float baseW = 1920f / n;
             EnsureZoneBackgrounds(n);
+            int fi = opps.FindIndex(o => o.Id == focusedOpp);
+            if (fi < 0) focusedOpp = -1;
             for (int i = 0; i < opps.Count; i++)
             {
                 var p = opps[i];
-                float x0 = i * colW;
+                // Focus: the chosen opponent takes the whole top band; the others slide off to their own side.
+                float colW = fi < 0 ? baseW : (i == fi ? 1920f : baseW);
+                float x0 = fi < 0 ? i * baseW : i == fi ? 0f : i < fi ? -(fi - i) * baseW - 40f : 1920f + 40f + (i - fi - 1) * baseW;
+                columnSpans[p.Id] = (x0, colW);
                 var bg = zoneBackgrounds[i];
                 bg.rectTransform.Place(x0 + 6, OppBandBottom, colW - 12, 1080 - OppBandBottom - 6);
-                bg.color = p.Id == s.ActivePlayer ? new Color(1f, 0.8f, 0.4f, 0.06f) : new Color(1f, 1f, 1f, 0.03f);
+                var seat = Theme.PlayerColor(s.Players.IndexOf(p));
+                bg.color = new Color(seat.r, seat.g, seat.b, p.Id == s.ActivePlayer ? 0.11f : 0.05f);   // each player's area in their colour
 
                 // Nameplate centred at the top of the opponent's column, scaled from that top-centre point.
                 float headerH = OppHeaderH * UiScale.Value;
                 float pw = Mathf.Min(OppPanelW, colW - 24);
                 var panel = PanelFor(p, false);
-                panel.Rect.Place(x0 + colW / 2f - pw / 2f, 1080 - OppHeaderH - 8, pw, OppHeaderH);
+                panel.SetColor(Theme.PlayerColor(s.Players.IndexOf(p)));
+                panel.MoveTo(x0 + colW / 2f - pw / 2f, 1080 - OppHeaderH - 8, pw, OppHeaderH);
                 UiScaled.Add(panel, new Vector2(x0 + colW / 2f, 1072));
                 panel.Render(p, s, false);
                 panelCenters[p.Id] = new Vector2(x0 + colW / 2f, 1072 - headerH / 2f);
 
-                float cardH = Mathf.Clamp(colW / 5.6f, 70, 150);
+                float cardH = Mathf.Clamp(colW / 5.6f, 70, 150) * UiScale.CardScale;
                 float fieldTop = 1080 - headerH - 16;
                 float otherY = fieldTop - cardH * 0.55f - 4;
                 float creatureY = otherY - cardH - 18;
-                // Commander: a larger card at the top-left of the column.
-                float cmdH = Mathf.Min(cardH * 1.3f, fieldTop - OppBandBottom - 10), cmdW = cmdH * 0.714f;
-                LayoutRow(p.Command, x0 + 12, fieldTop - cmdH, cmdW, cmdH, placements, 0, false);
-                LayoutField(p, x0 + 18 + cmdW + 8, x0 + colW - 14, creatureY, otherY, cardH, placements, true);
+                LayoutField(p, x0 + 16, x0 + colW - 14, creatureY, otherY, cardH, placements, true);
             }
 
             // ---------------------------------------------------------------- selection tray
@@ -296,20 +299,21 @@ namespace MTGUnited
 
             foreach (var p in s.Players)
             {
+                if (p.Command.Any(c => c.Id == id)) { cv.PlayExit(ExitKind.ToLibrary, PanelCenter(p.Id)); return; }
                 if (p.Graveyard.Any(c => c.Id == id))
                 {
-                    var target = p.Id == s.Me ? MyGraveyardPos : PanelCenter(p.Id);
+                    var target = ZonePos(p.Id, "Graveyard");
                     cv.PlayExit(fromHand ? ExitKind.Discard : ExitKind.Die, target);
                     return;
                 }
                 if (p.Exile.Any(c => c.Id == id))
                 {
-                    cv.PlayExit(ExitKind.Exile, p.Id == s.Me ? MyExilePos : PanelCenter(p.Id));
+                    cv.PlayExit(ExitKind.Exile, ZonePos(p.Id, "Exile"));
                     return;
                 }
             }
             // Not visible anywhere: shuffled or put back into a library (or a hand we can't see).
-            cv.PlayExit(ExitKind.ToLibrary, mine ? MyLibraryPos : ownerSpot);
+            cv.PlayExit(ExitKind.ToLibrary, owner >= 0 ? ZonePos(owner, "Library") : ownerSpot);
         }
 
         Vector2? PileFor(GameState s, int cardId, int owner)
@@ -317,13 +321,65 @@ namespace MTGUnited
             if (s == null) return null;
             foreach (var p in s.Players)
             {
-                if (p.Graveyard.Any(c => c.Id == cardId)) return p.Id == s.Me ? MyGraveyardPos : PanelCenter(p.Id);
-                if (p.Exile.Any(c => c.Id == cardId)) return p.Id == s.Me ? MyExilePos : PanelCenter(p.Id);
+                if (p.Graveyard.Any(c => c.Id == cardId)) return ZonePos(p.Id, "Graveyard");
+                if (p.Exile.Any(c => c.Id == cardId)) return ZonePos(p.Id, "Exile");
+                if (p.Command.Any(c => c.Id == cardId)) return PanelCenter(p.Id);
             }
             return null;
         }
 
         Vector2 PanelCenter(int playerId) => panelCenters.TryGetValue(playerId, out var v) ? v : new Vector2(960, 900);
+
+        /// <summary>Board position of a player's zone symbol (hand, library, graveyard, exile) in their nameplate.</summary>
+        Vector2 ZonePos(int playerId, string zone)
+        {
+            if (panels.TryGetValue(playerId, out var panel))
+            {
+                var rt = panel.ZoneRect(zone);
+                if (rt != null)
+                {
+                    Vector3 world = rt.TransformPoint(rt.rect.center);
+                    Vector2 local = root.InverseTransformPoint(world);
+                    return local + new Vector2(960, 540);
+                }
+            }
+            return PanelCenter(playerId);
+        }
+
+        // ---------------------------------------------------------------- focus (scroll over an opponent)
+
+        int focusedOpp = -1;
+        readonly Dictionary<int, (float x0, float w)> columnSpans = new Dictionary<int, (float, float)>();
+
+        /// <summary>Scroll up over an opponent's area to focus their board; scroll down to show everyone again.</summary>
+        void HandleFocusScroll()
+        {
+#if ENABLE_LEGACY_INPUT_MANAGER
+            float wheel = Input.mouseScrollDelta.y;
+            if (Mathf.Abs(wheel) < 0.01f || last == null) return;
+            if (gc.Dialog.IsOpen || gc.Menu.IsOpen || gc.ZoneViewer.IsOpen || gc.Options.IsOpen || gc.Inspector.IsOpen) return;
+            if (gc.Tray.gameObject.activeSelf) return;
+            if (!RectTransformUtility.ScreenPointToLocalPointInRectangle(root, Input.mousePosition, null, out var local)) return;
+            var p = local + new Vector2(960, 540);
+            if (p.y < OppBandBottom) return;
+            if (wheel < 0f)
+            {
+                if (focusedOpp >= 0) { focusedOpp = -1; Render(last); }
+                return;
+            }
+            foreach (var kv in columnSpans)
+            {
+                if (last.Player(kv.Key) == null || kv.Key == last.Me) continue;
+                if (p.x >= kv.Value.x0 && p.x < kv.Value.x0 + kv.Value.w && focusedOpp != kv.Key)
+                {
+                    focusedOpp = kv.Key;
+                    Sound.Play(Sfx.Draw, 0.4f);
+                    Render(last);
+                    return;
+                }
+            }
+#endif
+        }
 
         // =================================================================================== stack / combat / damage
 
@@ -418,6 +474,7 @@ namespace MTGUnited
 
         void Update()
         {
+            HandleFocusScroll();
             DrawCombatLines();
 
             // Large preview after the hover delay; right-click opens the full-size inspector instead.
@@ -510,10 +567,10 @@ namespace MTGUnited
             int n = hand.Count;
             if (n == 0) return;
             float h = HandCardH, w = h * 0.714f;
-            float maxWidth = MyFieldRight - MyFieldLeft;
+            float maxWidth = MyFieldRight - HandLeft;
             float spacing = n == 1 ? 0 : Mathf.Min(w * 0.82f, (maxWidth - w) / (n - 1));
             float total = spacing * (n - 1);
-            float cx = (MyFieldLeft + MyFieldRight) / 2f;
+            float cx = (HandLeft + MyFieldRight) / 2f;
             int hoverIndex = hand.FindIndex(c => c.Id == hoveredHandId);
             for (int i = 0; i < n; i++)
             {
@@ -641,6 +698,8 @@ namespace MTGUnited
             prev = last = null;
             hoveredHandId = -1;
             hoverCandidate = null;
+            focusedOpp = -1;
+            columnSpans.Clear();
         }
     }
 }

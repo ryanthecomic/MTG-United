@@ -167,9 +167,14 @@ namespace MTGUnited
         }
     }
 
-    /// <summary>Browse a graveyard or exile. Cards can be clicked (e.g. to cast with flashback).</summary>
+    /// <summary>
+    /// Browse a graveyard, exile, command zone (right-click a player) or this game's revealed cards. Cards can be
+    /// clicked when Forge allows it (cast the commander, flashback...).
+    /// </summary>
     public class ZoneViewer : MonoBehaviour
     {
+        /// <summary>Cards revealed this game, newest last (filled by the reveal pop-up).</summary>
+        public static readonly List<CardData> Revealed = new List<CardData>();
         GameController gc;
         Text title;
         RectTransform content;
@@ -207,6 +212,7 @@ namespace MTGUnited
             var close = UIKit.Button("Close", panel.transform, "Close", Theme.Secondary, v.Close, 20);
             var cr = (RectTransform)close.transform;
             cr.anchorMin = cr.anchorMax = new Vector2(0.5f, 0); cr.sizeDelta = new Vector2(200, 46); cr.anchoredPosition = new Vector2(0, 36);
+            UIKit.CloseX(panel.transform, v.Close);
             shade.gameObject.SetActive(false);
             return v;
         }
@@ -220,6 +226,8 @@ namespace MTGUnited
             Refresh(gc.State);
         }
 
+        public bool IsOpen => gameObject.activeSelf;
+
         public void Close()
         {
             playerId = -1;
@@ -229,16 +237,29 @@ namespace MTGUnited
 
         public void Refresh(GameState s)
         {
-            if (!gameObject.activeSelf || s == null || playerId < 0) return;
-            var p = s.Player(playerId);
-            if (p == null) { Close(); return; }
-            var list = zone == "Exile" ? p.Exile : p.Graveyard;
-            title.text = p.ShortName + " — " + zone + " (" + list.Count + ")";
+            if (!gameObject.activeSelf || s == null) return;
+            List<CardData> list;
+            if (zone == "Revealed")
+            {
+                list = Revealed;
+                title.text = "Revealed this game (" + list.Count + ")";
+            }
+            else
+            {
+                if (playerId < 0) return;
+                var p = s.Player(playerId);
+                if (p == null) { Close(); return; }
+                list = zone == "Exile" ? p.Exile : zone == "Command" ? p.Command : p.Graveyard;
+                string label = zone == "Command" ? (list.Count == 1 ? "Commander" : "Commanders") : zone;
+                title.text = p.ShortName + " — " + label + " (" + list.Count + ")";
+                if (zone == "Command" && list.Count == 0) title.text = p.ShortName + " — commander is not in the command zone";
+            }
             foreach (Transform child in content) Destroy(child.gameObject);
             for (int i = list.Count - 1; i >= 0; i--)
             {
                 var c = list[i];
-                var tile = CardTile.Create(content, c, 160, 224, () => gc.ClickCard(c.Id), cd => { if (cd != null) gc.Preview.Request(cd, false); else gc.Preview.Hide(); });
+                System.Action click = zone == "Revealed" ? (System.Action)null : () => gc.ClickCard(c.Id);
+                var tile = CardTile.Create(content, c, 160, 224, click, cd => { if (cd != null) gc.Preview.Request(cd, false); else gc.Preview.Hide(); });
                 bool playable = s.Prompt.ActionableCards.Contains(c.Id) || s.Prompt.SelectableCards.Contains(c.Id);
                 if (playable)
                 {
@@ -293,5 +314,83 @@ namespace MTGUnited
         }
 
         public void Hide() => gameObject.SetActive(false);
+    }
+}
+
+namespace MTGUnited
+{
+    /// <summary>
+    /// Cards revealed from a library (or hand) pop up briefly at the top of the board, then fade on their own.
+    /// Hovering keeps them up; left-click dismisses; right-click opens every card revealed this game.
+    /// </summary>
+    public class RevealPopup : MonoBehaviour
+    {
+        const float Life = 4f, Fade = 0.3f;
+        GameController gc;
+        CanvasGroup group;
+        RectTransform panel, row;
+        Text title;
+        float shownAt = -100f;
+        bool hovered;
+
+        public static RevealPopup Create(RectTransform parent, GameController gc)
+        {
+            var bg = UIKit.Panel("RevealPopup", parent, new Color(0.04f, 0.04f, 0.07f, 0.94f));
+            var r = bg.gameObject.AddComponent<RevealPopup>();
+            r.gc = gc;
+            r.panel = bg.rectTransform;
+            r.panel.anchorMin = r.panel.anchorMax = new Vector2(0.5f, 0.5f);
+            r.group = bg.gameObject.AddComponent<CanvasGroup>();
+            var rim = bg.gameObject.AddComponent<UnityEngine.UI.Outline>();
+            rim.effectColor = new Color(1f, 0.8f, 0.4f, 0.6f); rim.effectDistance = new Vector2(2, -2);
+            var pe = bg.gameObject.AddComponent<PointerEvents>();
+            pe.OnClick = r.Hide;
+            pe.OnRightClick = () => { r.Hide(); gc.ZoneViewer.Open(-1, "Revealed"); };
+            pe.OnEnter = () => r.hovered = true;
+            pe.OnExit = () => { r.hovered = false; r.shownAt = Time.unscaledTime - 1.5f; };
+            r.title = UIKit.Label("Title", bg.transform, "", 18, Theme.Text, TextAnchor.UpperCenter, FontStyle.Bold);
+            r.title.rectTransform.Stretch(16, 0, 16, 10);
+            var hint = UIKit.Label("Hint", bg.transform, "right-click: all revealed cards", 12, Theme.TextDim, TextAnchor.LowerCenter);
+            hint.rectTransform.Stretch(10, 6, 10, 0);
+            r.row = UIKit.Rect("Row", bg.transform).Stretch(14, 26, 14, 40);
+            bg.gameObject.SetActive(false);
+            return r;
+        }
+
+        public void Show(string message, List<CardData> cards)
+        {
+            if (cards.Count == 0) return;
+            ZoneViewer.Revealed.AddRange(cards);
+            foreach (Transform c in row) Destroy(c.gameObject);
+            int n = Mathf.Min(cards.Count, 7);
+            const float w = 150, h = 210, gap = 10;
+            for (int i = 0; i < n; i++)
+            {
+                var cd = cards[i];
+                var tile = CardTile.Create(row, cd, w, h, null, null);
+                var tr = tile.rectTransform;
+                tr.anchorMin = tr.anchorMax = new Vector2(0, 0.5f); tr.pivot = new Vector2(0, 0.5f);
+                tr.anchoredPosition = new Vector2(i * (w + gap), 0);
+                tile.raycastTarget = false;
+            }
+            title.text = string.IsNullOrEmpty(message) ? "Revealed" : message.Replace('\n', ' ');
+            panel.sizeDelta = new Vector2(Mathf.Max(420, n * (w + gap) - gap + 28), h + 80);
+            panel.anchoredPosition = new Vector2(0, 150);
+            shownAt = Time.unscaledTime;
+            gameObject.SetActive(true);
+            transform.SetAsLastSibling();
+            Sound.Play(Sfx.Popup, 0.6f);
+        }
+
+        public void Hide() => gameObject.SetActive(false);
+
+        void Update()
+        {
+            if (hovered) { group.alpha = 1f; shownAt = Time.unscaledTime; return; }
+            float t = Time.unscaledTime - shownAt;
+            // Quick fade in (within the motion budget), hold, then fade out.
+            group.alpha = t < 0.15f ? t / 0.15f : t > Life ? 1f - (t - Life) / Fade : 1f;
+            if (t > Life + Fade) Hide();
+        }
     }
 }

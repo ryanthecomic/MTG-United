@@ -15,6 +15,14 @@ namespace MTGUnited
             set { cached = Mathf.Clamp(value, Min, Max); PlayerPrefs.SetFloat("uiScale", cached); }
         }
 
+        /// <summary>Size of cards on the battlefield and in hand (Options > card size).</summary>
+        static float cardCached = -1f;
+        public static float CardScale
+        {
+            get { if (cardCached < 0f) cardCached = Mathf.Clamp(PlayerPrefs.GetFloat("cardScale", 1f), 0.8f, 1.3f); return cardCached; }
+            set { cardCached = Mathf.Clamp(value, 0.8f, 1.3f); PlayerPrefs.SetFloat("cardScale", cardCached); }
+        }
+
         /// <summary>Seconds of hovering before the large card preview appears.</summary>
         public static float PreviewDelay
         {

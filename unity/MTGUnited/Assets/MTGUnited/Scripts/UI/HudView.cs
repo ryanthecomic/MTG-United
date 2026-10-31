@@ -116,8 +116,9 @@ namespace MTGUnited
             stackBg.gameObject.SetActive(false);
 
             // In-game menu (top right corner of the screen).
-            menuButton = UIKit.Button("Menu", rt, "≡", Theme.Secondary, ToggleMenu, 26);
-            ((RectTransform)menuButton.transform).Place(1862, 1022, 50, 50);
+            // Settings gear, top right (opens the in-game menu: concede, options, back to menu...).
+            menuButton = UIKit.IconButton("Menu", rt, Icons.Gear, 1856, 1016, 56, ToggleMenu);
+            menuButton.GetComponent<Image>().color = new Color(0.05f, 0.06f, 0.09f, 0.85f);
             menuButton.transform.SetAsLastSibling();
             ingameMenu = UIKit.Panel("IngameMenu", rt, Theme.PanelLight).rectTransform;
             ingameMenu.Place(1640, 790, 270, 226);

@@ -16,11 +16,16 @@ namespace MTGUnited
         int playerId;
         Image bg, ring;
         Text nameText, lifeText, infoText, cmdText;
+        RawImage art;
+        Image badge;
+        UnityEngine.UI.Outline badgeRim;
+        Color playerColor = new Color(0.35f, 0.55f, 0.95f);
+        string artFor;
         RectTransform manaRow;
         readonly List<Button> manaButtons = new List<Button>();
         int lastLife = int.MinValue;
-        Button gyButton, exButton;
         float lifePulse;
+        readonly Dictionary<string, (RectTransform rt, Text count)> zones = new Dictionary<string, (RectTransform, Text)>();
 
         public RectTransform Rect => (RectTransform)transform;
 
@@ -38,57 +43,60 @@ namespace MTGUnited
 
             p.bg = UIKit.Panel("Bg", ring.transform, Theme.Panel);
             p.bg.rectTransform.Stretch(4, 4, 4, 4);
+            p.bg.gameObject.AddComponent<Mask>().showMaskGraphic = true;   // clips the commander art to the rounded panel
             var pe = p.bg.gameObject.AddComponent<PointerEvents>();
             pe.OnClick = () => gc.ClickPlayer(p.playerId);
+            pe.OnRightClick = () => gc.ZoneViewer.Open(p.playerId, "Command");   // commander(s) live behind a right-click
+
+            // Commander art, faint, behind everything else in the panel.
+            var artRt = UIKit.Rect("Art", p.bg.transform).Stretch();
+            p.art = artRt.gameObject.AddComponent<RawImage>();
+            p.art.raycastTarget = false;
+            p.art.enabled = false;
+            var shade = UIKit.Rect("Shade", p.bg.transform).Stretch();
+            var shadeImg = shade.gameObject.AddComponent<RawImage>();
+            shadeImg.texture = HorizontalShade();
+            shadeImg.raycastTarget = false;
+
+            // Same layout for everyone: life badge on the left; name, then a 2x2 grid of zone symbols.
+            float manaH = isMe ? 36f : 0f;
+            p.badge = UIKit.Panel("LifeBadge", p.bg.transform, new Color(0f, 0f, 0f, 0.38f));
+            p.badge.raycastTarget = false;
+            p.badge.pixelsPerUnitMultiplier = 1.4f;
+            var brt = p.badge.rectTransform;
+            brt.anchorMin = new Vector2(0, 0); brt.anchorMax = new Vector2(0, 1); brt.pivot = new Vector2(0, 0.5f);
+            brt.offsetMin = new Vector2(6, 6 + manaH); brt.offsetMax = new Vector2(6 + 128, -6);
+            p.badgeRim = p.badge.gameObject.AddComponent<UnityEngine.UI.Outline>();
+            p.badgeRim.effectDistance = new Vector2(2, -2);
+            p.lifeText = UIKit.Label("Life", p.badge.transform, "40", 58, Theme.Life, TextAnchor.MiddleCenter, FontStyle.Bold).Outline(2);
+            p.lifeText.rectTransform.Stretch();
+            p.lifeText.resizeTextForBestFit = true; p.lifeText.resizeTextMinSize = 24; p.lifeText.resizeTextMaxSize = 60;
+
+            const float left = 146;
+            p.nameText = UIKit.Label("Name", p.bg.transform, "", 21, Theme.Text, TextAnchor.MiddleLeft, FontStyle.Bold).Outline(1.2f);
+            var nr = p.nameText.rectTransform;
+            nr.anchorMin = new Vector2(0, 1); nr.anchorMax = new Vector2(1, 1); nr.pivot = new Vector2(0, 1);
+            nr.offsetMin = new Vector2(left, -34); nr.offsetMax = new Vector2(-10, -4);
+            p.nameText.resizeTextForBestFit = true; p.nameText.resizeTextMinSize = 12; p.nameText.resizeTextMaxSize = 21;
+
+            var zr = UIKit.Rect("Zones", p.bg.transform);
+            zr.anchorMin = zr.anchorMax = new Vector2(0, 1); zr.pivot = new Vector2(0, 1);
+            zr.sizeDelta = new Vector2(170, 70); zr.anchoredPosition = new Vector2(left - 4, -38);
+            p.BuildZones(zr);
+
+            // Poison, commander damage: a small line beside the grid.
+            p.infoText = UIKit.Label("Info", p.bg.transform, "", 13, Theme.TextDim, TextAnchor.UpperLeft);
+            var ir = p.infoText.rectTransform;
+            ir.anchorMin = new Vector2(0, 1); ir.anchorMax = new Vector2(1, 1); ir.pivot = new Vector2(0, 1);
+            ir.offsetMin = new Vector2(left + 172, -110); ir.offsetMax = new Vector2(-8, -40);
+            p.infoText.supportRichText = true;
+            p.infoText.verticalOverflow = VerticalWrapMode.Overflow;
 
             if (isMe)
             {
-                p.lifeText = UIKit.Label("Life", p.bg.transform, "40", 64, Theme.Life, TextAnchor.MiddleCenter, FontStyle.Bold).Outline(2);
-                p.lifeText.rectTransform.anchorMin = new Vector2(0, 0.38f); p.lifeText.rectTransform.anchorMax = new Vector2(1, 0.88f);
-                p.lifeText.rectTransform.offsetMin = p.lifeText.rectTransform.offsetMax = Vector2.zero;
-                p.nameText = UIKit.Label("Name", p.bg.transform, "", 18, Theme.Text, TextAnchor.UpperCenter, FontStyle.Bold);
-                p.nameText.rectTransform.Stretch(8, 0, 8, 6);
-                p.infoText = UIKit.Label("Info", p.bg.transform, "", 14, Theme.TextDim, TextAnchor.MiddleCenter);
-                p.infoText.rectTransform.anchorMin = new Vector2(0, 0.24f); p.infoText.rectTransform.anchorMax = new Vector2(1, 0.4f);
-                p.infoText.rectTransform.offsetMin = p.infoText.rectTransform.offsetMax = Vector2.zero;
-                p.cmdText = UIKit.Label("Cmd", p.bg.transform, "", 13, new Color(1f, 0.7f, 0.5f), TextAnchor.MiddleCenter);
-                p.cmdText.rectTransform.anchorMin = new Vector2(0, 0.12f); p.cmdText.rectTransform.anchorMax = new Vector2(1, 0.25f);
-                p.cmdText.rectTransform.offsetMin = p.cmdText.rectTransform.offsetMax = Vector2.zero;
                 p.manaRow = UIKit.Rect("Mana", p.bg.transform);
-                p.manaRow.anchorMin = new Vector2(0, 0); p.manaRow.anchorMax = new Vector2(1, 0.13f);
-                p.manaRow.offsetMin = new Vector2(8, 4); p.manaRow.offsetMax = new Vector2(-8, 0);
-            }
-            else
-            {
-                // Compact nameplate like the player's own: a big life badge on the left, name and counts beside it.
-                var badge = UIKit.Panel("LifeBadge", p.bg.transform, new Color(0f, 0f, 0f, 0.3f));
-                badge.raycastTarget = false;
-                var brt = badge.rectTransform;
-                brt.anchorMin = new Vector2(0, 0); brt.anchorMax = new Vector2(0, 1);
-                brt.pivot = new Vector2(0, 0.5f);
-                brt.sizeDelta = new Vector2(118, -12); brt.anchoredPosition = new Vector2(6, 0);
-                p.lifeText = UIKit.Label("Life", badge.transform, "40", 58, Theme.Life, TextAnchor.MiddleCenter, FontStyle.Bold).Outline(2);
-                p.lifeText.rectTransform.Stretch();
-
-                p.nameText = UIKit.Label("Name", p.bg.transform, "", 20, Theme.Text, TextAnchor.MiddleLeft, FontStyle.Bold);
-                p.nameText.rectTransform.anchorMin = new Vector2(0, 0.62f); p.nameText.rectTransform.anchorMax = new Vector2(1, 1);
-                p.nameText.rectTransform.offsetMin = new Vector2(136, 0); p.nameText.rectTransform.offsetMax = new Vector2(-10, -6);
-                p.nameText.resizeTextForBestFit = true; p.nameText.resizeTextMinSize = 12; p.nameText.resizeTextMaxSize = 20;
-                p.infoText = UIKit.Label("Info", p.bg.transform, "", 14, Theme.TextDim, TextAnchor.MiddleLeft);
-                p.infoText.rectTransform.anchorMin = new Vector2(0, 0.36f); p.infoText.rectTransform.anchorMax = new Vector2(1, 0.64f);
-                p.infoText.rectTransform.offsetMin = new Vector2(136, 0); p.infoText.rectTransform.offsetMax = new Vector2(-10, 0);
-                p.infoText.supportRichText = true;
-                p.infoText.resizeTextForBestFit = true; p.infoText.resizeTextMinSize = 9; p.infoText.resizeTextMaxSize = 14;
-
-                // Graveyard / exile viewers under the name.
-                p.gyButton = UIKit.Button("Graveyard", p.bg.transform, "GY", Theme.Secondary, () => gc.ZoneViewer.Open(p.playerId, "Graveyard"), 13);
-                var gr = (RectTransform)p.gyButton.transform;
-                gr.anchorMin = gr.anchorMax = new Vector2(0, 0); gr.pivot = new Vector2(0, 0);
-                gr.sizeDelta = new Vector2(78, 28); gr.anchoredPosition = new Vector2(136, 10);
-                p.exButton = UIKit.Button("Exile", p.bg.transform, "EX", Theme.Secondary, () => gc.ZoneViewer.Open(p.playerId, "Exile"), 13);
-                var er = (RectTransform)p.exButton.transform;
-                er.anchorMin = er.anchorMax = new Vector2(0, 0); er.pivot = new Vector2(0, 0);
-                er.sizeDelta = new Vector2(78, 28); er.anchoredPosition = new Vector2(222, 10);
+                p.manaRow.anchorMin = new Vector2(0, 0); p.manaRow.anchorMax = new Vector2(1, 0); p.manaRow.pivot = new Vector2(0.5f, 0);
+                p.manaRow.sizeDelta = new Vector2(-12, manaH - 6); p.manaRow.anchoredPosition = new Vector2(0, 5);
             }
             return p;
         }
@@ -116,31 +124,140 @@ namespace MTGUnited
             lowLife = pd.Life <= 5 && !pd.HasLost;
 
             var sb = new StringBuilder();
-            sb.Append("Hand ").Append(pd.HandSize).Append("  ·  Library ").Append(pd.LibrarySize);
-            if (pd.Poison > 0) sb.Append("  ·  <color=#9be37a>Poison ").Append(pd.Poison).Append("</color>");
+            SetZone("Hand", pd.HandSize);
+            SetZone("Library", pd.LibrarySize);
+            SetZone("Graveyard", pd.GraveyardSize);
+            SetZone("Exile", pd.ExileSize);
+            if (pd.Poison > 0) sb.Append("<color=#9be37a>Poison ").Append(pd.Poison).Append("</color>");
             if (!me)
             {
-                UIKit.LabelOf(gyButton).text = "GY " + pd.GraveyardSize;
-                UIKit.LabelOf(exButton).text = "EX " + pd.ExileSize;
                 // Commander damage this opponent has taken from my commander(s).
                 foreach (var cd in pd.CommanderDamage)
-                    if (cd.FromPlayer == s.Me) sb.Append("  ·  <color=#ffb380>Cmdr ").Append(cd.Damage).Append("</color>");
+                    if (cd.FromPlayer == s.Me) sb.Append(sb.Length > 0 ? "\n" : "").Append("<color=#ffb380>Cmdr ").Append(cd.Damage).Append("</color>");
             }
             infoText.text = sb.ToString();
 
-            if (me && cmdText != null)
+            if (me)
             {
                 // Commander damage I've taken, the number that actually kills you at 21.
-                var parts = new List<string>();
-                foreach (var cd in pd.CommanderDamage) parts.Add(cd.CommanderName + " " + cd.Damage);
-                cmdText.text = parts.Count > 0 ? "Cmdr dmg: " + string.Join(", ", parts) : "";
+                foreach (var cd in pd.CommanderDamage)
+                    if (cd.Damage > 0) sb.Append(sb.Length > 0 ? "\n" : "").Append("<color=#ffb380>").Append(cd.CommanderName).Append(" ").Append(cd.Damage).Append("</color>");
+                infoText.text = sb.ToString();
                 RenderMana(pd);
             }
+            ShowArt(pd);
 
             bool targetable = s.Prompt.TargetPlayers.Contains(pd.Id);
             bool chosen = s.Prompt.ChosenPlayers.Contains(pd.Id);
             ringState = chosen ? 2 : targetable ? 1 : pd.HasPriority ? 3 : 0;
-            currentBg = pd.HasLost ? new Color(0.2f, 0.08f, 0.08f, 0.9f) : Theme.Panel;
+            var tint = Color.Lerp(new Color(0.07f, 0.08f, 0.12f), playerColor, 0.22f);
+            tint.a = 0.94f;
+            currentBg = pd.HasLost ? new Color(0.2f, 0.08f, 0.08f, 0.9f) : tint;
+        }
+
+        /// <summary>
+        /// Hand and library on the first row, graveyard and exile (clickable, in pills) on the second. Each symbol
+        /// pops up a little on hover so it's an easy target.
+        /// </summary>
+        void BuildZones(RectTransform grid)
+        {
+            string[] ids = { "Hand", "Library", "Graveyard", "Exile" };
+            Sprite[] icons = { Icons.Hand, Icons.Library, Icons.Grave, Icons.Spiral };
+            for (int i = 0; i < ids.Length; i++)
+            {
+                string id = ids[i];
+                bool viewer = id == "Graveyard" || id == "Exile";
+                var cell = UIKit.Rect(id, grid);
+                cell.anchorMin = cell.anchorMax = new Vector2(0, 1); cell.pivot = new Vector2(0.5f, 0.5f);
+                cell.sizeDelta = new Vector2(76, 30);
+                cell.anchoredPosition = new Vector2(38 + (i % 2) * 86, -15 - (i / 2) * 36);
+                var hit = cell.gameObject.AddComponent<Image>();
+                hit.sprite = UIKit.Rounded; hit.type = Image.Type.Sliced; hit.pixelsPerUnitMultiplier = 32f / 30f;
+                hit.color = new Color(1, 1, 1, viewer ? 0.09f : 0f);
+                var pe = cell.gameObject.AddComponent<PointerEvents>();
+                if (viewer) pe.OnClick = () => { Sound.Play(Sfx.UiClick, 0.6f); gc.ZoneViewer.Open(playerId, id); };
+                else pe.OnClick = () => gc.ClickPlayer(playerId);
+                pe.OnRightClick = () => gc.ZoneViewer.Open(playerId, "Command");
+                var pop = cell.gameObject.AddComponent<HoverPop>();
+                pe.OnEnter = () => pop.Hovered = true;
+                pe.OnExit = () => pop.Hovered = false;
+
+                var ic = UIKit.Rect("Icon", cell);
+                ic.anchorMin = ic.anchorMax = new Vector2(0, 0.5f); ic.pivot = new Vector2(0, 0.5f);
+                ic.sizeDelta = new Vector2(22, 22); ic.anchoredPosition = new Vector2(6, 0);
+                var img = ic.gameObject.AddComponent<Image>();
+                img.sprite = icons[i]; img.color = new Color(0.88f, 0.9f, 0.95f); img.raycastTarget = false; img.preserveAspect = true;
+                var t = UIKit.Label("Count", cell, "0", 17, Theme.Text, TextAnchor.MiddleLeft, FontStyle.Bold).Outline(1f);
+                t.rectTransform.Stretch(34, 0, 2, 0);
+                zones[id] = (cell, t);
+            }
+        }
+
+        /// <summary>The player's seat colour: tints the panel, the life badge rim and the name.</summary>
+        public void SetColor(Color c)
+        {
+            playerColor = c;
+            badgeRim.effectColor = new Color(c.r, c.g, c.b, 0.85f);
+            nameText.color = Color.Lerp(c, Color.white, 0.55f);
+        }
+
+        /// <summary>The commander's art, faint, behind the panel (cropped to the art box of the card image).</summary>
+        void ShowArt(PlayerData pd)
+        {
+            string cmd = pd.Commanders.Count > 0 ? pd.Commanders[0].Name : (pd.Command.Count > 0 ? pd.Command[0].Name : null);
+            if (cmd == artFor || string.IsNullOrEmpty(cmd) || CardImageCache.Instance == null) return;
+            artFor = cmd;
+            CardImageCache.Instance.Get(cmd, null, tex =>
+            {
+                if (art == null || artFor != cmd) return;
+                art.texture = tex;
+                // Art box of a card image is roughly x 8-92%, y 45-89%; crop it to the panel's shape.
+                var r = ((RectTransform)art.transform).rect;
+                float aspect = r.height > 0 ? r.width / r.height : 3f;
+                float uvW = 0.84f, uvH = Mathf.Min(0.44f, uvW * tex.width / tex.height / aspect);
+                art.uvRect = new Rect(0.08f, 0.67f - uvH / 2f, uvW, uvH);
+                art.color = new Color(1, 1, 1, 0.28f);
+                art.enabled = true;
+            });
+        }
+
+        static Texture2D shadeTex;
+        /// <summary>Darker on the left (behind the life total), lighter on the right, so the art shows where text is sparse.</summary>
+        static Texture2D HorizontalShade()
+        {
+            if (shadeTex != null) return shadeTex;
+            shadeTex = new Texture2D(64, 1);
+            for (int x = 0; x < 64; x++) shadeTex.SetPixel(x, 0, new Color(0.02f, 0.03f, 0.06f, Mathf.Lerp(0.55f, 0.15f, x / 63f)));
+            shadeTex.Apply();
+            shadeTex.wrapMode = TextureWrapMode.Clamp;
+            return shadeTex;
+        }
+
+        void SetZone(string id, int n)
+        {
+            if (zones.TryGetValue(id, out var z)) z.count.text = n.ToString();
+        }
+
+        /// <summary>Where a zone symbol sits, for cards flying to or from it.</summary>
+        public RectTransform ZoneRect(string id) => zones.TryGetValue(id, out var z) ? z.rt : null;
+
+        // Smooth panel moves (board focus slides the nameplates along with the cards).
+        Vector4 target, current;
+        bool placed;
+
+        public void MoveTo(float x, float y, float w, float h, bool instant = false)
+        {
+            target = new Vector4(x, y, w, h);
+            if (!placed || instant) { current = target; placed = true; Rect.Place(x, y, w, h); }
+        }
+
+        void LateUpdateMove()
+        {
+            if (!placed || current == target) return;
+            float k = 1f - Mathf.Exp(-Time.unscaledDeltaTime / (Motion.Base / 4f));
+            current = Vector4.Lerp(current, target, k);
+            if ((current - target).sqrMagnitude < 0.25f) current = target;
+            Rect.Place(current.x, current.y, current.z, current.w);
         }
 
         void RenderMana(PlayerData pd)
@@ -181,6 +298,7 @@ namespace MTGUnited
 
         void Update()
         {
+            LateUpdateMove();
             float now = Motion.Now;
 
             // Number rolls to its new value.
@@ -294,6 +412,26 @@ namespace MTGUnited
             var top = zone[zone.Count - 1];
             if (top.Hidden) { img.enabled = false; return; }
             CardImageCache.Instance.Get(top.Name, top.Set, tex => { if (img != null) { img.texture = tex; img.enabled = true; } });
+        }
+    }
+}
+
+namespace MTGUnited
+{
+    /// <summary>Grows an element a little while hovered (eased, well under the 400 ms budget).</summary>
+    public class HoverPop : MonoBehaviour
+    {
+        public bool Hovered;
+        public float Scale = 1.22f;
+        float s = 1f;
+
+        void Update()
+        {
+            float target = Hovered ? Scale : 1f;
+            if (Mathf.Abs(s - target) < 0.001f) return;
+            s = Mathf.Lerp(s, target, 1f - Mathf.Exp(-Time.unscaledDeltaTime / 0.04f));
+            transform.localScale = new Vector3(s, s, 1f);
+            if (Hovered) transform.SetAsLastSibling();
         }
     }
 }

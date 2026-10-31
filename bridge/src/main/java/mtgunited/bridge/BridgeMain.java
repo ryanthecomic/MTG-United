@@ -121,6 +121,12 @@ public final class BridgeMain {
         gui.onClientConnected();
     }
 
+    private static final java.util.concurrent.ExecutorService CATALOG = java.util.concurrent.Executors.newSingleThreadExecutor(r -> {
+        final Thread th = new Thread(r, "bridge-catalog");
+        th.setDaemon(true);
+        return th;
+    });
+
     private static void onMessage(final JsonObject msg) {
         final String t = msg.has("t") ? msg.get("t").getAsString() : "";
         Log.debug("<< " + msg);
@@ -137,6 +143,11 @@ public final class BridgeMain {
                 th.start();
             }
             case "stops" -> gui.setStops(msg);
+            // Deck builder queries: answered off the game threads so searching never stalls a match.
+            case "cardSearch" -> CATALOG.execute(() -> conn.send(CardCatalog.search(
+                    msg.has("q") ? msg.get("q").getAsString() : "", msg.has("limit") ? msg.get("limit").getAsInt() : 60)));
+            case "cardInfo" -> CATALOG.execute(() -> conn.send(CardCatalog.info(
+                    msg.has("names") ? msg.getAsJsonArray("names") : null, msg.has("req") ? msg.get("req").getAsString() : null)));
             default -> guiBase.invokeInEdtLater(() -> handleAction(t, msg));
         }
     }

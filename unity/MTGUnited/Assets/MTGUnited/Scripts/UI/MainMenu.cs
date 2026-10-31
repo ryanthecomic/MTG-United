@@ -17,10 +17,10 @@ namespace MTGUnited
         RenderTexture videoTarget;
 
         // Navigation
-        readonly Dictionary<string, (Text label, Image bar)> tabs = new Dictionary<string, (Text, Image)>();
+        readonly Dictionary<string, (Text label, Image bar, Image icon, Image bg)> tabs = new Dictionary<string, (Text, Image, Image, Image)>();
         readonly Dictionary<string, RectTransform> pages = new Dictionary<string, RectTransform>();
         string currentTab = "home";
-        Text connText, profileName, profileInitial;
+        Text connText;
         Image connDot;
 
         // Play cluster
@@ -32,10 +32,10 @@ namespace MTGUnited
 
         // Decks page
         RectTransform deckGrid;
-        InputField deckNameInput, deckCmdInput, deckListInput;
-        Text deckEditorTitle;
         List<SavedDeck> decks = new List<SavedDeck>();
-        SavedDeck editing;
+        DeckBuilder builder;
+        RectTransform decksFooter;
+        float lastTileClick; string lastTileId;
 
         // Profile page
         InputField nameInput;
@@ -47,6 +47,8 @@ namespace MTGUnited
         readonly Dictionary<string, Image> strengthBtns = new Dictionary<string, Image>();
         string selectedDeckId;
         bool connected;
+        RawImage heroArt;
+        Text deckCountText;
 
         public bool IsOpen => gameObject.activeSelf;
 
@@ -82,6 +84,7 @@ namespace MTGUnited
             pages["decks"] = BuildDecks(content);
             pages["profile"] = BuildProfile(content);
             BuildPlayCluster(frame);
+            builder = DeckBuilder.Create(content, gc);
 
             SelectTab("home");
             RefreshPlayCluster();
@@ -142,65 +145,72 @@ namespace MTGUnited
             return t;
         }
 
+        /// <summary>
+        /// Top bar: icon-over-label tabs on the left (the active one lit, with a glowing underline), the bridge
+        /// status and a settings gear on the right.
+        /// </summary>
         void BuildNavBar(RectTransform frame)
         {
-            var bar = UIKit.Panel("NavBar", frame, new Color(0.04f, 0.04f, 0.07f, 0.88f), false);
-            bar.rectTransform.Place(0, 1080 - 92, 1920, 92);
+            var bar = UIKit.Rect("NavBar", frame);
+            bar.Place(0, 1080 - 92, 1920, 92);
+            var barBg = bar.gameObject.AddComponent<RawImage>();
+            barBg.texture = UIKit.Gradient(new Color(0.16f, 0.17f, 0.2f, 0.97f), new Color(0.07f, 0.075f, 0.09f, 0.97f));
             UIKit.AddShadow(bar.transform, 20, new Vector2(0, -10), 0.7f);
-            var accent = UIKit.Panel("Accent", bar.transform, new Color(Theme.Accent.r, Theme.Accent.g, Theme.Accent.b, 0.55f), false);
-            accent.rectTransform.anchorMin = new Vector2(0, 0); accent.rectTransform.anchorMax = new Vector2(1, 0);
-            accent.rectTransform.sizeDelta = new Vector2(0, 2); accent.rectTransform.anchoredPosition = Vector2.zero;
-            accent.raycastTarget = false;
+            var edge = UIKit.Panel("Edge", bar, new Color(1f, 1f, 1f, 0.08f), false);
+            edge.rectTransform.anchorMin = new Vector2(0, 0); edge.rectTransform.anchorMax = new Vector2(1, 0);
+            edge.rectTransform.sizeDelta = new Vector2(0, 2); edge.rectTransform.anchoredPosition = Vector2.zero;
+            edge.raycastTarget = false;
 
-            var logo = UIKit.Label("Logo", bar.transform, "MTG UNITED", 40, Theme.Accent, TextAnchor.MiddleLeft, FontStyle.Bold).Outline(2).Titled();
-            logo.rectTransform.Place(40, 26, 360, 56);
-            var sub = UIKit.Label("Sub", bar.transform, "COMMANDER  ·  FORGE ENGINE", 13, Theme.TextDim, TextAnchor.MiddleLeft);
-            sub.rectTransform.Place(42, 8, 360, 22);
-
-            string[] ids = { "home", "decks", "profile", "options" };
-            string[] labels = { "HOME", "DECKS", "PROFILE", "OPTIONS" };
-            float x = 500;
+            string[] ids = { "home", "profile", "decks" };
+            string[] labels = { "Home", "Profile", "Decks" };
+            Sprite[] icons = { Icons.Home, Icons.Person, Icons.Decks };
+            // Wordmark in the top-left corner, tabs after it.
+            var logo = UIKit.Label("Logo", bar, "MTG UNITED", 30, new Color(0.95f, 0.75f, 0.45f), TextAnchor.MiddleLeft, FontStyle.Bold).Outline(1.5f).Titled();
+            logo.rectTransform.Place(28, 22, 260, 50);
+            float x = 290;
             for (int i = 0; i < ids.Length; i++)
             {
                 string id = ids[i];
-                var tab = UIKit.Rect("Tab " + id, bar.transform);
-                tab.Place(x, 0, 180, 92);
-                var hit = tab.gameObject.AddComponent<Image>();
-                hit.color = Color.clear;
-                tab.gameObject.AddComponent<PointerEvents>().OnClick = () => SelectTab(id);
-                var lbl = UIKit.Label("Label", tab, labels[i], 26, Theme.TextDim, TextAnchor.MiddleCenter, FontStyle.Bold).Titled();
-                lbl.rectTransform.Stretch(0, 8, 0, 0);
-                var underline = UIKit.Panel("Underline", tab, Theme.Accent);
-                underline.rectTransform.anchorMin = new Vector2(0.2f, 0); underline.rectTransform.anchorMax = new Vector2(0.8f, 0);
-                underline.rectTransform.sizeDelta = new Vector2(0, 5); underline.rectTransform.anchoredPosition = new Vector2(0, 6);
+                var tab = UIKit.Rect("Tab " + id, bar);
+                tab.Place(x, 0, 132, 92);
+                var bg = tab.gameObject.AddComponent<Image>();
+                bg.sprite = UIKit.White;
+                bg.color = Color.clear;
+                tab.gameObject.AddComponent<PointerEvents>().OnClick = () => { Sound.Play(Sfx.UiClick, 0.6f); SelectTab(id); };
+                var ic = UIKit.Rect("Icon", tab); ic.Place(41, 38, 50, 46);
+                var icon = ic.gameObject.AddComponent<Image>();
+                icon.sprite = icons[i]; icon.preserveAspect = true; icon.raycastTarget = false;
+                var lbl = UIKit.Label("Label", tab, labels[i], 22, Theme.TextDim, TextAnchor.MiddleCenter, FontStyle.Bold).Titled();
+                lbl.rectTransform.Place(0, 6, 132, 32);
+                var underline = UIKit.Panel("Underline", tab, new Color(1f, 0.45f, 0.12f));
+                underline.rectTransform.anchorMin = new Vector2(0.06f, 0); underline.rectTransform.anchorMax = new Vector2(0.94f, 0);
+                underline.rectTransform.sizeDelta = new Vector2(0, 5); underline.rectTransform.anchoredPosition = new Vector2(0, 3);
+                underline.pixelsPerUnitMultiplier = 6f;
                 underline.raycastTarget = false;
-                tabs[id] = (lbl, underline);
-                x += 190;
+                var glow = UIKit.Panel("Glow", underline.transform, new Color(1f, 0.5f, 0.15f, 0.35f));
+                glow.rectTransform.Stretch(-6, -6, -6, -6);
+                glow.raycastTarget = false;
+                tabs[id] = (lbl, underline, icon, bg);
+                // Thin divider between tabs.
+                var div = UIKit.Panel("Divider", bar, new Color(1, 1, 1, 0.07f), false);
+                div.rectTransform.Place(x + 132, 8, 1, 76);
+                div.raycastTarget = false;
+                x += 133;
             }
 
-            // Connection pill
-            var pill = UIKit.Panel("Connection", bar.transform, new Color(1, 1, 1, 0.06f));
-            pill.rectTransform.Place(1290, 26, 330, 40);
+
+            // Bridge status.
+            var pill = UIKit.Panel("Connection", bar, new Color(0, 0, 0, 0.3f));
+            pill.rectTransform.Place(1420, 26, 360, 40);
+            pill.pixelsPerUnitMultiplier = 32f / 40f;
             connDot = UIKit.Panel("Dot", pill.transform, Theme.Danger);
             connDot.rectTransform.anchorMin = connDot.rectTransform.anchorMax = new Vector2(0, 0.5f);
             connDot.rectTransform.sizeDelta = new Vector2(12, 12); connDot.rectTransform.anchoredPosition = new Vector2(20, 0);
             connText = UIKit.Label("Text", pill.transform, "", 15, Theme.Text, TextAnchor.MiddleLeft);
             connText.rectTransform.Stretch(36, 0, 10, 0);
 
-            // Profile chip
-            var chip = UIKit.Rect("ProfileChip", bar.transform);
-            chip.Place(1640, 14, 260, 64);
-            var chipHit = chip.gameObject.AddComponent<Image>();
-            chipHit.color = Color.clear;
-            chip.gameObject.AddComponent<PointerEvents>().OnClick = () => SelectTab("profile");
-            var avatar = UIKit.Panel("Avatar", chip, Theme.Accent);
-            avatar.rectTransform.Place(0, 4, 56, 56);
-            avatar.pixelsPerUnitMultiplier = 0.55f; // fully round
-            profileInitial = UIKit.Label("Initial", avatar.transform, "P", 28, new Color(0.15f, 0.08f, 0.02f), TextAnchor.MiddleCenter, FontStyle.Bold);
-            profileInitial.rectTransform.Stretch();
-            profileName = UIKit.Label("Name", chip, "", 20, Theme.Text, TextAnchor.MiddleLeft, FontStyle.Bold);
-            profileName.rectTransform.Place(68, 4, 190, 56);
-            RefreshProfileChip();
+            // Settings gear (top right).
+            UIKit.IconButton("Settings", bar, Icons.Gear, 1806, 16, 60, () => gc.Options.Open());
         }
 
         // =================================================================================================== home
@@ -209,26 +219,38 @@ namespace MTGUnited
         {
             var page = UIKit.Rect("Home", parent).Stretch();
 
-            var hero = Card(page, 60, 430, 980, 470);
-            var kicker = UIKit.Label("Kicker", hero, "WELCOME BACK", 16, Theme.Accent, TextAnchor.UpperLeft, FontStyle.Bold).Titled();
-            kicker.rectTransform.Stretch(40, 0, 40, 36);
-            var title = UIKit.Label("Title", hero, "Gather your pod.", 64, Theme.Text, TextAnchor.UpperLeft, FontStyle.Bold).Outline(2).Titled();
-            title.rectTransform.Stretch(38, 0, 40, 62);
-            var body = UIKit.Label("Body", hero,
-                "Full Commander rules from the Forge engine, against up to five AI opponents.\n\n" +
-                "•  Build or paste a deck in <b>Decks</b> (Arena, Moxfield and MTGO exports work).\n" +
-                "•  Pick the pod size on the right, then hit <b>PLAY</b>.\n" +
-                "•  In game: blue glow = playable, yellow = valid choice, Space = pass.",
-                21, new Color(0.85f, 0.88f, 0.94f), TextAnchor.UpperLeft);
-            body.rectTransform.Stretch(40, 40, 40, 160);
+            // Hero banner: the selected deck's commander art, with a caption strip.
+            var hero = UIKit.Panel("Hero", page, new Color(0.05f, 0.05f, 0.07f, 0.95f));
+            hero.rectTransform.Place(70, 190, 1150, 690);
+            hero.pixelsPerUnitMultiplier = 3f;
+            UIKit.AddShadow(hero.transform, 26, new Vector2(0, -12), 0.7f);
+            hero.gameObject.AddComponent<Mask>().showMaskGraphic = true;
+            var artRt = UIKit.Rect("Art", hero.transform);
+            artRt.anchorMin = artRt.anchorMax = new Vector2(0.5f, 0.5f);
+            artRt.sizeDelta = new Vector2(1150, 1610);        // card-shaped; the banner shows the art band
+            artRt.anchoredPosition = new Vector2(0, -260);
+            heroArt = artRt.gameObject.AddComponent<RawImage>();
+            heroArt.raycastTarget = false;
+            var fade = UIKit.Rect("Fade", hero.transform).Stretch();
+            var fadeImg = fade.gameObject.AddComponent<RawImage>();
+            fadeImg.texture = UIKit.Gradient(new Color(0, 0, 0, 0f), new Color(0, 0, 0, 0.55f));
+            fadeImg.raycastTarget = false;
 
-            var bridge = Card(page, 60, 150, 980, 250);
-            var bTitle = UIKit.Label("Title", bridge, "FORGE BRIDGE", 16, Theme.Accent, TextAnchor.UpperLeft, FontStyle.Bold).Titled();
-            bTitle.rectTransform.Stretch(40, 0, 40, 30);
-            launcherText = UIKit.Label("Status", bridge, "", 17, Theme.TextDim, TextAnchor.UpperLeft);
-            launcherText.rectTransform.Stretch(40, 80, 40, 66);
-            launchButton = UIKit.Button("Launch", bridge, "START FORGE BRIDGE", Theme.Secondary, () => gc.Launcher.Launch(), 18);
-            ((RectTransform)launchButton.transform).Place(40, 26, 320, 52);
+            var strip = UIKit.Panel("Caption", hero.transform, new Color(0.03f, 0.03f, 0.05f, 0.82f), false);
+            strip.rectTransform.anchorMin = new Vector2(0, 0); strip.rectTransform.anchorMax = new Vector2(1, 0);
+            strip.rectTransform.pivot = new Vector2(0.5f, 0); strip.rectTransform.sizeDelta = new Vector2(0, 170);
+            var title = UIKit.Label("Title", strip.transform, "Gather your pod", 44, Theme.Text, TextAnchor.UpperLeft, FontStyle.Bold).Outline(1.5f).Titled();
+            title.rectTransform.Stretch(30, 0, 30, 16);
+            var body = UIKit.Label("Body", strip.transform,
+                "Commander with full rules from the Forge engine, against up to five AI opponents. Pick a deck, set the pod, press Play.",
+                20, new Color(0.88f, 0.9f, 0.95f), TextAnchor.UpperLeft);
+            body.rectTransform.Stretch(32, 50, 320, 76);
+            launcherText = UIKit.Label("Status", strip.transform, "", 15, Theme.TextDim, TextAnchor.LowerLeft);
+            launcherText.rectTransform.Stretch(32, 16, 320, 100);
+            launchButton = UIKit.Button("Launch", strip.transform, "START FORGE", Theme.Secondary, () => gc.Launcher.Launch(), 17);
+            var lr = (RectTransform)launchButton.transform;
+            lr.anchorMin = lr.anchorMax = new Vector2(1, 0); lr.pivot = new Vector2(1, 0);
+            lr.sizeDelta = new Vector2(260, 50); lr.anchoredPosition = new Vector2(-30, 24);
             return page;
         }
 
@@ -237,143 +259,207 @@ namespace MTGUnited
         RectTransform BuildDecks(RectTransform parent)
         {
             var page = UIKit.Rect("Decks", parent).Stretch();
+            var shade = UIKit.Panel("Shade", page, new Color(0.02f, 0.02f, 0.04f, 0.45f), false);
+            shade.rectTransform.Stretch();
+            shade.raycastTarget = false;
 
-            // Deck grid (left)
-            var gridCard = Card(page, 40, 30, 1100, 920);
-            var gTitle = UIKit.Label("Title", gridCard, "YOUR DECKS", 18, Theme.Accent, TextAnchor.UpperLeft, FontStyle.Bold).Titled();
-            gTitle.rectTransform.Stretch(30, 0, 30, 24);
-            var scroll = UIKit.Rect("Scroll", gridCard).Stretch(24, 24, 24, 64);
+            var title = UIKit.Label("Title", page, "My Decks", 54, Theme.Text, TextAnchor.MiddleLeft, FontStyle.Bold).Outline(1.5f).Titled();
+            title.rectTransform.Place(80, 860, 800, 80);
+            deckCountText = UIKit.Label("Count", page, "", 38, new Color(0.88f, 0.86f, 0.8f), TextAnchor.MiddleRight, FontStyle.Bold).Titled();
+            deckCountText.rectTransform.Place(1500, 860, 340, 80);
+
+            var scroll = UIKit.Rect("Scroll", page);
+            scroll.Place(60, 140, 1800, 710);
             var sr = scroll.gameObject.AddComponent<ScrollRect>();
             scroll.gameObject.AddComponent<RectMask2D>();
+            scroll.gameObject.AddComponent<Image>().color = Color.clear;
             deckGrid = UIKit.Rect("Grid", scroll);
             deckGrid.anchorMin = new Vector2(0, 1); deckGrid.anchorMax = new Vector2(1, 1); deckGrid.pivot = new Vector2(0.5f, 1);
             var grid = deckGrid.gameObject.AddComponent<GridLayoutGroup>();
-            grid.cellSize = new Vector2(196, 290);
-            grid.spacing = new Vector2(20, 22);
-            grid.padding = new RectOffset(6, 6, 6, 6);
+            grid.cellSize = new Vector2(316, 300);
+            grid.spacing = new Vector2(26, 30);
+            grid.padding = new RectOffset(10, 10, 14, 14);
             deckGrid.gameObject.AddComponent<ContentSizeFitter>().verticalFit = ContentSizeFitter.FitMode.PreferredSize;
             sr.content = deckGrid; sr.horizontal = false; sr.scrollSensitivity = 40;
+            sr.movementType = ScrollRect.MovementType.Clamped;
             UIKit.AddScrollbar(sr);
 
-            // Editor (right)
-            var ed = Card(page, 1160, 330, 720, 620);
-            deckEditorTitle = UIKit.Label("Title", ed, "EDIT DECK", 18, Theme.Accent, TextAnchor.UpperLeft, FontStyle.Bold).Titled();
-            deckEditorTitle.rectTransform.Stretch(30, 0, 30, 24);
-            FieldLabel(ed, "Name", 540);
-            deckNameInput = UIKit.Input("Name", ed, "Deck name", false, 20);
-            deckNameInput.GetComponent<RectTransform>().Place(30, 476, 660, 48);
-            FieldLabel(ed, "Commander (optional; partners separated by ';')", 440);
-            deckCmdInput = UIKit.Input("Commander", ed, "Taken from the list's 'Commander' section if empty", false, 18);
-            deckCmdInput.GetComponent<RectTransform>().Place(30, 376, 660, 48);
-            FieldLabel(ed, "Decklist", 340);
-            deckListInput = UIKit.Input("List", ed, "Commander\n1 Atraxa, Praetors' Voice\n\nDeck\n1 Sol Ring\n1 Command Tower\n...", true, 14);
-            deckListInput.GetComponent<RectTransform>().Place(30, 90, 660, 246);
-
-            var save = UIKit.Button("Save", ed, "SAVE", Theme.Accent, SaveEditing, 20);
-            ((RectTransform)save.transform).Place(30, 24, 200, 52);
-            var use = UIKit.Button("Use", ed, "SAVE & USE", Theme.Secondary, () => { SaveEditing(); if (editing != null) SelectDeck(editing.Id); }, 18);
-            ((RectTransform)use.transform).Place(246, 24, 220, 52);
-            var del = UIKit.Button("Delete", ed, "DELETE", new Color(0.45f, 0.14f, 0.14f), DeleteEditing, 18);
-            ((RectTransform)del.transform).Place(490, 24, 200, 52);
+            // Footer: delete on the left, Edit Deck on the right.
+            decksFooter = UIKit.Rect("Footer", page).Stretch();
+            UIKit.IconButton("Delete", decksFooter, Icons.Trash, 80, 34, 64, DeleteSelected);
+            UIKit.Pill("EditDeck", decksFooter, "Edit Deck", new Color(0.16f, 0.3f, 0.72f), () => OpenBuilder(FindDeck(selectedDeckId)), 1530, 30, 330, 80, 36);
 
             RebuildDeckGrid();
-            EditDeck(FindDeck(selectedDeckId) ?? (decks.Count > 0 ? decks[0] : null));
             return page;
-        }
-
-        void FieldLabel(Transform parent, string text, float y)
-        {
-            var l = UIKit.Label("Label", parent, text, 15, Theme.TextDim, TextAnchor.LowerLeft);
-            l.rectTransform.Place(32, y, 660, 26);
         }
 
         void RebuildDeckGrid()
         {
             foreach (Transform c in deckGrid) Destroy(c.gameObject);
+            deckCountText.text = decks.Count + (decks.Count == 1 ? " deck" : " decks");
 
             // "New deck" tile
-            var add = UIKit.Panel("New", deckGrid, new Color(1, 1, 1, 0.05f));
-            add.gameObject.AddComponent<PointerEvents>().OnClick = () => EditDeck(new SavedDeck());
-            var plus = UIKit.Label("Plus", add.transform, "+", 90, Theme.Accent, TextAnchor.MiddleCenter, FontStyle.Bold);
-            plus.rectTransform.Stretch(0, 40, 0, 0);
-            var addLbl = UIKit.Label("Label", add.transform, "NEW DECK", 18, Theme.TextDim, TextAnchor.LowerCenter, FontStyle.Bold);
-            addLbl.rectTransform.Stretch(0, 30, 0, 0);
-
-            foreach (var d in decks)
+            var add = UIKit.Panel("New", deckGrid, new Color(0.03f, 0.03f, 0.05f, 0.9f));
+            add.pixelsPerUnitMultiplier = 1.2f;
+            add.gameObject.AddComponent<PointerEvents>().OnClick = () =>
             {
-                var deck = d;
-                bool selected = deck.Id == selectedDeckId;
-                var tile = UIKit.Panel("Deck", deckGrid, selected ? Theme.Accent : new Color(0.15f, 0.16f, 0.22f));
-                tile.gameObject.AddComponent<PointerEvents>().OnClick = () => EditDeck(deck);
-                var artRt = UIKit.Rect("Art", tile.transform).Stretch(5, 62, 5, 5);
-                var mask = artRt.gameObject.AddComponent<Image>();
-                mask.sprite = UIKit.Rounded; mask.type = Image.Type.Sliced; mask.color = new Color(0.08f, 0.08f, 0.1f);
-                mask.raycastTarget = false;
-                artRt.gameObject.AddComponent<Mask>().showMaskGraphic = true;
-                var art = UIKit.Rect("Img", artRt).Stretch().gameObject.AddComponent<RawImage>();
-                art.raycastTarget = false;
-                art.enabled = false;
-                string cmd = deck.CommanderName;
-                if (!string.IsNullOrEmpty(cmd) && CardImageCache.Instance != null)
-                    CardImageCache.Instance.Get(cmd, null, tex => { if (art != null) { art.texture = tex; art.enabled = true; } });
-                else if (GameArt.CardBack != null) { art.texture = GameArt.CardBack; art.enabled = true; }
+                Sound.Play(Sfx.UiClick, 0.6f);
+                OpenBuilder(new SavedDeck { Name = "New Deck" });
+            };
+            var plusRt = UIKit.Rect("Plus", add.transform);
+            plusRt.anchorMin = plusRt.anchorMax = new Vector2(0.5f, 0.5f); plusRt.sizeDelta = new Vector2(150, 150);
+            plusRt.anchoredPosition = new Vector2(0, 14);
+            var plusImg = plusRt.gameObject.AddComponent<Image>();
+            plusImg.sprite = Icons.Plus; plusImg.color = new Color(0.9f, 0.88f, 1f); plusImg.raycastTarget = false;
+            var plusGlow = UIKit.Rect("Glow", add.transform);
+            plusGlow.anchorMin = plusGlow.anchorMax = new Vector2(0.5f, 0.5f); plusGlow.sizeDelta = new Vector2(190, 190);
+            plusGlow.anchoredPosition = new Vector2(0, 14); plusGlow.SetSiblingIndex(0);
+            var pg = plusGlow.gameObject.AddComponent<Image>(); pg.sprite = Icons.Plus; pg.color = new Color(0.55f, 0.45f, 1f, 0.35f); pg.raycastTarget = false;
+            var addLbl = UIKit.Label("Label", add.transform, "New Deck", 22, Theme.TextDim, TextAnchor.LowerCenter, FontStyle.Bold).Titled();
+            addLbl.rectTransform.Stretch(0, 22, 0, 0);
 
-                var name = UIKit.Label("Name", tile.transform, deck.Name, 17, selected ? new Color(0.12f, 0.06f, 0.02f) : Theme.Text, TextAnchor.UpperLeft, FontStyle.Bold);
-                name.rectTransform.anchorMin = new Vector2(0, 0); name.rectTransform.anchorMax = new Vector2(1, 0);
-                name.rectTransform.pivot = new Vector2(0.5f, 0); name.rectTransform.sizeDelta = new Vector2(-16, 30);
-                name.rectTransform.anchoredPosition = new Vector2(0, 28);
-                var info = UIKit.Label("Info", tile.transform, (cmd ?? "No commander") + "  ·  " + deck.CardCount, 12,
-                    selected ? new Color(0.2f, 0.1f, 0.03f) : Theme.TextDim, TextAnchor.UpperLeft);
-                info.rectTransform.anchorMin = new Vector2(0, 0); info.rectTransform.anchorMax = new Vector2(1, 0);
-                info.rectTransform.pivot = new Vector2(0.5f, 0); info.rectTransform.sizeDelta = new Vector2(-16, 22);
-                info.rectTransform.anchoredPosition = new Vector2(0, 6);
-                if (selected)
-                {
-                    var tag = UIKit.Panel("InUse", tile.transform, new Color(0.1f, 0.1f, 0.12f, 0.92f));
-                    tag.rectTransform.anchorMin = tag.rectTransform.anchorMax = new Vector2(1, 1);
-                    tag.rectTransform.pivot = new Vector2(1, 1);
-                    tag.rectTransform.sizeDelta = new Vector2(84, 26); tag.rectTransform.anchoredPosition = new Vector2(-10, -10);
-                    tag.raycastTarget = false;
-                    var t = UIKit.Label("T", tag.transform, "IN USE", 13, Theme.Accent, TextAnchor.MiddleCenter, FontStyle.Bold);
-                    t.rectTransform.Stretch();
-                }
+            foreach (var d in decks) DeckBox(d);
+        }
+
+        /// <summary>A deck box: commander art, colour pips, and a gold-rimmed name banner. Click selects, double-click edits.</summary>
+        void DeckBox(SavedDeck deck)
+        {
+            bool selected = deck.Id == selectedDeckId;
+            var tile = UIKit.Rect("Deck", deckGrid);
+            var hit = tile.gameObject.AddComponent<Image>(); hit.color = Color.clear;
+            tile.gameObject.AddComponent<PointerEvents>().OnClick = () => OnDeckBoxClick(deck);
+
+            if (selected)
+            {
+                var glow = UIKit.Panel("Selected", tile, new Color(1f, 0.6f, 0.2f, 0.55f));
+                glow.rectTransform.Stretch(-8, -8, -8, -8);
+                glow.raycastTarget = false;
+            }
+            var box = UIKit.Panel("Box", tile, new Color(0.06f, 0.06f, 0.08f));
+            box.rectTransform.Stretch(0, 46, 0, 0);
+            box.raycastTarget = false;
+            box.gameObject.AddComponent<Mask>().showMaskGraphic = true;
+            var artRt = UIKit.Rect("Art", box.transform);
+            artRt.anchorMin = artRt.anchorMax = new Vector2(0.5f, 0.5f);
+            artRt.sizeDelta = new Vector2(316, 442); artRt.anchoredPosition = new Vector2(0, -60);
+            var art = artRt.gameObject.AddComponent<RawImage>();
+            art.raycastTarget = false;
+            art.texture = GameArt.CardBack;
+            // Box side shading on the right edge, like a closed deck box.
+            var side = UIKit.Rect("Side", box.transform);
+            side.anchorMin = new Vector2(1, 0); side.anchorMax = new Vector2(1, 1); side.pivot = new Vector2(1, 0.5f);
+            side.sizeDelta = new Vector2(26, 0);
+            var sideImg = side.gameObject.AddComponent<Image>(); sideImg.sprite = UIKit.White;
+            sideImg.color = new Color(0.04f, 0.04f, 0.05f, 0.85f); sideImg.raycastTarget = false;
+
+            var pips = UIKit.Rect("Pips", box.transform);
+            pips.anchorMin = pips.anchorMax = new Vector2(0.5f, 0); pips.pivot = new Vector2(0.5f, 0);
+            pips.sizeDelta = new Vector2(200, 30); pips.anchoredPosition = new Vector2(-13, 8);
+
+            var banner = UIKit.Panel("Banner", tile, new Color(0.06f, 0.05f, 0.04f, 0.98f));
+            banner.rectTransform.anchorMin = new Vector2(0, 0); banner.rectTransform.anchorMax = new Vector2(1, 0);
+            banner.rectTransform.pivot = new Vector2(0.5f, 0); banner.rectTransform.sizeDelta = new Vector2(0, 54);
+            banner.rectTransform.anchoredPosition = new Vector2(0, 4);
+            banner.pixelsPerUnitMultiplier = 32f / 54f;
+            banner.raycastTarget = false;
+            var rim = banner.gameObject.AddComponent<UnityEngine.UI.Outline>();
+            rim.effectColor = selected ? new Color(1f, 0.7f, 0.3f) : new Color(0.85f, 0.65f, 0.28f, 0.85f);
+            rim.effectDistance = new Vector2(2, -2);
+            var name = UIKit.Label("Name", banner.transform, deck.Name, 23, new Color(1f, 0.86f, 0.55f), TextAnchor.MiddleCenter, FontStyle.Bold).Titled();
+            name.rectTransform.Stretch(18, 0, 18, 0);
+            name.resizeTextForBestFit = true; name.resizeTextMinSize = 14; name.resizeTextMaxSize = 23;
+
+            var count = UIKit.Label("Count", box.transform, deck.CardCount + "", 15, Color.white, TextAnchor.UpperRight, FontStyle.Bold).Outline(1.5f);
+            count.rectTransform.Stretch(0, 0, 36, 10);
+
+            var model = DeckModel.From(deck);
+            string cmd = model.Commanders.Count > 0 ? model.Commanders[0] : null;
+            if (cmd != null && CardImageCache.Instance != null)
+                CardImageCache.Instance.Get(cmd, null, tex => { if (art != null) art.texture = tex; });
+            if (model.Commanders.Count > 0)
+                CardCatalog.Ensure(model.Commanders, () => { if (pips != null) FillPips(pips, model.Commanders); });
+        }
+
+        /// <summary>Colour identity pips under the art (from the commanders' colours).</summary>
+        static void FillPips(RectTransform pips, List<string> commanders)
+        {
+            foreach (Transform c in pips) Destroy(c.gameObject);
+            string colors = "";
+            foreach (var n in commanders)
+            {
+                var info = CardCatalog.Get(n);
+                if (info == null) continue;
+                foreach (char ch in info.Colors ?? "") if (colors.IndexOf(ch) < 0) colors += ch;
+            }
+            string order = "WUBRG";
+            var sorted = new List<char>();
+            foreach (char ch in order) if (colors.IndexOf(ch) >= 0) sorted.Add(ch);
+            float x = -(sorted.Count - 1) * 15f;
+            foreach (char ch in sorted)
+            {
+                var pip = UIKit.Rect("Pip", pips);
+                pip.anchorMin = pip.anchorMax = new Vector2(0.5f, 0.5f); pip.sizeDelta = new Vector2(28, 28);
+                pip.anchoredPosition = new Vector2(x, 0);
+                var ring = pip.gameObject.AddComponent<Image>(); ring.sprite = Icons.Circle; ring.color = new Color(0.05f, 0.05f, 0.05f); ring.raycastTarget = false;
+                var fill = UIKit.Rect("Fill", pip).Stretch(3, 3, 3, 3).gameObject.AddComponent<Image>();
+                fill.sprite = Icons.Circle; fill.color = Theme.ForManaColor(ch.ToString()); fill.raycastTarget = false;
+                x += 30f;
             }
         }
 
-        void EditDeck(SavedDeck d)
+        void OnDeckBoxClick(SavedDeck deck)
         {
-            editing = d;
-            deckEditorTitle.text = d == null ? "EDIT DECK" : string.IsNullOrEmpty(d.Id) ? "NEW DECK" : "EDIT DECK";
-            deckNameInput.text = d?.Name ?? "";
-            deckCmdInput.text = d?.Commander ?? "";
-            deckListInput.text = d?.List ?? "";
+            Sound.Play(Sfx.UiClick, 0.6f);
+            bool dbl = lastTileId == deck.Id && Time.unscaledTime - lastTileClick < 0.35f;
+            lastTileId = deck.Id; lastTileClick = Time.unscaledTime;
+            if (dbl) { OpenBuilder(deck); return; }
+            if (selectedDeckId != deck.Id) SelectDeck(deck.Id);
         }
 
-        void SaveEditing()
+        void OpenBuilder(SavedDeck deck)
         {
-            if (editing == null) editing = new SavedDeck();
-            editing.Name = string.IsNullOrWhiteSpace(deckNameInput.text) ? "Untitled Deck" : deckNameInput.text.Trim();
-            editing.Commander = deckCmdInput.text.Trim();
-            editing.List = deckListInput.text;
-            bool isNew = string.IsNullOrEmpty(editing.Id);
-            DeckStore.Save(editing);
-            if (isNew) decks.Insert(0, editing);
-            if (string.IsNullOrEmpty(selectedDeckId)) SelectDeck(editing.Id);
-            RebuildDeckGrid();
-            RefreshPlayCluster();
-            gc.Toasts.Show("Saved \"" + editing.Name + "\"");
+            if (deck == null) { gc.Toasts.Show("Select a deck first, or create one with +."); return; }
+            pages["decks"].gameObject.SetActive(false);
+            builder.Open(deck, d =>
+            {
+                if (string.IsNullOrEmpty(d.Id))
+                {
+                    decks.Remove(d);
+                    if (selectedDeckId == lastBuilt) SelectDeck(decks.Count > 0 ? decks[0].Id : "");
+                }
+                else
+                {
+                    if (!decks.Contains(d)) decks.Insert(0, d);
+                    if (string.IsNullOrEmpty(selectedDeckId)) selectedDeckId = d.Id;
+                }
+                decks.Sort((a, b) => b.Updated.CompareTo(a.Updated));
+                PlayerPrefs.SetString("selectedDeck", selectedDeckId);
+                RebuildDeckGrid();
+                RefreshPlayCluster();
+                if (currentTab == "decks") pages["decks"].gameObject.SetActive(true);
+            });
+            lastBuilt = deck.Id;
         }
+        string lastBuilt;
 
-        void DeleteEditing()
+        void DeleteSelected()
         {
-            if (editing == null || string.IsNullOrEmpty(editing.Id)) { EditDeck(null); return; }
-            DeckStore.Delete(editing);
-            decks.Remove(editing);
-            if (selectedDeckId == editing.Id) SelectDeck(decks.Count > 0 ? decks[0].Id : "");
-            EditDeck(decks.Count > 0 ? decks[0] : null);
-            RebuildDeckGrid();
-            RefreshPlayCluster();
+            var deck = FindDeck(selectedDeckId);
+            if (deck == null) { gc.Toasts.Show("Select a deck to delete."); return; }
+            // Two clicks within 3 s confirm, so a deck is never lost to one stray click.
+            if (pendingDelete != deck.Id || Time.unscaledTime - pendingDeleteAt > 3f)
+            {
+                pendingDelete = deck.Id; pendingDeleteAt = Time.unscaledTime;
+                gc.Toasts.Show("Click the trash again to delete \"" + deck.Name + "\".");
+                return;
+            }
+            pendingDelete = null;
+            DeckStore.Delete(deck);
+            decks.Remove(deck);
+            SelectDeck(decks.Count > 0 ? decks[0].Id : "");
+            gc.Toasts.Show("Deleted \"" + deck.Name + "\"");
         }
+        string pendingDelete; float pendingDeleteAt;
 
         void SelectDeck(string id)
         {
@@ -429,11 +515,12 @@ namespace MTGUnited
             statsText.text = "GAMES  " + g + "        WINS  <color=#f7a540>" + w + "</color>        LOSSES  " + PlayerStats.Losses + "        WIN RATE  " + rate;
         }
 
-        void RefreshProfileChip()
+        void RefreshProfileChip() { }   // the player's name shows on the Profile page
+
+        void FieldLabel(Transform parent, string text, float y)
         {
-            string n = PlayerPrefs.GetString("playerName", "Player");
-            profileName.text = n;
-            profileInitial.text = n.Length > 0 ? n.Substring(0, 1).ToUpperInvariant() : "P";
+            var l = UIKit.Label("Label", parent, text, 15, Theme.TextDim, TextAnchor.LowerLeft);
+            l.rectTransform.Place(32, y, 660, 26);
         }
 
         void ClearImageCache()
@@ -447,86 +534,97 @@ namespace MTGUnited
 
         // =================================================================================================== play cluster
 
+        /// <summary>
+        /// Home's right column: three tiles (deck, pod, AI skill) beside the hero banner, and the big Play button
+        /// in the bottom-right corner. Only shown on Home.
+        /// </summary>
         void BuildPlayCluster(RectTransform frame)
         {
             playCluster = UIKit.Rect("PlayCluster", frame).Stretch();
-            var panel = Card(playCluster, 1450, 150, 430, 380);
 
-            var mode = UIKit.Label("Mode", panel, "COMMANDER", 16, Theme.Accent, TextAnchor.UpperLeft, FontStyle.Bold).Titled();
-            mode.rectTransform.Stretch(24, 0, 24, 18);
-            modeText = mode;
-
-            // Selected deck row
-            var deckRow = UIKit.Panel("DeckRow", panel, new Color(1, 1, 1, 0.05f));
-            deckRow.rectTransform.Place(18, 236, 394, 100);
-            deckRow.gameObject.AddComponent<PointerEvents>().OnClick = () => SelectTab("decks");
-            var artRt = UIKit.Rect("Art", deckRow.transform);
-            artRt.Place(8, 8, 120, 84);
-            var maskImg = artRt.gameObject.AddComponent<Image>();
-            maskImg.sprite = UIKit.Rounded; maskImg.type = Image.Type.Sliced; maskImg.color = new Color(0.08f, 0.08f, 0.1f);
-            artRt.gameObject.AddComponent<Mask>().showMaskGraphic = true;
-            var artImg = UIKit.Rect("Img", artRt);
+            // Tile 1: selected deck (click to pick another).
+            var deckTile = Tile(playCluster, 1260, 662, 600, 218);
+            deckTile.gameObject.AddComponent<PointerEvents>().OnClick = () => { Sound.Play(Sfx.UiClick, 0.6f); SelectTab("decks"); };
+            var artMask = UIKit.Panel("ArtMask", deckTile, Color.black);
+            artMask.rectTransform.Stretch();
+            artMask.pixelsPerUnitMultiplier = 3f;
+            artMask.raycastTarget = false;
+            artMask.gameObject.AddComponent<Mask>().showMaskGraphic = true;
+            var artImg = UIKit.Rect("Img", artMask.transform);
             artImg.anchorMin = artImg.anchorMax = new Vector2(0.5f, 0.5f);
-            artImg.sizeDelta = new Vector2(120, 168);          // card-shaped; the mask crops it to the art area
-            artImg.anchoredPosition = new Vector2(0, -24);
+            artImg.sizeDelta = new Vector2(600, 840);
+            artImg.anchoredPosition = new Vector2(0, -150);
             deckArt = artImg.gameObject.AddComponent<RawImage>();
             deckArt.raycastTarget = false;
-            deckTitle = UIKit.Label("Title", deckRow.transform, "", 21, Theme.Text, TextAnchor.UpperLeft, FontStyle.Bold);
-            deckTitle.rectTransform.Stretch(140, 0, 10, 14);
-            deckSub = UIKit.Label("Sub", deckRow.transform, "", 13, Theme.TextDim, TextAnchor.LowerLeft);
-            deckSub.rectTransform.Stretch(140, 14, 10, 0);
+            var cap = UIKit.Panel("Caption", deckTile, new Color(0.02f, 0.02f, 0.04f, 0.8f), false);
+            cap.rectTransform.anchorMin = new Vector2(0, 0); cap.rectTransform.anchorMax = new Vector2(1, 0);
+            cap.rectTransform.pivot = new Vector2(0.5f, 0); cap.rectTransform.sizeDelta = new Vector2(0, 80);
+            cap.raycastTarget = false;
+            deckTitle = UIKit.Label("Title", cap.transform, "", 30, Theme.Text, TextAnchor.UpperLeft, FontStyle.Bold).Outline(1.2f).Titled();
+            deckTitle.rectTransform.Stretch(22, 0, 22, 6);
+            deckSub = UIKit.Label("Sub", cap.transform, "", 14, new Color(0.82f, 0.84f, 0.9f), TextAnchor.LowerLeft);
+            deckSub.rectTransform.Stretch(24, 8, 22, 0);
 
-            // Opponents stepper
-            oppText = UIKit.Label("Opp", panel, "", 18, Theme.Text, TextAnchor.MiddleLeft, FontStyle.Bold);
-            oppText.rectTransform.Place(24, 178, 200, 44);
-            var minus = UIKit.Button("Minus", panel, "−", Theme.Secondary, () => { opponents = Mathf.Max(1, opponents - 1); RefreshPlayCluster(); }, 24);
-            ((RectTransform)minus.transform).Place(300, 180, 50, 40);
-            var plus = UIKit.Button("Plus", panel, "+", Theme.Secondary, () => { opponents = Mathf.Min(5, opponents + 1); RefreshPlayCluster(); }, 24);
-            ((RectTransform)plus.transform).Place(360, 180, 50, 40);
-
-            // AI decks toggle
-            aiText = UIKit.Label("AiLabel", panel, "AI DECKS", 14, Theme.TextDim, TextAnchor.MiddleLeft, FontStyle.Bold);
-            aiText.rectTransform.Place(24, 134, 120, 36);
-            var precon = UIKit.Button("Precon", panel, "PRECONS", Theme.Secondary, () => { aiDecks = "precon"; RefreshPlayCluster(); }, 15);
-            ((RectTransform)precon.transform).Place(150, 134, 125, 36);
+            // Tile 2: pod (opponents + AI decks).
+            var pod = Tile(playCluster, 1260, 426, 600, 216);
+            modeText = UIKit.Label("Mode", pod, "", 30, Theme.Text, TextAnchor.UpperLeft, FontStyle.Bold).Outline(1.2f).Titled();
+            modeText.rectTransform.Stretch(24, 0, 24, 14);
+            oppText = UIKit.Label("Opp", pod, "", 19, Theme.Text, TextAnchor.MiddleLeft, FontStyle.Bold);
+            oppText.rectTransform.Place(26, 92, 260, 44);
+            var minus = UIKit.Button("Minus", pod, "−", Theme.Secondary, () => { opponents = Mathf.Max(1, opponents - 1); RefreshPlayCluster(); }, 26);
+            ((RectTransform)minus.transform).Place(430, 94, 66, 42);
+            var plus = UIKit.Button("Plus", pod, "+", Theme.Secondary, () => { opponents = Mathf.Min(5, opponents + 1); RefreshPlayCluster(); }, 26);
+            ((RectTransform)plus.transform).Place(506, 94, 66, 42);
+            aiText = UIKit.Label("AiLabel", pod, "AI DECKS", 15, Theme.TextDim, TextAnchor.MiddleLeft, FontStyle.Bold);
+            aiText.rectTransform.Place(26, 28, 160, 42);
+            var precon = UIKit.Button("Precon", pod, "PRECONS", Theme.Secondary, () => { aiDecks = "precon"; RefreshPlayCluster(); }, 16);
+            ((RectTransform)precon.transform).Place(250, 28, 156, 42);
             aiPreconBtn = precon.GetComponent<Image>();
-            var random = UIKit.Button("Random", panel, "RANDOM", Theme.Secondary, () => { aiDecks = "random"; RefreshPlayCluster(); }, 15);
-            ((RectTransform)random.transform).Place(285, 134, 125, 36);
+            var random = UIKit.Button("Random", pod, "RANDOM", Theme.Secondary, () => { aiDecks = "random"; RefreshPlayCluster(); }, 16);
+            ((RectTransform)random.transform).Place(416, 28, 156, 42);
             aiRandomBtn = random.GetComponent<Image>();
 
-            // AI strength: Strong is Forge's maximum (simulates mulligans and combat) and is slow in big pods.
-            var strengthLbl = UIKit.Label("StrengthLabel", panel, "AI SKILL", 14, Theme.TextDim, TextAnchor.MiddleLeft, FontStyle.Bold);
-            strengthLbl.rectTransform.Place(24, 90, 120, 36);
+            // Tile 3: AI skill. Strong is Forge's maximum (simulates mulligans and combat) and is slow in big pods.
+            var skill = Tile(playCluster, 1260, 190, 600, 216);
+            var sTitle = UIKit.Label("Title", skill, "AI Skill", 30, Theme.Text, TextAnchor.UpperLeft, FontStyle.Bold).Outline(1.2f).Titled();
+            sTitle.rectTransform.Stretch(24, 0, 24, 14);
+            var sHint = UIKit.Label("Hint", skill, "Fast is quick to act. Strong thinks harder but is slow with many opponents.", 15, Theme.TextDim, TextAnchor.UpperLeft);
+            sHint.rectTransform.Stretch(26, 0, 26, 62);
             string[] ids = { "fast", "normal", "strong" };
             string[] labels = { "FAST", "NORMAL", "STRONG" };
             for (int i = 0; i < ids.Length; i++)
             {
                 string id = ids[i];
-                var b = UIKit.Button("Skill " + id, panel, labels[i], Theme.Secondary, () => { aiStrength = id; RefreshPlayCluster(); }, 14);
-                ((RectTransform)b.transform).Place(150 + i * 88, 90, 82, 36);
+                var b = UIKit.Button("Skill " + id, skill, labels[i], Theme.Secondary, () => { aiStrength = id; RefreshPlayCluster(); }, 16);
+                ((RectTransform)b.transform).Place(26 + i * 186, 28, 174, 46);
                 strengthBtns[id] = b.GetComponent<Image>();
             }
 
-            statusText = UIKit.Label("Status", panel, "", 14, Theme.Danger, TextAnchor.UpperLeft);
-            statusText.rectTransform.Place(24, 8, 390, 76);
+            statusText = UIKit.Label("Status", playCluster, "", 15, Theme.Danger, TextAnchor.LowerRight);
+            statusText.rectTransform.Place(900, 120, 600, 60);
 
             // The big button.
-            playButton = UIKit.Button("Play", playCluster, "PLAY", Theme.Accent, OnPlay, 52);
-            ((RectTransform)playButton.transform).Place(1450, 30, 430, 108);
-            UIKit.AddShadow(playButton.transform, 26, new Vector2(0, -10), 0.75f);
-            var shine = UIKit.Rect("Shine", playButton.transform).Stretch(4, 54, 4, 4);
-            var shineImg = shine.gameObject.AddComponent<RawImage>();
-            shineImg.texture = UIKit.Gradient(new Color(1, 1, 1, 0.28f), new Color(1, 1, 1, 0f));
-            shineImg.raycastTarget = false;
-            UIKit.LabelOf(playButton).color = new Color(0.16f, 0.07f, 0.01f);
-            UIKit.LabelOf(playButton).Titled();
+            playButton = UIKit.Pill("Play", playCluster, "Play", new Color(0.95f, 0.43f, 0.1f), OnPlay, 1520, 34, 340, 92, 46);
+        }
+
+        /// <summary>A home tile: dark rounded panel with a soft shadow and a faint light rim.</summary>
+        RectTransform Tile(Transform parent, float x, float y, float w, float h)
+        {
+            var img = UIKit.Panel("Tile", parent, new Color(0.05f, 0.06f, 0.09f, 0.9f));
+            img.rectTransform.Place(x, y, w, h);
+            img.pixelsPerUnitMultiplier = 3f;
+            UIKit.AddShadow(img.transform, 22, new Vector2(0, -10), 0.6f);
+            var edge = img.gameObject.AddComponent<UnityEngine.UI.Outline>();
+            edge.effectColor = new Color(1, 1, 1, 0.08f);
+            edge.effectDistance = new Vector2(1, -1);
+            return img.rectTransform;
         }
 
         void RefreshPlayCluster()
         {
             PlayerPrefs.SetInt("opponents", opponents);
             PlayerPrefs.SetString("aiDecks", aiDecks);
-            modeText.text = "COMMANDER  ·  " + (opponents + 1) + "-PLAYER POD";
+            modeText.text = "Commander · " + (opponents + 1) + " players";
             oppText.text = "OPPONENTS   " + opponents;
             aiPreconBtn.color = aiDecks == "precon" ? Theme.Accent : Theme.Secondary;
             aiRandomBtn.color = aiDecks == "random" ? Theme.Accent : Theme.Secondary;
@@ -539,16 +637,20 @@ namespace MTGUnited
                 deckTitle.text = "Random precon";
                 deckSub.text = "Click to choose one of your decks";
                 deckArt.texture = GameArt.CardBack;
-                deckArt.enabled = GameArt.CardBack != null;
+                heroArt.texture = GameArt.TableBackground;
             }
             else
             {
                 deckTitle.text = deck.Name;
                 string cmd = deck.CommanderName;
                 deckSub.text = (cmd ?? "No commander set") + "  ·  " + deck.CardCount + " cards";
-                deckArt.enabled = false;
                 if (!string.IsNullOrEmpty(cmd) && CardImageCache.Instance != null)
-                    CardImageCache.Instance.Get(cmd, null, tex => { if (deckArt != null) { deckArt.texture = tex; deckArt.enabled = true; } });
+                    CardImageCache.Instance.Get(cmd, null, tex =>
+                    {
+                        if (deckArt != null) deckArt.texture = tex;
+                        if (heroArt != null) heroArt.texture = tex;
+                    });
+                else { deckArt.texture = GameArt.CardBack; heroArt.texture = GameArt.TableBackground; }
             }
         }
 
@@ -569,10 +671,13 @@ namespace MTGUnited
         {
             if (id == "options") { gc.Options.Open(); return; }   // a pop-up, not a page
             currentTab = id;
+            if (builder != null && builder.IsOpen) builder.Done();   // leaving the builder saves the deck
             foreach (var kv in tabs)
             {
                 bool on = kv.Key == id;
-                kv.Value.label.color = on ? Theme.Text : Theme.TextDim;
+                kv.Value.label.color = on ? Color.white : Theme.TextDim;
+                kv.Value.icon.color = on ? Color.white : new Color(0.6f, 0.64f, 0.72f);
+                kv.Value.bg.color = on ? new Color(1f, 1f, 1f, 0.07f) : Color.clear;
                 kv.Value.bar.SetVisible(on);
             }
             foreach (var kv in pages) kv.Value.gameObject.SetActive(kv.Key == id);

@@ -680,7 +680,8 @@ namespace MTGUnited
         public static string ManaText(string cost)
         {
             if (string.IsNullOrEmpty(cost) || cost == "no cost") return "";
-            return cost.Replace("{", "").Replace("}", "").Replace(" ", "");
+            // Kept as {codes}: labels draw them as mana symbols.
+            return cost.Replace(" ", "");
         }
     }
 }

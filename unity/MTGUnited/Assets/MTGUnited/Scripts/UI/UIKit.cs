@@ -27,6 +27,14 @@ namespace MTGUnited
         public static readonly Color Danger = new Color(0.95f, 0.30f, 0.30f);
         public static readonly Color Good = new Color(0.35f, 0.85f, 0.45f);
 
+        /// <summary>One colour per seat (panel tint, life badge rim, name, board area).</summary>
+        static readonly Color[] SeatColors =
+        {
+            new Color(0.27f, 0.55f, 0.98f), new Color(0.93f, 0.33f, 0.31f), new Color(0.27f, 0.78f, 0.45f),
+            new Color(0.68f, 0.42f, 0.95f), new Color(0.98f, 0.66f, 0.18f), new Color(0.18f, 0.75f, 0.75f),
+        };
+        public static Color PlayerColor(int seat) => SeatColors[((seat % SeatColors.Length) + SeatColors.Length) % SeatColors.Length];
+
         public static Color ForManaColor(string c)
         {
             switch (c)
@@ -238,7 +246,7 @@ namespace MTGUnited
         public static Text Label(string name, Transform parent, string text, int size, Color color, TextAnchor anchor = TextAnchor.MiddleCenter, FontStyle style = FontStyle.Normal)
         {
             var rt = Rect(name, parent);
-            var t = rt.gameObject.AddComponent<Text>();
+            var t = rt.gameObject.AddComponent<SymbolText>();   // draws {T}, {R}, {2}... as symbols
             // Bold text uses the display font, which already has the weight built in.
             bool useHeading = style == FontStyle.Bold && Heading != null;
             t.font = useHeading ? Heading : Font;
@@ -305,6 +313,70 @@ namespace MTGUnited
             return sb;
         }
 
+        /// <summary>
+        /// Big glossy pill button (fully rounded ends, light top sheen, soft glow underneath) for the main actions:
+        /// Play, Done, Edit Deck.
+        /// </summary>
+        public static Button Pill(string name, Transform parent, string label, Color color, UnityAction onClick, float x, float y, float w, float h, int fontSize = 40)
+        {
+            var glow = Panel(name + "Glow", parent, new Color(color.r, color.g * 0.7f, color.b * 0.6f, 0.45f));
+            glow.rectTransform.Place(x - 10, y - 12, w + 20, h + 20);
+            glow.pixelsPerUnitMultiplier = 32f / (h + 20);
+            glow.raycastTarget = false;
+            var b = Button(name, parent, label, color, onClick, fontSize);
+            var img = b.GetComponent<Image>();
+            ((RectTransform)b.transform).Place(x, y, w, h);
+            img.pixelsPerUnitMultiplier = 32f / h;
+            var rim = img.gameObject.AddComponent<UnityEngine.UI.Outline>();
+            rim.effectColor = new Color(1f, 0.92f, 0.75f, 0.55f);
+            rim.effectDistance = new Vector2(1.5f, -1.5f);
+            var sheen = Panel("Sheen", b.transform, new Color(1f, 1f, 1f, 0.22f));
+            sheen.rectTransform.Stretch(h * 0.18f, h * 0.52f, h * 0.18f, 4);
+            sheen.pixelsPerUnitMultiplier = 32f / (h * 0.44f);
+            sheen.raycastTarget = false;
+            var t = LabelOf(b);
+            t.transform.SetAsLastSibling();
+            t.color = Color.white;
+            t.Outline(1.5f);
+            return b;
+        }
+
+        /// <summary>Round icon button (gear, trash, layout...). The icon is tinted; the disc is subtle until hovered.</summary>
+        public static Button IconButton(string name, Transform parent, Sprite icon, float x, float y, float size, UnityAction onClick, string tooltipLabel = null)
+        {
+            var disc = Panel(name, parent, new Color(1f, 1f, 1f, 0.07f));
+            disc.rectTransform.Place(x, y, size, size);
+            disc.pixelsPerUnitMultiplier = 32f / size;
+            var b = disc.gameObject.AddComponent<Button>();
+            var cb = b.colors;
+            cb.normalColor = Color.white;
+            cb.highlightedColor = new Color(2.2f, 2.0f, 1.6f);
+            cb.pressedColor = new Color(1.4f, 1.2f, 0.9f);
+            cb.colorMultiplier = 2.5f;
+            cb.fadeDuration = 0.08f;
+            b.colors = cb;
+            b.onClick.AddListener(() => Sound.Play(Sfx.UiClick, 0.6f));
+            if (onClick != null) b.onClick.AddListener(onClick);
+            var ic = Rect("Icon", disc.transform).Stretch(size * 0.2f, size * 0.2f, size * 0.2f, size * 0.2f);
+            var img = ic.gameObject.AddComponent<Image>();
+            img.sprite = icon;
+            img.color = new Color(0.86f, 0.88f, 0.92f);
+            img.raycastTarget = false;
+            img.preserveAspect = true;
+            return b;
+        }
+
+        /// <summary>A round "X" close button in the top-right corner of a panel.</summary>
+        public static Button CloseX(Transform panel, UnityAction onClick, float size = 46, float inset = 12)
+        {
+            var b = IconButton("Close", panel, Icons.Cross, 0, 0, size, onClick);
+            var r = (RectTransform)b.transform;
+            r.anchorMin = r.anchorMax = new Vector2(1, 1); r.pivot = new Vector2(1, 1);
+            r.anchoredPosition = new Vector2(-inset, -inset);
+            b.GetComponent<Image>().color = new Color(0f, 0f, 0f, 0.35f);
+            return b;
+        }
+
         public static Button Button(string name, Transform parent, string label, Color color, UnityAction onClick, int fontSize = 22)
         {
             var img = Panel(name, parent, color);
@@ -330,6 +402,7 @@ namespace MTGUnited
             var bg = Panel(name, parent, new Color(0.05f, 0.06f, 0.09f, 0.95f));
             var field = bg.gameObject.AddComponent<InputField>();
             var text = Label("Text", bg.transform, "", fontSize, Theme.Text, multiline ? TextAnchor.UpperLeft : TextAnchor.MiddleLeft);
+            if (text is SymbolText st) st.Symbols = false;   // typed text stays as typed
             text.rectTransform.Stretch(12, 8, 12, 8);
             text.supportRichText = false;
             text.verticalOverflow = multiline ? VerticalWrapMode.Overflow : VerticalWrapMode.Truncate;

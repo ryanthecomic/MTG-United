@@ -40,6 +40,8 @@ namespace MTGUnited
             var artRt = UIKit.Rect("Art", frame.transform).Stretch(6, 6, 6, 6);
             ins.art = artRt.gameObject.AddComponent<RawImage>();
             ins.art.raycastTarget = false;
+            var x = UIKit.CloseX(frame.transform, () => { ins.openedAt = -1f; ins.Hide(); }, 52, -26);
+            x.transform.SetAsLastSibling();
             shade.gameObject.SetActive(false);
             return ins;
         }
@@ -100,15 +102,16 @@ namespace MTGUnited
             var p = UIKit.Panel("Panel", shade.transform, Theme.Panel);
             o.panel = p.rectTransform;
             o.panel.anchorMin = o.panel.anchorMax = new Vector2(0.5f, 0.5f);
-            o.panel.sizeDelta = new Vector2(640, 560);
+            o.panel.sizeDelta = new Vector2(640, 630);
             p.gameObject.AddComponent<PointerEvents>();   // clicks inside the panel don't close it
             UiScaled.Add(p, Vector2.zero);
 
             var title = UIKit.Label("Title", p.transform, "OPTIONS", 30, Theme.Accent, TextAnchor.UpperCenter, FontStyle.Bold).Titled();
             title.rectTransform.Stretch(20, 0, 20, 24);
 
-            float y = 410;
+            float y = 480;
             o.scaleText = o.Row(p.transform, "Interface size", ref y, () => o.Step(-1, Setting.Scale), () => o.Step(1, Setting.Scale));
+            o.cardText = o.Row(p.transform, "Card size", ref y, () => o.Step(-1, Setting.Cards), () => o.Step(1, Setting.Cards));
             o.delayText = o.Row(p.transform, "Card preview delay", ref y, () => o.Step(-1, Setting.Delay), () => o.Step(1, Setting.Delay));
             o.volumeText = o.Row(p.transform, "Volume", ref y, () => o.Step(-1, Setting.Volume), () => o.Step(1, Setting.Volume));
             o.soundText = o.ToggleRow(p.transform, "Sound", ref y, () => { Sound.Enabled = !Sound.Enabled; o.Refresh(); });
@@ -124,11 +127,13 @@ namespace MTGUnited
             cr.anchorMin = cr.anchorMax = new Vector2(0.5f, 0); cr.pivot = new Vector2(0.5f, 0);
             cr.sizeDelta = new Vector2(240, 56); cr.anchoredPosition = new Vector2(0, 28);
 
+            UIKit.CloseX(p.transform, o.Close);
             shade.gameObject.SetActive(false);
             return o;
         }
 
-        enum Setting { Scale, Delay, Volume }
+        enum Setting { Scale, Cards, Delay, Volume }
+        Text cardText;
 
         Text Row(Transform parent, string label, ref float y, Action minus, Action plus)
         {
@@ -159,6 +164,7 @@ namespace MTGUnited
             switch (s)
             {
                 case Setting.Scale: UiScale.Value = Mathf.Round((UiScale.Value + dir * 0.05f) * 20f) / 20f; break;
+                case Setting.Cards: UiScale.CardScale = Mathf.Round((UiScale.CardScale + dir * 0.05f) * 20f) / 20f; break;
                 case Setting.Delay: UiScale.PreviewDelay = Mathf.Round((UiScale.PreviewDelay + dir * 0.25f) * 4f) / 4f; break;
                 case Setting.Volume:
                     Sound.Volume = Mathf.Round((Sound.Volume + dir * 0.1f) * 10f) / 10f;
@@ -166,12 +172,13 @@ namespace MTGUnited
                     break;
             }
             Refresh();
-            if (s == Setting.Scale && gc.InGame && gc.State != null) gc.BoardView.Render(gc.State);   // re-flow around the bigger HUD
+            if ((s == Setting.Scale || s == Setting.Cards) && gc.InGame && gc.State != null) gc.BoardView.Render(gc.State);   // re-flow around the bigger HUD
         }
 
         void Refresh()
         {
             scaleText.text = Mathf.RoundToInt(UiScale.Value * 100) + "%";
+            cardText.text = Mathf.RoundToInt(UiScale.CardScale * 100) + "%";
             delayText.text = UiScale.PreviewDelay <= 0f ? "instant" : UiScale.PreviewDelay.ToString("0.##") + " s";
             volumeText.text = Mathf.RoundToInt(Sound.Volume * 100) + "%";
             soundText.text = Sound.Enabled ? "ON" : "OFF";

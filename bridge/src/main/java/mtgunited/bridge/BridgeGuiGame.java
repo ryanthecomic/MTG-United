@@ -366,6 +366,18 @@ public final class BridgeGuiGame extends AbstractGuiGame {
         if (min >= 0 && max <= 1 && choices.get(0) instanceof CardFaceView) {
             return chooseName(message, min, choices);
         }
+        // Plain reveals of cards ("reveals the top card of their library"): show them without stopping the game.
+        if (min < 0 && choices.stream().allMatch(c -> c instanceof CardView)) {
+            final JsonObject ev = new JsonObject();
+            ev.addProperty("title", message == null ? "" : message);
+            final JsonArray cards = new JsonArray();
+            for (final T c : choices) {
+                try { cards.add(serializer.card((CardView) c)); } catch (final RuntimeException ex) { logOnce("reveal", ex); }
+            }
+            ev.add("cards", cards);
+            sendEvent("revealed", ev);
+            return new ArrayList<>();
+        }
         final JsonObject body = new JsonObject();
         body.addProperty("title", message);
         body.addProperty("min", min);

@@ -27,6 +27,7 @@ namespace MTGUnited
         public CardPreview Preview { get; private set; }
         public CardInspector Inspector { get; private set; }
         public OptionsPanel Options { get; private set; }
+        public RevealPopup Reveals { get; private set; }
         public Toasts Toasts { get; private set; }
         public ZoneViewer ZoneViewer { get; private set; }
         public GameOverPanel GameOver { get; private set; }
@@ -68,6 +69,7 @@ namespace MTGUnited
             EnsureEventSystem();
             gameObject.AddComponent<CardImageCache>();
             Sound.Create(gameObject);
+            CardCatalog.Gc = this;
             Launcher = gameObject.AddComponent<BridgeLauncher>();
 
             Bridge = new BridgeClient { Port = PlayerPrefs.GetInt("port", 7777) };
@@ -150,6 +152,7 @@ namespace MTGUnited
             GameOver = GameOverPanel.Create(OverlayLayer, this);
             Menu = MainMenu.Create(OverlayLayer, this);
             Options = OptionsPanel.Create(OverlayLayer, this);
+            Reveals = RevealPopup.Create(OverlayLayer, this);
             Toasts = Toasts.Create(OverlayLayer);
 
             // Hover preview sits above everything, in the same 1920x1080 space as the board.
@@ -240,6 +243,7 @@ namespace MTGUnited
                 case "gameStarted":
                     InGame = true;
                     SoundDirector.Reset();
+                    ZoneViewer.Revealed.Clear();
                     GameOver.Hide();
                     Menu.Hide();
                     Dialog.Close();
@@ -270,6 +274,18 @@ namespace MTGUnited
                     GameOver.Show(msg.Str("winner", null), State);
                     break;
                 case "pong":
+                    break;
+                case "revealed":
+                {
+                    var shown = new List<CardData>();
+                    foreach (var o in msg.Arr("cards"))
+                        if (o is Dictionary<string, object> cd) { var c = CardData.From(cd); if (c != null && !c.Hidden) shown.Add(c); }
+                    Reveals.Show(msg.Str("title"), shown);
+                    break;
+                }
+                case "cardResults":
+                case "cardInfo":
+                    CardCatalog.OnMessage(msg);
                     break;
             }
         }
