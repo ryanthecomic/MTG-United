@@ -22,6 +22,8 @@ namespace MTGUnited.EditorTools
     {
         const string ScenePath = "Assets/MTGUnited/Main.unity";
         const string ProductName = "MTG United";
+        /// <summary>The release being built (shown on the main menu, in the zip's name and in the guide).</summary>
+        public const string Version = "0.1.1";
 
         static string ProjectDir => Directory.GetParent(Application.dataPath).FullName;           // unity/MTGUnited
         static string RepoDir => Directory.GetParent(ProjectDir).Parent.FullName;                // repo root
@@ -32,13 +34,34 @@ namespace MTGUnited.EditorTools
         static void BuildWindows()
         {
             if (!EditorSceneManager.SaveCurrentModifiedScenesIfUserWantsTo()) return;
+            string zip = Build(out string error);
+            if (zip == null) { EditorUtility.DisplayDialog("MTG United", error, "OK"); return; }
+            EditorUtility.RevealInFinder(File.Exists(zip) ? zip : OutDir);
+        }
+
+        /// <summary>
+        /// Command line (scripts\build-release.bat):
+        /// Unity.exe -batchmode -quit -projectPath unity\MTGUnited -executeMethod MTGUnited.EditorTools.BuildMenu.BuildFromCommandLine
+        /// </summary>
+        public static void BuildFromCommandLine()
+        {
+            string zip = Build(out string error);
+            if (zip == null) { Debug.LogError("[MTGUnited] " + error); EditorApplication.Exit(1); return; }
+            Debug.Log("[MTGUnited] Release ready: " + zip);
+            EditorApplication.Exit(0);
+        }
+
+        /// <summary>Builds, copies the support files and zips. Returns the zip path, or null with an error.</summary>
+        static string Build(out string error)
+        {
+            error = null;
             EnsureScene();
             ApplyPlayerSettings();
 
             if (Directory.Exists(OutDir))
             {
                 try { Directory.Delete(OutDir, true); }
-                catch (Exception ex) { EditorUtility.DisplayDialog("MTG United", "Couldn't clear the old build (is the game still open?)\n\n" + ex.Message, "OK"); return; }
+                catch (Exception ex) { error = "Couldn't clear the old build (is the game still open?)\n\n" + ex.Message; return null; }
             }
             Directory.CreateDirectory(OutDir);
 
@@ -52,15 +75,15 @@ namespace MTGUnited.EditorTools
             var report = BuildPipeline.BuildPlayer(options);
             if (report.summary.result != BuildResult.Succeeded)
             {
-                EditorUtility.DisplayDialog("MTG United", "The build failed. See the Console for the errors.", "OK");
-                return;
+                error = "The build failed. See the Console for the errors.";
+                return null;
             }
 
             CopySupportFiles();
-            string zip = Path.Combine(BuildsDir, ProductName + " " + PlayerSettings.bundleVersion + ".zip");
+            string zip = Path.Combine(BuildsDir, ProductName + " " + Version + ".zip");
             Zip(OutDir, zip);
             Debug.Log("[MTGUnited] Build ready: " + OutDir + (File.Exists(zip) ? "  ·  zip: " + zip : ""));
-            EditorUtility.RevealInFinder(File.Exists(zip) ? zip : options.locationPathName);
+            return zip;
         }
 
         [MenuItem("MTG United/Open Builds Folder", priority = 2)]
@@ -96,8 +119,7 @@ namespace MTGUnited.EditorTools
         {
             PlayerSettings.companyName = ProductName;
             PlayerSettings.productName = ProductName;
-            if (string.IsNullOrEmpty(PlayerSettings.bundleVersion) || PlayerSettings.bundleVersion == "0.1" || PlayerSettings.bundleVersion == "1.0")
-                PlayerSettings.bundleVersion = "0.1.0";
+            PlayerSettings.bundleVersion = Version;
             PlayerSettings.runInBackground = true;   // LAN games and the bridge keep going when the window loses focus
             PlayerSettings.fullScreenMode = FullScreenMode.FullScreenWindow;
             PlayerSettings.defaultScreenWidth = 1920;
@@ -113,6 +135,7 @@ namespace MTGUnited.EditorTools
             CopyDir(Path.Combine(RepoDir, "bridge", "src"), Path.Combine(OutDir, "bridge", "src"));
             CopyFile(Path.Combine(RepoDir, "bridge", "pom.xml"), Path.Combine(OutDir, "bridge", "pom.xml"));
             CopyFile(Path.Combine(RepoDir, "README.md"), Path.Combine(OutDir, "README.md"));
+            CopyFile(Path.Combine(RepoDir, "CHANGELOG.md"), Path.Combine(OutDir, "CHANGELOG.md"));
             File.WriteAllText(Path.Combine(OutDir, "LEIA-ME - COMO INSTALAR.txt"), Guide);
         }
 
@@ -152,8 +175,8 @@ namespace MTGUnited.EditorTools
         }
 
         const string Guide =
-@"MTG UNITED - COMO INSTALAR
-==========================
+@"MTG UNITED " + Version + @" - COMO INSTALAR
+=================================
 
 1. Extraia esta pasta inteira em um lugar seu, por exemplo Documentos\MTG United
    (NAO coloque em Arquivos de Programas: o MTG United grava o Forge e as configuracoes dentro da propria pasta).
@@ -165,17 +188,21 @@ namespace MTGUnited.EditorTools
    - Nao tem? Instale o Git (botao ""Install Git""), reabra, e clique ""Install Forge"" (uns minutos).
 4. Pronto: Home > Play.
 
+JOGAR CONTRA A IA (FORGE)
+- Home > modo FORGE RULES. Escolha o formato: CMDR (Commander), 60 ou 40 cartas.
+- Numero de oponentes, decks da IA (PRECONS / RANDOM) e forca da IA no mesmo quadro.
+
 KITCHEN TABLE (mesa livre, cartas customizadas, nao precisa do Forge)
-- Decks > Custom Sets > Import: escolha o .xml exportado do Magic Set Editor (File > Export > Cockatrice).
+- Aba TABLE (garfo): explica tudo. Sets do Magic Set Editor: File > Export > Cockatrice, depois ""Import a set"".
+- Atalhos: Options > Shortcuts > Kitchen Table.
 
 JOGAR EM REDE LOCAL (LAN)
-- Todos na mesma rede (mesmo Wi-Fi/roteador).
-- Home > modo KITCHEN TABLE > ""PLAY ON LAN (HOST / JOIN)"".
-- Quem hospeda: HOST A TABLE > OPEN TABLE. Na primeira vez o Windows pergunta sobre o firewall:
-  marque ""Redes privadas"" e clique Permitir.
-- Os outros: JOIN A TABLE > clique no nome do host (ou digite o endereco IP que aparece pra ele).
-- Os sets customizados sao copiados automaticamente entre os jogadores.
-- O host clica Start game.
+- Todos na mesma rede (mesmo Wi-Fi/roteador). Na primeira vez o Windows pergunta sobre o firewall:
+  marque ""Redes privadas"" e clique Permitir (para o MTG United e, no host do Forge, tambem para o Java).
+- Home > PLAY ON LAN.
+  - Modo KITCHEN TABLE: HOST A TABLE > OPEN TABLE; os outros: JOIN A TABLE. Sets customizados sao copiados sozinhos.
+  - Modo FORGE RULES: o host precisa do Forge rodando; quem entra NAO precisa. O host escolhe o formato e quantos bots.
+- Se a mesa nao aparecer na lista: REFRESH, ou digite o endereco que aparece na tela do host.
 ";
     }
 }

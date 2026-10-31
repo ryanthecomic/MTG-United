@@ -63,6 +63,19 @@ namespace MTGUnited
                     c.Note = (a.Str("text") ?? "").Trim();
                     Say((by?.Name ?? "") + (c.Note.Length > 0 ? " put a note on " : " removed the note from ") + (c.FaceDown ? "a face-down card" : c.Name) + ".");
                     break;
+                case "batch":
+                    // Several cards at once (a selection): one undo step for all of them.
+                    foreach (var o in a.Arr("ops"))
+                        if (o is Dictionary<string, object> sub) { sub["by"] = a.ContainsKey("by") ? a["by"] : (object)(double)(by?.Id ?? 1); Apply(sub); }
+                    break;
+                case "delete":
+                    if (c == null) break;
+                    Say((by?.Name ?? "") + " removed " + (c.FaceDown && c.Zone == "Battlefield" ? "a face-down card" : c.Name) + " from the game.");
+                    Delete(id);
+                    break;
+                case "sick":
+                    if (c != null) c.Sick = a.Bool("v");
+                    break;
                 case "rotate": if (c != null) c.Rot = ((c.Rot + a.Int("d", 1)) % 4 + 4) % 4; break;
                 case "pos": if (c != null) c.Pos = new Vector2(F(a, "x"), F(a, "y")); break;
                 case "give":
@@ -154,7 +167,7 @@ namespace MTGUnited
                 cards.Add(new Dictionary<string, object>
                 {
                     { "id", c.Id }, { "name", hidden ? "" : c.Name }, { "owner", c.Owner }, { "ctrl", c.Controller }, { "zone", c.Zone },
-                    { "x", (double)c.Pos.x }, { "y", (double)c.Pos.y }, { "tap", c.Tapped }, { "rot", c.Rot }, { "flip", c.Flipped }, { "note", c.Note ?? "" }, { "fd", c.FaceDown }, { "tok", c.Token },
+                    { "x", (double)c.Pos.x }, { "y", (double)c.Pos.y }, { "tap", c.Tapped }, { "rot", c.Rot }, { "flip", c.Flipped }, { "note", c.Note ?? "" }, { "sick", c.Sick }, { "fd", c.FaceDown }, { "tok", c.Token },
                     { "rev", c.Revealed }, { "pt", c.TokenPT }, { "col", c.TokenColors }, { "ctr", counters },
                 });
             }
@@ -187,7 +200,7 @@ namespace MTGUnited
                 var c = new TableCard
                 {
                     Id = j.Int("id"), Name = j.Str("name"), Owner = j.Int("owner"), Controller = j.Int("ctrl"), Zone = j.Str("zone"),
-                    Pos = new Vector2(F(j, "x"), F(j, "y")), Tapped = j.Bool("tap"), Rot = j.Int("rot"), Flipped = j.Bool("flip"), Note = j.Str("note"), FaceDown = j.Bool("fd"), Token = j.Bool("tok"),
+                    Pos = new Vector2(F(j, "x"), F(j, "y")), Tapped = j.Bool("tap"), Rot = j.Int("rot"), Flipped = j.Bool("flip"), Note = j.Str("note"), Sick = j.Bool("sick"), FaceDown = j.Bool("fd"), Token = j.Bool("tok"),
                     Revealed = j.Bool("rev"), TokenPT = j.Str("pt"), TokenColors = j.Str("col"),
                 };
                 var ctr = j.Obj("ctr");

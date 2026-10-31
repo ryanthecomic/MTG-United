@@ -755,6 +755,7 @@ namespace MTGUnited
             string u = name.ToUpperInvariant();
             if (u == "P1P1" || name == "+1/+1") return "+" + n + "/+" + n;
             if (u == "M1M1" || name == "-1/-1") return "-" + n + "/-" + n;
+            if (name == "counter") return n.ToString();   // kitchen table's plain counter: just the number
             string label = name.Length > 6 ? name.Substring(0, 6) : name;
             return n + " " + label;
         }

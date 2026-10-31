@@ -47,6 +47,16 @@ namespace MTGUnited
             float y = 0;
             foreach (var (label, action) in items)
             {
+                if (action == null && label == "---")
+                {
+                    // Section divider.
+                    var line = UIKit.Panel("Divider", list, new Color(1f, 1f, 1f, 0.12f), false);
+                    line.raycastTarget = false;
+                    Place(line.rectTransform, y + 6, 1);
+                    rows.Add(line.gameObject);
+                    y += 13;
+                    continue;
+                }
                 if (action == null)
                 {
                     var h = UIKit.Label("Header", list, label, 13, new Color(1f, 0.72f, 0.4f), TextAnchor.MiddleLeft, FontStyle.Bold);
@@ -58,6 +68,8 @@ namespace MTGUnited
                 var a = action;
                 // "Label\tKey": the key (its shortcut) is shown faintly on the right.
                 string key = null, text = label;
+                bool danger = text.StartsWith("!");   // "!Delete": shown in red
+                if (danger) text = text.Substring(1);
                 int tab = text.IndexOf('\t');
                 if (tab >= 0) { key = text.Substring(tab + 1).Trim(); text = text.Substring(0, tab).TrimEnd(); }
                 var b = UIKit.Button(text, list, text, new Color(1, 1, 1, 0.04f), () =>
@@ -76,6 +88,7 @@ namespace MTGUnited
                 }, 16);
                 var t = UIKit.LabelOf(b);
                 t.alignment = TextAnchor.MiddleLeft;
+                if (danger) t.color = new Color(1f, 0.42f, 0.42f);
                 t.rectTransform.Stretch(12, 0, string.IsNullOrEmpty(key) ? 8 : 90, 0);
                 if (!string.IsNullOrEmpty(key))
                 {

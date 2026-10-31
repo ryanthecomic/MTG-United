@@ -16,7 +16,8 @@ namespace MTGUnited
         public bool Tapped, FaceDown, Token, Revealed;
         public int Rot;
         public bool Flipped;           // double-faced card showing its back
-        public string Note = "";       // a sticky note everyone at the table sees (battlefield)                // extra quarter turns clockwise (Q / E at the table), on top of tapping
+        public string Note = "";       // a sticky note everyone at the table sees (battlefield)
+        public bool Sick;              // marked summoning sick (Z); cleared at its controller's next turn                // extra quarter turns clockwise (Q / E at the table), on top of tapping
         public string TokenPT = "", TokenColors = "";   // for tokens made up at the table
         public Dictionary<string, int> Counters = new Dictionary<string, int>();
 
@@ -196,6 +197,7 @@ namespace MTGUnited
                 c.Rot = 0;
                 c.Flipped = false;   // double-faced cards return to their front face
                 c.Note = "";         // notes belong to the permanent, not the card
+                c.Sick = false;
                 c.Counters.Clear();
                 if (zone != "Library") c.FaceDown = false;
                 var list = Player(c.Owner).ZoneList(zone);
@@ -249,6 +251,15 @@ namespace MTGUnited
         public void AddCounter(int cardId, string kind, int delta)
         {
             if (!Cards.TryGetValue(cardId, out var c)) return;
+            // +1/+1 and -1/-1 counters cancel each other out (rule 704.5q).
+            string opposite = kind == "+1/+1" ? "-1/-1" : kind == "-1/-1" ? "+1/+1" : null;
+            if (opposite != null && delta > 0 && c.Counters.TryGetValue(opposite, out int other) && other > 0)
+            {
+                int cancel = Mathf.Min(other, delta);
+                other -= cancel; delta -= cancel;
+                if (other <= 0) c.Counters.Remove(opposite); else c.Counters[opposite] = other;
+                if (delta == 0) return;
+            }
             c.Counters.TryGetValue(kind, out int n);
             n += delta;
             if (n <= 0) c.Counters.Remove(kind); else c.Counters[kind] = n;
@@ -277,8 +288,16 @@ namespace MTGUnited
             if (Active == 0) Turn++;
             var p = ActivePlayer;
             Say("— Turn " + Turn + ": " + p.Name + " —");
-            foreach (var c in Battlefield(p.Id)) c.Tapped = false;
+            foreach (var c in Battlefield(p.Id)) { c.Tapped = false; c.Sick = false; }
             Draw(p, 1);
+        }
+
+        /// <summary>Takes a card out of the game entirely (tokens, misclicks): it's in no zone anymore.</summary>
+        public void Delete(int cardId)
+        {
+            if (!Cards.TryGetValue(cardId, out var c)) return;
+            foreach (var pl in Players) foreach (var z in new[] { "Library", "Hand", "Graveyard", "Exile", "Command" }) pl.ZoneList(z)?.Remove(cardId);
+            Cards.Remove(cardId);
         }
 
         public int Roll(int sides) => rng.Next(1, sides + 1);

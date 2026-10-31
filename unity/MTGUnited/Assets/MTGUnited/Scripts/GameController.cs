@@ -255,7 +255,7 @@ namespace MTGUnited
             bool ctrl = Input.GetKey(KeyCode.LeftControl) || Input.GetKey(KeyCode.RightControl);
 
             if (Input.GetKeyDown(KeyCode.F1)) { Options.Open(true); return; }
-            if (Input.GetKeyDown(KeyCode.M) && !ctrl)
+            if (Input.GetKeyDown(KeyCode.M) && !ctrl && !Table.IsOpen)
             {
                 Sound.Enabled = !Sound.Enabled;
                 Toasts.Show(Sound.Enabled ? "Sound on" : "Sound muted");

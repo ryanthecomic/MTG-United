@@ -186,6 +186,8 @@ namespace MTGUnited
             // Wordmark in the top-left corner, tabs after it.
             var logo = UIKit.Label("Logo", bar, "MTG UNITED", 30, new Color(0.95f, 0.75f, 0.45f), TextAnchor.MiddleLeft, FontStyle.Bold).Outline(1.5f).Titled();
             logo.rectTransform.Place(28, 22, 260, 50);
+            var version = UIKit.Label("Version", bar, "v" + Application.version, 12, new Color(1f, 1f, 1f, 0.35f), TextAnchor.LowerLeft);
+            version.rectTransform.Place(31, 4, 200, 20);
             float x = 290;
             for (int i = 0; i < ids.Length; i++)
             {
