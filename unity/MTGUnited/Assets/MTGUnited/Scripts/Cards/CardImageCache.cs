@@ -60,6 +60,29 @@ namespace MTGUnited
         public void Get(string name, string set, Action<Texture2D> callback)
         {
             if (string.IsNullOrEmpty(name)) return;
+            // Custom cards (imported sets) use their own image file, or their picture URL.
+            if (!name.StartsWith(TokenMark))
+            {
+                var custom = CustomSets.Get(name);
+                if (custom != null)
+                {
+                    string ckey = "custom|" + name.ToLowerInvariant();
+                    if (memory.TryGetValue(ckey, out var ct)) { callback(ct); return; }
+                    string path = CustomSets.ImageFor(name);
+                    if (path != null)
+                    {
+                        var t = new Texture2D(2, 2, TextureFormat.RGBA32, true);
+                        try
+                        {
+                            if (t.LoadImage(File.ReadAllBytes(path))) { Prepare(t); memory[ckey] = t; callback(t); }
+                        }
+                        catch (Exception ex) { Debug.LogWarning("[MTGUnited] Custom image failed: " + ex.Message); }
+                        return;
+                    }
+                    if (!string.IsNullOrEmpty(custom.PicUrl) && custom.PicUrl.StartsWith("http")) { StartCoroutine(DownloadCustom(custom.PicUrl, ckey, callback)); return; }
+                    return;   // custom card without art: shows as a text card
+                }
+            }
             string key = (name + "|" + (set ?? "")).ToLowerInvariant();
             if (memory.TryGetValue(key, out var tex)) { callback(tex); return; }
             if (failed.Contains(key)) return;
@@ -142,6 +165,13 @@ namespace MTGUnited
             running = false;
         }
 
+        IEnumerator DownloadCustom(string url, string key, Action<Texture2D> callback)
+        {
+            Texture2D tex = null;
+            yield return Download(url, (t, b) => tex = t);
+            if (tex != null) { memory[key] = tex; callback(tex); }
+        }
+
         static IEnumerator FindTokenImage(string query, Action<string> done)
         {
             string url = "https://api.scryfall.com/cards/search?unique=art&include_extras=true&q=" + UnityWebRequest.EscapeURL(query);
@@ -203,10 +233,11 @@ namespace MTGUnited
             t.anisoLevel = 4;
             try
             {
-                if (t.isReadable && t.width % 4 == 0 && t.height % 4 == 0)
+                if (t.isReadable)
                 {
-                    t.Compress(true);
-                    t.Apply(false, true);
+                    // Block compression needs sizes that are multiples of 4 (Scryfall's are; custom exports may not be).
+                    if (t.width % 4 == 0 && t.height % 4 == 0) t.Compress(true);
+                    t.Apply(false, true);   // either way, drop the CPU copy
                 }
             }
             catch (Exception ex) { Debug.LogWarning("[MTGUnited] Could not compress card image: " + ex.Message); }

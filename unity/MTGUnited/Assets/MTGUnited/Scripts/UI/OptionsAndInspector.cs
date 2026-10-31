@@ -37,10 +37,10 @@ namespace MTGUnited
             ins.text = UIKit.Label("Text", frame.transform, "", 26, Theme.Text, TextAnchor.UpperLeft);
             ins.text.rectTransform.Stretch(28, 28, 28, 28);
             ins.text.supportRichText = true;
-            var artRt = UIKit.Rect("Art", frame.transform).Stretch(6, 6, 6, 6);
+            var artRt = UIKit.Rect("Art", frame.transform).Stretch();
             ins.art = artRt.gameObject.AddComponent<RawImage>();
             ins.art.raycastTarget = false;
-            var x = UIKit.CloseX(frame.transform, () => { ins.openedAt = -1f; ins.Hide(); }, 52, -26);
+            var x = UIKit.CloseX(frame.transform, () => { ins.openedAt = -1f; ins.Hide(); }, 52, 14);   // inside: the card is clipped round
             x.transform.SetAsLastSibling();
             shade.gameObject.SetActive(false);
             return ins;
@@ -56,6 +56,7 @@ namespace MTGUnited
             // Board space is 1920x1080 centred on the screen; the card hugs the left edge.
             float h = Mathf.Min(1040f, 940f * UiScale.Value), w = h * 0.716f;
             card.sizeDelta = new Vector2(w, h);
+            UIKit.RoundCard(card.GetComponent<Image>(), w);
             card.anchoredPosition = new Vector2(-960 + 20 + w / 2f, 0);
             art.enabled = false;
             text.text = "<b>" + c.Name + "</b>   " + CardView.ManaText(c.ManaCost) + "\n<i>" + c.TypeLine + "</i>\n\n" + c.Text

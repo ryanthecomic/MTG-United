@@ -63,9 +63,9 @@ namespace MTGUnited
             Item("Resume", Theme.Accent, m.Close);
             Item("Options", Theme.Secondary, () => { m.Close(); gc.Options.Open(false); });
             Item("Shortcuts", Theme.Secondary, () => { m.Close(); gc.Options.Open(true); });
-            Item("Attack with everything", Theme.Secondary, () => { m.Close(); gc.Send("alphaStrike"); });
-            Item("Concede", new Color(0.45f, 0.14f, 0.14f), () => { m.Close(); gc.Send("concede"); });
-            Item("Back to main menu", Theme.Secondary, () => { m.Close(); gc.Menu.Show(); });
+            Item("Attack with everything", Theme.Secondary, () => { m.Close(); if (!gc.Table.IsOpen) gc.Send("alphaStrike"); });
+            Item("Concede", new Color(0.45f, 0.14f, 0.14f), () => { m.Close(); if (gc.Table.IsOpen) gc.Table.Leave(); else gc.Send("concede"); });
+            Item("Back to main menu", Theme.Secondary, () => { m.Close(); if (gc.Table.IsOpen) gc.Table.Leave(); else gc.Menu.Show(); });
             UIKit.CloseX(p.transform, m.Close);
             shade.gameObject.SetActive(false);
             return m;

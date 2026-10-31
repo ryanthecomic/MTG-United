@@ -47,8 +47,8 @@ namespace MTGUnited
             p.bg.rectTransform.Stretch(4, 4, 4, 4);
             p.bg.gameObject.AddComponent<Mask>().showMaskGraphic = true;   // clips the commander art to the rounded panel
             var pe = p.bg.gameObject.AddComponent<PointerEvents>();
-            pe.OnClick = () => gc.ClickPlayer(p.playerId);
-            pe.OnRightClick = () => gc.ZoneViewer.Open(p.playerId, "Command");   // commander(s) live behind a right-click
+            pe.OnClick = () => { if (p.Clicked != null) p.Clicked(); else gc.ClickPlayer(p.playerId); };
+            pe.OnRightClick = () => { if (p.RightClicked != null) p.RightClicked(); else gc.ZoneViewer.Open(p.playerId, "Command"); };   // commander(s) live behind a right-click
             pe.OnEnter = () => p.hovered = true;
             pe.OnExit = () => p.hovered = false;
             p.fadeGroup = ring.gameObject.AddComponent<CanvasGroup>();
@@ -155,7 +155,7 @@ namespace MTGUnited
                 foreach (var cd in pd.CommanderDamage)
                     if (cd.Damage > 0) sb.Append(sb.Length > 0 ? "\n" : "").Append("<color=#ffb380>").Append(cd.CommanderName).Append(" ").Append(cd.Damage).Append("</color>");
                 infoText.text = sb.ToString();
-                RenderMana(pd);
+                if (manaRow != null) RenderMana(pd);
             }
             ShowArt(pd);
 
@@ -191,9 +191,13 @@ namespace MTGUnited
                 hit.sprite = UIKit.Rounded; hit.type = Image.Type.Sliced; hit.pixelsPerUnitMultiplier = 32f / 30f;
                 hit.color = new Color(1, 1, 1, viewer ? 0.09f : 0f);
                 var pe = cell.gameObject.AddComponent<PointerEvents>();
-                if (viewer) pe.OnClick = () => { Sound.Play(Sfx.UiClick, 0.6f); gc.ZoneViewer.Open(playerId, id); };
-                else pe.OnClick = () => gc.ClickPlayer(playerId);
-                pe.OnRightClick = () => gc.ZoneViewer.Open(playerId, "Command");
+                pe.OnClick = () =>
+                {
+                    if (ZoneClicked != null) { Sound.Play(Sfx.UiClick, 0.6f); ZoneClicked(id); return; }
+                    if (viewer) { Sound.Play(Sfx.UiClick, 0.6f); gc.ZoneViewer.Open(playerId, id); }
+                    else gc.ClickPlayer(playerId);
+                };
+                pe.OnRightClick = () => { if (RightClicked != null) RightClicked(); else gc.ZoneViewer.Open(playerId, "Command"); };
                 var pop = cell.gameObject.AddComponent<HoverPop>();
                 pe.OnEnter = () => pop.Hovered = true;
                 pe.OnExit = () => pop.Hovered = false;
@@ -207,6 +211,24 @@ namespace MTGUnited
                 t.rectTransform.Stretch(34, 0, 2, 0);
                 zones[id] = (cell, t);
             }
+        }
+
+        // Hooks for the kitchen table (no Forge): when set, they replace the Forge actions.
+        public System.Action Clicked, RightClicked;
+        public System.Action<string> ZoneClicked;
+
+        /// <summary>Kitchen table: small − / + buttons under the life total.</summary>
+        public void AddLifeButtons(System.Action<int> delta)
+        {
+            lifeText.rectTransform.Stretch(0, 30, 0, 0);
+            var minus = UIKit.Button("Minus", badge.transform, "−", new Color(0.45f, 0.15f, 0.15f, 0.9f), () => delta(-1), 20);
+            var mr = (RectTransform)minus.transform;
+            mr.anchorMin = new Vector2(0, 0); mr.anchorMax = new Vector2(0.5f, 0); mr.pivot = new Vector2(0.5f, 0);
+            mr.offsetMin = new Vector2(4, 4); mr.offsetMax = new Vector2(-2, 30);
+            var plus = UIKit.Button("Plus", badge.transform, "+", new Color(0.15f, 0.4f, 0.2f, 0.9f), () => delta(1), 20);
+            var pr = (RectTransform)plus.transform;
+            pr.anchorMin = new Vector2(0.5f, 0); pr.anchorMax = new Vector2(1, 0); pr.pivot = new Vector2(0.5f, 0);
+            pr.offsetMin = new Vector2(2, 4); pr.offsetMax = new Vector2(-4, 30);
         }
 
         /// <summary>The player's seat colour: tints the panel, the life badge rim and the name.</summary>

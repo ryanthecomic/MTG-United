@@ -6,6 +6,9 @@
 /mtgunited-data/
 /mtgunited-forge.json
 
+# Game builds made with MTG United > Build Windows Game
+/Builds/
+
 # Java build output
 /bridge/target/
 

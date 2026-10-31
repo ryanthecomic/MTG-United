@@ -144,7 +144,22 @@ namespace MTGUnited
                 p.BeginErrorReadLine();
             }
             catch { JavaVersion = "not found (install Java 17+)"; }
+            try
+            {
+                var g = new Process { StartInfo = new ProcessStartInfo { FileName = "git", Arguments = "--version", UseShellExecute = false, RedirectStandardOutput = true, CreateNoWindow = true }, EnableRaisingEvents = true };
+                g.Exited += (s, e) => GitFound = true;
+                g.Start();
+            }
+            catch { GitFound = false; }
         }
+
+        public static bool JavaMissing => JavaVersion.StartsWith("not found");
+        public static bool GitFound { get; private set; }
+
+        /// <summary>Installs a prerequisite with winget (Windows' package manager); MTG United must restart to see it.</summary>
+        public static void InstallTool(string name, string wingetId)
+            => Run("Installing " + name, "winget", "install --id " + wingetId + " -e --accept-source-agreements --accept-package-agreements",
+                   "When this finishes, close and reopen MTG United so it can see " + name + ".");
 
         // ---------------------------------------------------------------- running the setup script
 
@@ -188,18 +203,25 @@ namespace MTGUnited
 
         static void Run(string name, string args)
         {
+            if (Script == null || !File.Exists(Script)) { Log("Can't find scripts\\setup.ps1 next to MTG United. Keep the 'scripts' and 'bridge' folders next to MTG United.exe."); return; }
             if (Busy) return;
-            if (Script == null || !File.Exists(Script)) { Log("Can't find scripts\\setup.ps1 next to MTG United."); return; }
             GameController.Instance?.Launcher.Stop();   // the bridge holds its jar open
+            Run(name, "powershell", "-NoProfile -ExecutionPolicy Bypass -File \"" + Script + "\" " + args, null);
+        }
+
+        static void Run(string name, string exe, string args, string note)
+        {
+            if (Busy) return;
             TaskName = name;
             Log("");
             Log("==> " + name);
+            if (note != null) Log(note);
             var psi = new ProcessStartInfo
             {
-                FileName = "powershell",
-                Arguments = "-NoProfile -ExecutionPolicy Bypass -File \"" + Script + "\" " + args,
+                FileName = exe,
+                Arguments = args,
                 UseShellExecute = false, RedirectStandardOutput = true, RedirectStandardError = true, CreateNoWindow = true,
-                WorkingDirectory = Root,
+                WorkingDirectory = Root ?? Directory.GetCurrentDirectory(),
             };
             try
             {
@@ -246,6 +268,25 @@ namespace MTGUnited
                 p.BeginOutputReadLine();
             }
             catch (Exception ex) { Log("Couldn't open the folder picker: " + ex.Message); }
+        }
+
+        /// <summary>Opens Windows' file picker for one file (e.g. a Cockatrice set .xml).</summary>
+        public static void BrowseFile(string title, string filter, Action<string> chosen)
+        {
+            string ps = "Add-Type -AssemblyName System.Windows.Forms; $d = New-Object System.Windows.Forms.OpenFileDialog; " +
+                        "$d.Title = '" + title.Replace("'", "") + "'; $d.Filter = '" + filter.Replace("'", "") + "'; " +
+                        "if ($d.ShowDialog() -eq [System.Windows.Forms.DialogResult]::OK) { $d.FileName }";
+            try
+            {
+                var psi = new ProcessStartInfo { FileName = "powershell", Arguments = "-NoProfile -STA -Command \"" + ps + "\"", UseShellExecute = false, RedirectStandardOutput = true, CreateNoWindow = true };
+                var p = new Process { StartInfo = psi, EnableRaisingEvents = true };
+                string result = null;
+                p.OutputDataReceived += (s, e) => { if (!string.IsNullOrWhiteSpace(e.Data)) result = e.Data.Trim(); };
+                p.Exited += (s, e) => { browseResult = result; browseCallback = chosen; browsePending = true; };
+                p.Start();
+                p.BeginOutputReadLine();
+            }
+            catch (Exception ex) { Log("Couldn't open the file picker: " + ex.Message); }
         }
 
         static volatile bool browsePending;

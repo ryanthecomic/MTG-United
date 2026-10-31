@@ -54,6 +54,10 @@ namespace MTGUnited
         ScrollRect columnsScroll;
         readonly List<Tile> columnPool = new List<Tile>();
 
+        Button formatButton, poolButton;
+        static bool commanderFormat = true;   // read by the deck list rows (crown only in Commander)
+        string Format => deck?.Format ?? DeckFormat.Commander;
+
         // text import / export
         RectTransform textDialog;
         InputField textInput;
@@ -138,6 +142,14 @@ namespace MTGUnited
             UIKit.IconButton("Text", root, Icons.List, 1366, Top - 84, 56, OpenTextDialog);
             var tl = UIKit.Label("TextLabel", root, "Text", 13, Theme.TextDim, TextAnchor.UpperCenter);
             tl.rectTransform.Place(1344, Top - 112, 100, 24);
+
+            // Format (size / copy limits) and card pool (which sets "all cards" draws from).
+            formatButton = UIKit.Button("Format", root, "", new Color(0.3f, 0.22f, 0.45f), CycleFormat, 16);
+            ((RectTransform)formatButton.transform).Place(1440, Top - 82, 186, 52);
+            formatButton.GetComponent<Image>().pixelsPerUnitMultiplier = 32f / 52f;
+            poolButton = UIKit.Button("Pool", root, "", new Color(0.22f, 0.32f, 0.3f), () => PoolMenu(Input.mousePosition), 16);
+            ((RectTransform)poolButton.transform).Place(1636, Top - 82, 190, 52);
+            poolButton.GetComponent<Image>().pixelsPerUnitMultiplier = 32f / 52f;
 
             hintText = UIKit.Label("Hint", root, "", 15, Theme.TextDim, TextAnchor.MiddleLeft);
             hintText.rectTransform.Place(600, Top - 118, 700, 30);
@@ -299,11 +311,7 @@ namespace MTGUnited
             if (searchAt > 0 && Time.unscaledTime >= searchAt)
             {
                 searchAt = -1f;
-                if (query.Length > 0 && !gc.Bridge.Connected)
-                {
-                    hintText.text = "Card search needs Forge running: start it from Home, then search again.";
-                }
-                else if (query.Length > 0)
+                if (query.Length > 0)
                 {
                     searching = true;
                     UpdateHint();
@@ -329,17 +337,97 @@ namespace MTGUnited
             Refresh();
         }
 
+        // ---------------------------------------------------------------- format & card pool
+
+        void CycleFormat()
+        {
+            deck.Format = DeckFormat.Next(Format);
+            if (!DeckFormat.HasCommander(Format))
+            {
+                // Commanders become ordinary cards in formats without a command zone.
+                foreach (var c in model.Commanders) model.Add(c);
+                model.Commanders.Clear();
+            }
+            Refresh();
+        }
+
+        HashSet<string> Pool()
+        {
+            var set = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            foreach (var p in (deck?.Pool ?? "").Split(',')) if (p.Trim().Length > 0) set.Add(p.Trim());
+            return set;
+        }
+
+        bool InPool(CardInfo c, HashSet<string> pool)
+        {
+            if (pool.Count == 0) return true;
+            var custom = CustomSets.Get(c.Name);
+            return custom != null ? pool.Contains(custom.Set) : pool.Contains("REAL");
+        }
+
+        /// <summary>Only custom sets in the pool: "all cards" lists them whole, no search needed.</summary>
+        bool WholeSetView
+        {
+            get { var p = Pool(); return p.Count > 0 && !p.Contains("REAL"); }
+        }
+
+        List<CardInfo> PoolResults()
+        {
+            var pool = Pool();
+            if (query.Length == 0 && WholeSetView)
+            {
+                var all = new List<CardInfo>();
+                foreach (var set in CustomSets.All)
+                    if (pool.Contains(set.Code))
+                        foreach (var c in set.Cards) if (!c.Token) all.Add(c.ToInfo());
+                all.Sort((a, b) => string.Compare(a.Name, b.Name, StringComparison.OrdinalIgnoreCase));
+                return all.Count > 400 ? all.GetRange(0, 400) : all;
+            }
+            return results.Where(c => InPool(c, pool)).ToList();
+        }
+
+        string PoolLabel()
+        {
+            var p = Pool();
+            if (p.Count == 0) return "ALL";
+            if (p.Count == 1) return p.Contains("REAL") ? "REAL CARDS" : p.First();
+            return p.Count + " SETS";
+        }
+
+        /// <summary>Tick sets in or out of the pool (stays open so several can be toggled).</summary>
+        void PoolMenu(Vector2 at)
+        {
+            var pool = Pool();
+            var items = new List<(string, Action)> { ("CARD POOL", null) };
+            void Toggle(string code)
+            {
+                if (!pool.Remove(code)) pool.Add(code);
+                deck.Pool = string.Join(",", pool);
+                Refresh();
+                PoolMenu(at);
+            }
+            items.Add(((pool.Count == 0 ? "(•) " : "( ) ") + "Everything", () => { deck.Pool = ""; Refresh(); PoolMenu(at); }));
+            items.Add(((pool.Contains("REAL") ? "[x] " : "[  ] ") + "Real cards (Forge)", () => Toggle("REAL")));
+            foreach (var set in CustomSets.All)
+            {
+                string code = set.Code;
+                items.Add(((pool.Contains(code) ? "[x] " : "[  ] ") + code + " · " + set.Name + " (" + set.Cards.Count + ")", () => Toggle(code)));
+            }
+            if (CustomSets.All.Count == 0) items.Add(("Import custom sets in Decks → Custom Sets", null));
+            PopupMenu.Instance.Show(at, items);
+        }
+
         void AddCard(CardInfo c, RectTransform from = null)
         {
             if (c == null) return;
             bool unlimited = c.Basic || (c.Text ?? "").IndexOf("any number of cards named", StringComparison.OrdinalIgnoreCase) >= 0;
-            if (model.Contains(c.Name) && !unlimited)
+            if (DeckFormat.Singleton(Format) && model.Contains(c.Name) && !unlimited)
             {
                 gc.Toasts.Show(c.Name + " is already in the deck (Commander is singleton).");
                 return;
             }
-            // First legendary creature into an empty command zone becomes the commander.
-            if (model.Commanders.Count == 0 && c.CanBeCommander) model.Commanders.Add(c.Name);
+            // Commander: the first legendary creature into an empty command zone becomes the commander.
+            if (DeckFormat.HasCommander(Format) && model.Commanders.Count == 0 && c.CanBeCommander) model.Commanders.Add(c.Name);
             else model.Add(c.Name);
             Sound.Play(Sfx.Draw, 0.5f);
             if (from != null) FlyToList(c, from);
@@ -497,7 +585,11 @@ namespace MTGUnited
         {
             if (!IsOpen) return;
             int total = model.Total;
-            countText.text = total + "/100 Cards" + (model.Commanders.Count == 0 ? "   ·   <color=#f7a540>no commander yet</color>" : "");
+            int size = DeckFormat.Size(Format);
+            commanderFormat = DeckFormat.HasCommander(Format);
+            countText.text = total + "/" + size + " Cards" + (DeckFormat.HasCommander(Format) && model.Commanders.Count == 0 ? "   ·   <color=#f7a540>no commander yet</color>" : "");
+            UIKit.LabelOf(formatButton).text = DeckFormat.Label(Format).ToUpperInvariant();
+            UIKit.LabelOf(poolButton).text = "POOL: " + PoolLabel();
             countText.supportRichText = true;
             string cmd = model.Commanders.Count > 0 ? model.Commanders[0] : null;
             if (cmd != null && CardImageCache.Instance != null)
@@ -523,11 +615,13 @@ namespace MTGUnited
         void UpdateHint()
         {
             if (columnsLayout) hintText.text = "Click a card to remove one copy  ·  right-click to zoom";
+            else if (scope == Scope.All && query.Length == 0 && WholeSetView)
+                hintText.text = "All " + PoolResults().Count + " cards of " + PoolLabel() + "  ·  click to add  ·  type to filter";
             else if (scope == Scope.All)
                 hintText.text = query.Length == 0 ? "Type a card name to search all cards (shows the 60 closest matches)"
                     : searching ? "Searching..."
                     : results.Count == 0 ? "No cards match \"" + query + "\""
-                    : results.Count + " closest matches  ·  click to add  ·  ◆ = already in your deck";
+                    : results.Count + " closest matches  ·  click to add  ·  ◆ = already in your deck" + (gc.Bridge.Connected ? "" : "  (Forge isn't running: only custom sets searched)");
             else hintText.text = "Click a card to remove one copy  ·  search to add cards";
         }
 
@@ -538,7 +632,7 @@ namespace MTGUnited
             var shown = new List<(CardInfo info, int count)>();
             if (scope == Scope.All)
             {
-                foreach (var c in results) shown.Add((c, model.CountOf(c.Name) + (model.Commanders.Contains(c.Name) ? 1 : 0)));
+                foreach (var c in PoolResults()) shown.Add((c, model.CountOf(c.Name) + (model.Commanders.Contains(c.Name) ? 1 : 0)));
             }
             else
             {
@@ -806,7 +900,7 @@ namespace MTGUnited
                 cost.text = ManaShort(info.Cost);
                 band.color = commander ? new Color(1f, 0.83f, 0.45f) : Color.Lerp(FrameColor(info), Color.white, 0.45f);
                 // Crown: solid on the commander, faint on other cards that could be one, hidden otherwise.
-                bool eligible = commander || info.CanBeCommander;
+                bool eligible = commander || (commanderFormat && info.CanBeCommander);
                 crown.enabled = eligible;
                 crown.color = commander ? new Color(0.45f, 0.25f, 0.02f) : new Color(0.2f, 0.15f, 0.1f, 0.35f);
             }

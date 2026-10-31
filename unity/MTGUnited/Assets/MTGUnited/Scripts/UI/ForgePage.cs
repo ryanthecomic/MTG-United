@@ -105,6 +105,14 @@ namespace MTGUnited
 
         // =================================================================================================== refresh
 
+        /// <summary>First visit with nothing installed: open the guide by itself.</summary>
+        void OnEnable()
+        {
+            if (tutorial == null || ForgeSetup.Installed || PlayerPrefs.GetInt("forgeTutorialSeen", 0) == 1) return;
+            PlayerPrefs.SetInt("forgeTutorialSeen", 1);
+            OpenTutorial(0);
+        }
+
         void Update()
         {
             ForgeSetup.Poll();
@@ -136,7 +144,7 @@ namespace MTGUnited
                 : "";
 
             // Rebuild the action buttons only when the situation changes.
-            string sig = installed + "|" + busy + "|" + running + "|" + connected + "|" + ForgeSetup.CurrentMode + "|" + found.Count + "|" + scanned + "|" + keepData + "|" + (Time.unscaledTime - uninstallArmedAt < 4f);
+            string sig = installed + "|" + busy + "|" + running + "|" + connected + "|" + ForgeSetup.CurrentMode + "|" + found.Count + "|" + scanned + "|" + keepData + "|" + (Time.unscaledTime - uninstallArmedAt < 4f) + "|" + ForgeSetup.JavaMissing + "|" + ForgeSetup.GitFound;
             if (sig != lastSignature) { lastSignature = sig; BuildActions(installed, busy, running || connected); }
 
             string tail = ForgeSetup.LogTail(120);
@@ -167,6 +175,10 @@ namespace MTGUnited
 
             if (!installed)
             {
+                // Prerequisites first: Java (always) and Git (only to download Forge's source).
+                if (ForgeSetup.JavaMissing) Btn("1. Install Java (JDK 21)", new Color(0.62f, 0.33f, 0.12f), () => ForgeSetup.InstallTool("Java", "EclipseAdoptium.Temurin.21.JDK"), true);
+                if (!ForgeSetup.GitFound) Btn("Install Git (for Install Forge)", Theme.Secondary, () => ForgeSetup.InstallTool("Git", "Git.Git"), true);
+                if (ForgeSetup.JavaMissing || !ForgeSetup.GitFound) NewRow();
                 Btn("Install Forge", Theme.Accent, () => ForgeSetup.Install(false), true);
                 Btn("Use my Forge...", Theme.Secondary, Browse);
                 Btn("Find Forge", Theme.Secondary, Scan);
@@ -234,7 +246,8 @@ namespace MTGUnited
              "the <b>bridge</b>, and draws what Forge decides.\n\nSo before your first game, Forge has to be on your computer once."),
             ("What you need",
              "•  <b>Java 17 or newer (the JDK)</b>. Forge is written in Java. If the Forge tab says Java is \"not found\", open a terminal and run:\n" +
-             "      winget install EclipseAdoptium.Temurin.21.JDK\n   then restart MTG United.\n\n" +
+             "      winget install EclipseAdoptium.Temurin.21.JDK\n   (or press <b>Install Java</b> below), then restart MTG United.\n\n" +
+             "•  <b>Git</b>, only if MTG United installs Forge for you (it downloads Forge's source). <b>Install Git</b> below does it.\n\n" +
              "•  <b>Disk space</b>: about 1.5 GB if MTG United installs Forge for you; almost nothing if you already have Forge.\n\n" +
              "•  <b>Internet</b> for the first install, and for card images while you play."),
             ("Already have Forge? Use it",
@@ -337,6 +350,8 @@ namespace MTGUnited
                 ((RectTransform)b.transform).Place(x, 0, 240, 50);
                 x += 256;
             }
+            if (tutStep == 1 && ForgeSetup.JavaMissing) Act("Install Java", () => ForgeSetup.InstallTool("Java", "EclipseAdoptium.Temurin.21.JDK"));
+            if (tutStep == 1 && !ForgeSetup.GitFound) Act("Install Git", () => ForgeSetup.InstallTool("Git", "Git.Git"));
             if (tutStep == 2) { Act("Find Forge", Scan); Act("Use my Forge...", Browse); }
             if (tutStep == 3 && !ForgeSetup.Installed) Act("Install Forge", () => ForgeSetup.Install(false));
             if (tutStep == 4 && ForgeSetup.Installed && !gc.Bridge.Connected) Act("Start bridge", () => gc.Launcher.Launch());

@@ -30,6 +30,9 @@ namespace MTGUnited
         public RevealPopup Reveals { get; private set; }
         public ScreenFx ScreenFx { get; private set; }
         public GameMenu GameMenu { get; private set; }
+        public TableView Table { get; private set; }
+        public TableNet Net { get; private set; }
+        public LanLobby Lan { get; private set; }
         public Toasts Toasts { get; private set; }
         public ZoneViewer ZoneViewer { get; private set; }
         public GameOverPanel GameOver { get; private set; }
@@ -148,6 +151,7 @@ namespace MTGUnited
             Hud = HudView.Create(Board, this);
             Tray = SelectionTray.Create(Board, this);
             ScreenFx = ScreenFx.Create(Board, this);
+            Table = TableView.Create(Board, this);
 
             OverlayLayer = UIKit.Rect("Overlays", canvasGo.transform).Stretch().SubCanvas();
             ZoneViewer = ZoneViewer.Create(OverlayLayer, this);
@@ -155,9 +159,12 @@ namespace MTGUnited
             GameOver = GameOverPanel.Create(OverlayLayer, this);
             Menu = MainMenu.Create(OverlayLayer, this);
             GameMenu = GameMenu.Create(OverlayLayer, this);
+            Net = TableNet.Create(this);
+            Lan = LanLobby.Create(OverlayLayer, this);
             Options = OptionsPanel.Create(OverlayLayer, this);
             Reveals = RevealPopup.Create(OverlayLayer, this);
             Toasts = Toasts.Create(OverlayLayer);
+            PopupMenu.Create(OverlayLayer);
 
             // Hover preview sits above everything, in the same 1920x1080 space as the board.
             var top = UIKit.Rect("TopBoard", canvasGo.transform).SubCanvas();
@@ -169,6 +176,8 @@ namespace MTGUnited
 
         void Update()
         {
+            ForgeSetup.Poll();          // setup tasks and file pickers report back on the main thread
+            ForgeSetup.PollBrowse();
             if (Bridge == null)
             {
                 // Scripts were reloaded during Play mode (fields reset). Reconnect instead of failing every frame.
@@ -220,6 +229,9 @@ namespace MTGUnited
                 if (Options.IsOpen) { Options.Close(); return; }
                 if (GameMenu.IsOpen) { GameMenu.Close(); return; }
                 if (ZoneViewer.IsOpen) { ZoneViewer.Close(); return; }
+                if (PopupMenu.Instance != null && PopupMenu.Instance.IsOpen) { PopupMenu.Instance.Close(); return; }
+                if (Lan.IsOpen) { Lan.Close(); return; }
+                if (Table.IsOpen && !Menu.IsOpen) { if (!Table.CloseTopDialog()) GameMenu.Open(); return; }   // kitchen table: Esc opens the menu
             }
             if (!InGame || Menu.IsOpen || Dialog.IsOpen || Options.IsOpen || GameMenu.IsOpen) return;
 

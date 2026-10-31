@@ -380,6 +380,18 @@ namespace MTGUnited
             return rt;
         }
 
+        /// <summary>
+        /// Rounds a card-shaped frame like a real card (corner radius about 4.5% of the width) and clips the art
+        /// inside it to the same shape. Call again when the frame changes size.
+        /// </summary>
+        public static void RoundCard(Image frame, float width)
+        {
+            frame.sprite = Rounded;
+            frame.type = Image.Type.Sliced;
+            frame.pixelsPerUnitMultiplier = 16f / Mathf.Max(3f, width * 0.045f);
+            if (frame.GetComponent<Mask>() == null) frame.gameObject.AddComponent<Mask>().showMaskGraphic = true;
+        }
+
         /// <summary>A round "X" close button in the top-right corner of a panel.</summary>
         public static Button CloseX(Transform panel, UnityAction onClick, float size = 46, float inset = 12)
         {

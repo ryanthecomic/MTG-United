@@ -38,22 +38,33 @@ namespace MTGUnited
         static Action<string, List<CardInfo>> searchCallback;
         static readonly List<Action> infoWaiters = new List<Action>();
         static string lastQuery;
+        static List<CardInfo> pendingCustom = new List<CardInfo>();
         public static GameController Gc;
 
-        public static CardInfo Get(string name) => name != null && known.TryGetValue(name, out var c) ? c : null;
+        /// <summary>Custom (imported) cards first, then what the bridge told us.</summary>
+        public static CardInfo Get(string name)
+        {
+            if (name == null) return null;
+            var custom = CustomSets.Get(name);
+            if (custom != null) return custom.ToInfo();
+            return known.TryGetValue(name, out var c) ? c : null;
+        }
 
         public static void Search(string query, Action<string, List<CardInfo>> onResults)
         {
             searchCallback = onResults;
             lastQuery = query;
-            Gc?.Send("cardSearch", "q", query, "limit", 60);
+            // Custom cards are searched locally and shown first; real cards come from Forge's catalog when it runs.
+            pendingCustom = CustomSets.Search(query, 60);
+            if (Gc != null && Gc.Bridge.Connected) Gc.Send("cardSearch", "q", query, "limit", 60);
+            else onResults?.Invoke(query, new List<CardInfo>(pendingCustom));
         }
 
         /// <summary>Fetches details for any names not known yet, then calls back (immediately if all are known).</summary>
         public static void Ensure(IEnumerable<string> names, Action done)
         {
             var missing = new List<object>();
-            foreach (var n in names) if (!string.IsNullOrEmpty(n) && !known.ContainsKey(n) && !missing.Contains(n)) missing.Add(n);
+            foreach (var n in names) if (!string.IsNullOrEmpty(n) && !known.ContainsKey(n) && CustomSets.Get(n) == null && !missing.Contains(n)) missing.Add(n);
             if (missing.Count == 0 || Gc == null || !Gc.Bridge.Connected) { done?.Invoke(); return; }
             if (done != null) infoWaiters.Add(done);
             Gc.Send("cardInfo", "names", missing);
@@ -77,7 +88,12 @@ namespace MTGUnited
             if (t == "cardResults")
             {
                 // Ignore answers to queries the user has already typed past.
-                if (msg.Str("q") == lastQuery) searchCallback?.Invoke(lastQuery, list);
+                if (msg.Str("q") == lastQuery)
+                {
+                    var merged = new List<CardInfo>(pendingCustom);
+                    foreach (var c in list) if (merged.Count < 60 && !merged.Exists(m => string.Equals(m.Name, c.Name, StringComparison.OrdinalIgnoreCase))) merged.Add(c);
+                    searchCallback?.Invoke(lastQuery, merged);
+                }
             }
             else if (t == "cardInfo")
             {

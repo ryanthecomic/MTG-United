@@ -49,6 +49,12 @@ namespace MTGUnited
         bool connected;
         RawImage heroArt;
         Text deckCountText;
+        string playMode;
+        Image modeForgeBtn, modeTableBtn;
+        Text skillTitle, tableHint;
+        GameObject lanButton;
+        readonly List<GameObject> forgeOnly = new List<GameObject>();
+        CustomSetsPanel customSets;
 
         public bool IsOpen => gameObject.activeSelf;
 
@@ -62,6 +68,7 @@ namespace MTGUnited
             m.aiDecks = PlayerPrefs.GetString("aiDecks", "precon");
             m.aiStrength = PlayerPrefs.GetString("aiStrength", "normal");
             m.selectedDeckId = PlayerPrefs.GetString("selectedDeck", "");
+            m.playMode = PlayerPrefs.GetString("playMode", "forge");
             m.decks = DeckStore.LoadAll();
             m.Build();
             return m;
@@ -86,6 +93,7 @@ namespace MTGUnited
             pages["forge"] = ForgePage.Create(content, gc);
             BuildPlayCluster(frame);
             builder = DeckBuilder.Create(content, gc);
+            customSets = CustomSetsPanel.Create(root, gc);
 
             SelectTab("home");
             RefreshPlayCluster();
@@ -353,6 +361,8 @@ namespace MTGUnited
             // Footer: delete on the left, Edit Deck on the right.
             decksFooter = UIKit.Rect("Footer", page).Stretch();
             UIKit.IconButton("Delete", decksFooter, Icons.Trash, 80, 34, 64, DeleteSelected);
+            var sets = UIKit.Button("CustomSets", decksFooter, "CUSTOM SETS", new Color(0.55f, 0.3f, 0.12f), () => customSets.Open(), 18);
+            ((RectTransform)sets.transform).Place(170, 40, 240, 54);
             UIKit.Pill("EditDeck", decksFooter, "Edit Deck", new Color(0.16f, 0.3f, 0.72f), () => OpenBuilder(FindDeck(selectedDeckId)), 1530, 30, 330, 80, 36);
 
             RebuildDeckGrid();
@@ -649,13 +659,32 @@ namespace MTGUnited
             var random = UIKit.Button("Random", pod, "RANDOM", Theme.Secondary, () => { aiDecks = "random"; RefreshPlayCluster(); }, 16);
             ((RectTransform)random.transform).Place(416, 28, 156, 42);
             aiRandomBtn = random.GetComponent<Image>();
+            forgeOnly.Add(aiText.gameObject); forgeOnly.Add(precon.gameObject); forgeOnly.Add(random.gameObject);
 
             // Tile 3: AI skill. Strong is Forge's maximum (simulates mulligans and combat) and is slow in big pods.
             var skill = Tile(playCluster, 1260, 190, 600, 216);
             var sTitle = UIKit.Label("Title", skill, "AI Skill", 30, Theme.Text, TextAnchor.UpperLeft, FontStyle.Bold).Outline(1.2f).Titled();
             sTitle.rectTransform.Stretch(24, 0, 24, 14);
-            var sHint = UIKit.Label("Hint", skill, "Fast is quick to act. Strong thinks harder but is slow with many opponents.", 15, Theme.TextDim, TextAnchor.UpperLeft);
-            sHint.rectTransform.Stretch(26, 0, 26, 62);
+            skillTitle = sTitle;
+            // Mode: Forge rules (AI opponents) or Kitchen table (free table, custom cards, no Forge needed).
+            var forgeMode = UIKit.Button("ModeForge", skill, "FORGE RULES", Theme.Secondary, () => SetPlayMode("forge"), 16);
+            ((RectTransform)forgeMode.transform).Place(26, 104, 266, 46);
+            modeForgeBtn = forgeMode.GetComponent<Image>();
+            var tableMode = UIKit.Button("ModeTable", skill, "KITCHEN TABLE", Theme.Secondary, () => SetPlayMode("table"), 16);
+            ((RectTransform)tableMode.transform).Place(306, 104, 266, 46);
+            modeTableBtn = tableMode.GetComponent<Image>();
+            tableHint = UIKit.Label("TableHint", skill, "A free table like Cockatrice: nothing is enforced, custom sets welcome, no Forge needed. PLAY seats everyone on this screen.",
+                14, Theme.TextDim, TextAnchor.UpperLeft);
+            tableHint.rectTransform.Place(26, 56, 548, 44);
+            // LAN: host or join a table with other PCs on the same network.
+            var lan = UIKit.Button("Lan", skill, "PLAY ON LAN (HOST / JOIN)", new Color(0.16f, 0.3f, 0.72f), () =>
+            {
+                var d = FindDeck(selectedDeckId);
+                if (d == null) { gc.Toasts.Show("Pick a deck first (Decks tab).", true); return; }
+                gc.Lan.Open(d);
+            }, 16);
+            ((RectTransform)lan.transform).Place(26, 12, 548, 40);
+            lanButton = lan.gameObject;
             string[] ids = { "fast", "normal", "strong" };
             string[] labels = { "FAST", "NORMAL", "STRONG" };
             for (int i = 0; i < ids.Length; i++)
@@ -664,6 +693,7 @@ namespace MTGUnited
                 var b = UIKit.Button("Skill " + id, skill, labels[i], Theme.Secondary, () => { aiStrength = id; RefreshPlayCluster(); }, 16);
                 ((RectTransform)b.transform).Place(26 + i * 186, 28, 174, 46);
                 strengthBtns[id] = b.GetComponent<Image>();
+                forgeOnly.Add(b.gameObject);
             }
 
             statusText = UIKit.Label("Status", playCluster, "", 15, Theme.Danger, TextAnchor.LowerRight);
@@ -690,8 +720,16 @@ namespace MTGUnited
         {
             PlayerPrefs.SetInt("opponents", opponents);
             PlayerPrefs.SetString("aiDecks", aiDecks);
-            modeText.text = "Commander · " + (opponents + 1) + " players";
-            oppText.text = "OPPONENTS   " + opponents;
+            bool table = playMode == "table";
+            modeText.text = (table ? "Kitchen table · " : "Commander · ") + (opponents + 1) + " players";
+            oppText.text = (table ? "OTHER SEATS   " : "OPPONENTS   ") + opponents;
+            foreach (var go in forgeOnly) go.SetActive(!table);
+            tableHint.gameObject.SetActive(table);
+            lanButton.SetActive(table);
+            skillTitle.text = table ? "Mode" : "Mode & AI skill";
+            modeForgeBtn.color = table ? Theme.Secondary : Theme.Accent;
+            modeTableBtn.color = table ? Theme.Accent : Theme.Secondary;
+            playButton.interactable = table || connected;
             aiPreconBtn.color = aiDecks == "precon" ? Theme.Accent : Theme.Secondary;
             aiRandomBtn.color = aiDecks == "random" ? Theme.Accent : Theme.Secondary;
             PlayerPrefs.SetString("aiStrength", aiStrength);
@@ -765,7 +803,7 @@ namespace MTGUnited
             if (connText == null) return;
             connDot.color = isConnected ? Theme.Good : Theme.Danger;
             connText.text = isConnected ? "Connected to Forge" : "Waiting for Forge (port " + gc.Bridge.Port + ")";
-            playButton.interactable = isConnected;
+            playButton.interactable = isConnected || playMode == "table";
 
         }
 
@@ -806,8 +844,31 @@ namespace MTGUnited
             }
         }
 
+        void SetPlayMode(string mode)
+        {
+            playMode = mode;
+            PlayerPrefs.SetString("playMode", mode);
+            RefreshPlayCluster();
+        }
+
+        /// <summary>Kitchen table: seat 1 plays your selected deck; other seats take your other decks in turn.</summary>
+        void StartTable()
+        {
+            var deck = FindDeck(selectedDeckId);
+            if (deck == null) { gc.Toasts.Show("Pick a deck first (Decks tab).", true); return; }
+            var others = decks.FindAll(d => d.Id != deck.Id);
+            var seats = new List<(string, SavedDeck)> { (PlayerPrefs.GetString("playerName", "Player"), deck) };
+            for (int i = 0; i < opponents; i++)
+            {
+                var d = others.Count > 0 ? others[i % others.Count] : deck;
+                seats.Add(("Player " + (i + 2), d));
+            }
+            gc.Table.Begin(seats);
+        }
+
         void OnPlay()
         {
+            if (playMode == "table") { StartTable(); return; }
             var deck = FindDeck(selectedDeckId);
             var commanders = new List<object>();
             if (deck != null)

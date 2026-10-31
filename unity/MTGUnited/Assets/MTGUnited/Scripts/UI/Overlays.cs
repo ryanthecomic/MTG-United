@@ -23,7 +23,7 @@ namespace MTGUnited
             p.text = UIKit.Label("Text", frame.transform, "", 17, Theme.Text, TextAnchor.UpperLeft);
             p.text.rectTransform.Stretch(16, 16, 16, 16);
             p.text.supportRichText = true;
-            var artRt = UIKit.Rect("Art", frame.transform).Stretch(4, 4, 4, 4);
+            var artRt = UIKit.Rect("Art", frame.transform).Stretch();
             p.art = artRt.gameObject.AddComponent<RawImage>();
             p.art.raycastTarget = false;
             frame.gameObject.SetActive(false);
@@ -59,6 +59,7 @@ namespace MTGUnited
             transform.SetAsLastSibling();
             float s = UiScale.Value, w = 340 * s, h = 476 * s;
             rt.Place(onRight ? 1570 - w : 290, Mathf.Max(20, 488 - h / 2f), w, h);
+            UIKit.RoundCard(frame, w);
             art.enabled = false;
             text.text = "<b>" + c.Name + "</b>   " + CardView.ManaText(c.ManaCost) + "\n<i>" + c.TypeLine + "</i>\n\n" + c.Text
                         + (c.HasPT ? "\n\n<b>" + c.Power + "/" + c.Toughness + "</b>" : "");
@@ -149,7 +150,8 @@ namespace MTGUnited
             frame.rectTransform.sizeDelta = new Vector2(w, h);
             var label = UIKit.Label("Name", frame.transform, c == null ? "?" : c.Name + "\n\n<size=11>" + c.TypeLine + "</size>", 14, Color.black, TextAnchor.UpperCenter, FontStyle.Bold);
             label.rectTransform.Stretch(6, 6, 6, 6);
-            var artRt = UIKit.Rect("Art", frame.transform).Stretch(2, 2, 2, 2);
+            UIKit.RoundCard(frame, w);
+            var artRt = UIKit.Rect("Art", frame.transform).Stretch();
             var art = artRt.gameObject.AddComponent<RawImage>();
             art.raycastTarget = false;
             art.enabled = false;
