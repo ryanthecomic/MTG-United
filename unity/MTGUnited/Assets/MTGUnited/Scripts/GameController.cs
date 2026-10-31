@@ -41,6 +41,40 @@ namespace MTGUnited
         public bool AutoPayMana = true;
         public bool InGame;
         Dictionary<string, object> lastStartMessage;
+
+        // ------------------------------------------------------------------ LAN play with the rules engine
+        /// <summary>True while this client is connected to another player's bridge (their Forge table).</summary>
+        public bool RemoteBridge { get; private set; }
+        public string RemoteAddress { get; private set; }
+        Dictionary<string, object> pendingJoin;
+        float remoteSince;
+        public event Action<Dictionary<string, object>> LanLobbyChanged;
+
+        /// <summary>Joins a Forge table on the LAN: this client talks to the host's bridge instead of its own.</summary>
+        public void JoinForgeLan(string address, Dictionary<string, object> join)
+        {
+            pendingJoin = join;
+            RemoteBridge = true;
+            RemoteAddress = address;
+            remoteSince = Time.unscaledTime;
+            Bridge.Close();
+            Bridge = new BridgeClient { Host = address, Port = 7792 };
+            reconnectTimer = 0;
+        }
+
+        /// <summary>Back to this PC's own bridge (leaving a LAN table).</summary>
+        public void LeaveForgeLan(string why = null)
+        {
+            if (!RemoteBridge) return;
+            RemoteBridge = false;
+            pendingJoin = null;
+            Bridge.Close();
+            Bridge = new BridgeClient { Port = PlayerPrefs.GetInt("port", 7777) };
+            reconnectTimer = 0;
+            if (InGame) { InGame = false; Menu.Show(); }
+            if (!string.IsNullOrEmpty(why)) Toasts.Show(why, true);
+            LanLobbyChanged?.Invoke(null);
+        }
         float reconnectTimer;
         float pingTimer;
 
@@ -161,6 +195,7 @@ namespace MTGUnited
             GameMenu = GameMenu.Create(OverlayLayer, this);
             Net = TableNet.Create(this);
             Lan = LanLobby.Create(OverlayLayer, this);
+            ForgeLan.Create(OverlayLayer, this);
             Options = OptionsPanel.Create(OverlayLayer, this);
             Reveals = RevealPopup.Create(OverlayLayer, this);
             Toasts = Toasts.Create(OverlayLayer);
@@ -186,6 +221,8 @@ namespace MTGUnited
                 Bridge = new BridgeClient { Port = PlayerPrefs.GetInt("port", 7777) };
                 Debug.LogWarning("[MTGUnited] Scripts reloaded while playing; reconnecting to the bridge.");
             }
+            if (RemoteBridge && !Bridge.Connected && !Bridge.Connecting && pendingJoin != null && Time.unscaledTime - remoteSince > 10f)
+                LeaveForgeLan("Couldn't reach the table at " + RemoteAddress + (string.IsNullOrEmpty(Bridge.LastError) ? "." : ": " + Bridge.LastError));
             if (!Bridge.Connected && !Bridge.Connecting)
             {
                 reconnectTimer -= Time.unscaledDeltaTime;
@@ -235,6 +272,7 @@ namespace MTGUnited
                 if (ZoneViewer.IsOpen) { ZoneViewer.Close(); return; }
                 if (PopupMenu.Instance != null && PopupMenu.Instance.IsOpen) { PopupMenu.Instance.Close(); return; }
                 if (Lan.IsOpen) { Lan.Close(); return; }
+                if (ForgeLan.Instance != null && ForgeLan.Instance.IsOpen) { ForgeLan.Instance.Close(); return; }
                 if (Menu.IsOpen && Menu.Builder != null && Menu.Builder.IsOpen) { Menu.Builder.Escape(); return; }
                 if (Table.IsOpen && !Menu.IsOpen) { if (!Table.CloseTopDialog()) GameMenu.Open(); return; }   // kitchen table: Esc opens the menu
             }
@@ -271,11 +309,17 @@ namespace MTGUnited
             switch (msg.Str("t"))
             {
                 case "hello":
+                    if (RemoteBridge && pendingJoin != null)
+                    {
+                        Bridge.Send(pendingJoin);   // take a seat at the host's table
+                        pendingJoin = null;
+                    }
                     Menu.SetConnection(true);
                     if (msg.Bool("inGame")) { InGame = true; Menu.Hide(); }
                     SendStops();
                     break;
                 case "_disconnected":
+                    if (RemoteBridge && pendingJoin == null) { LeaveForgeLan("Disconnected from the host's table."); break; }
                     Menu.SetConnection(false);
                     if (InGame) Toasts.Show("Lost connection to the Forge bridge. Reconnecting...", true);
                     break;
@@ -334,6 +378,12 @@ namespace MTGUnited
                     GameOver.Show(msg.Str("winner", null), State);
                     break;
                 case "pong":
+                    break;
+                case "lanLobby":
+                    LanLobbyChanged?.Invoke(msg);
+                    break;
+                case "bye":
+                    LeaveForgeLan(msg.Str("text"));
                     break;
                 case "revealed":
                 {

@@ -48,7 +48,7 @@ import java.util.concurrent.atomic.AtomicInteger;
  * become a {@code request} that waits for the client's matching {@code response}.
  */
 public final class BridgeGuiGame extends AbstractGuiGame {
-    private final ClientConnection conn;
+    private final Channel conn;
     private final StateSerializer serializer = new StateSerializer(this);
     private final ScheduledExecutorService sync = Executors.newSingleThreadScheduledExecutor(r -> {
         final Thread t = new Thread(r, "bridge-sync");
@@ -80,7 +80,7 @@ public final class BridgeGuiGame extends AbstractGuiGame {
     private final Set<PhaseType> opponentTurnStops = Collections.synchronizedSet(EnumSet.of(
             PhaseType.COMBAT_DECLARE_BLOCKERS, PhaseType.END_OF_TURN));
 
-    public BridgeGuiGame(final ClientConnection conn) {
+    public BridgeGuiGame(final Channel conn) {
         this.conn = conn;
     }
 

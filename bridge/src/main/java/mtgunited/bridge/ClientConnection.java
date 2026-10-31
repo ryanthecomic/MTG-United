@@ -20,7 +20,7 @@ import java.util.function.Consumer;
  * One Unity client connected over localhost TCP. Messages are single-line JSON objects terminated by '\n'
  * in both directions. See PROTOCOL.md in the repository root for the message catalogue.
  */
-public final class ClientConnection {
+public final class ClientConnection implements Channel {
     public static final Gson GSON = new GsonBuilder().disableHtmlEscaping().serializeNulls().create();
 
     private final ServerSocket server;
@@ -77,10 +77,12 @@ public final class ClientConnection {
         }
     }
 
+    @Override
     public boolean isConnected() {
         return out != null;
     }
 
+    @Override
     public void send(final JsonObject msg) {
         final String line = GSON.toJson(msg);
         synchronized (writeLock) {

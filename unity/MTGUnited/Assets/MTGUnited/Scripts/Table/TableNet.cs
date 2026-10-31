@@ -31,6 +31,8 @@ namespace MTGUnited
         public Role Mode { get; private set; }
         public readonly List<LobbyPlayer> Lobby = new List<LobbyPlayer>();
         public readonly Dictionary<string, FoundHost> Hosts = new Dictionary<string, FoundHost>();
+        /// <summary>Rules-engine (Forge) tables found on the network.</summary>
+        public readonly Dictionary<string, FoundHost> ForgeHosts = new Dictionary<string, FoundHost>();
         public int MySeatId = 1;
         public bool Started;
         public string Status = "";
@@ -112,20 +114,42 @@ namespace MTGUnited
             }
         }
 
+        // ---------------------------------------------------------------- rules-engine (Forge) table beacon
+
+        volatile bool forgeBeaconOn;
+        volatile int forgePlayers = 1, forgeMax = 4;
+        volatile bool forgeStarted;
+
+        /// <summary>Announces a Forge LAN table on the network (the players connect to this PC's bridge).</summary>
+        public void StartForgeBeacon(int players, int max)
+        {
+            forgePlayers = players; forgeMax = max; forgeStarted = false;
+            beaconName = MyName;
+            if (forgeBeaconOn) return;
+            forgeBeaconOn = true;
+            new Thread(() => BeaconLoop("MTGF", 7792, () => forgeBeaconOn, () => forgePlayers, () => forgeMax, () => forgeStarted)) { IsBackground = true, Name = "forge-beacon" }.Start();
+        }
+
+        public void UpdateForgeBeacon(int players, bool started) { forgePlayers = players; forgeStarted = started; }
+
+        public void StopForgeBeacon() => forgeBeaconOn = false;
+
         // Read by the beacon thread (PlayerPrefs / Unity calls are main-thread only).
         volatile string beaconName = "Player";
         volatile int beaconPlayers;
 
-        void BeaconLoop()
+        void BeaconLoop() => BeaconLoop("MTGU", GamePort, () => running, () => beaconPlayers, () => MaxPlayers, () => Started);
+
+        void BeaconLoop(string kind, int port, Func<bool> alive, Func<int> players, Func<int> max, Func<bool> started)
         {
             using (var udp = new UdpClient { EnableBroadcast = true })
             {
                 // Every network the PC is on (Wi-Fi, cable...), plus this PC itself for a second copy of the game.
                 var targets = new List<IPEndPoint> { new IPEndPoint(IPAddress.Broadcast, DiscoveryPort), new IPEndPoint(IPAddress.Loopback, DiscoveryPort) };
                 foreach (var b in SubnetBroadcasts()) targets.Add(new IPEndPoint(b, DiscoveryPort));
-                while (running)
+                while (alive())
                 {
-                    string msg = "MTGU|" + beaconName.Replace("|", "/") + "|" + GamePort + "|" + beaconPlayers + "|" + MaxPlayers + "|" + (Started ? 1 : 0);
+                    string msg = kind + "|" + beaconName.Replace("|", "/") + "|" + port + "|" + players() + "|" + max() + "|" + (started() ? 1 : 0);
                     var bytes = Encoding.UTF8.GetBytes(msg);
                     foreach (var ep in targets) { try { udp.Send(bytes, bytes.Length, ep); } catch { } }
                     Thread.Sleep(1000);
@@ -211,6 +235,7 @@ namespace MTGUnited
         {
             StopDiscovery();
             Hosts.Clear();
+            ForgeHosts.Clear();
             try
             {
                 // Shared port, so a second copy of the game on this PC can listen too.
@@ -231,14 +256,14 @@ namespace MTGUnited
                 IPEndPoint ep = null;
                 var bytes = discovery.EndReceive(r, ref ep);
                 var parts = Encoding.UTF8.GetString(bytes).Split('|');
-                if (parts.Length >= 6 && parts[0] == "MTGU")
+                if (parts.Length >= 6 && (parts[0] == "MTGU" || parts[0] == "MTGF"))
                 {
                     var h = new FoundHost
                     {
                         Name = parts[1], Address = ep.Address.ToString(), Players = int.Parse(parts[3]), Max = int.Parse(parts[4]),
                         Started = parts[5] == "1",
                     };
-                    inbox.Enqueue((-2, new Dictionary<string, object> { { "t", "_beacon" }, { "name", h.Name }, { "addr", h.Address }, { "players", (double)h.Players }, { "max", (double)h.Max }, { "started", h.Started } }));
+                    inbox.Enqueue((-2, new Dictionary<string, object> { { "t", "_beacon" }, { "name", h.Name }, { "addr", h.Address }, { "players", (double)h.Players }, { "max", (double)h.Max }, { "started", h.Started }, { "forge", parts[0] == "MTGF" } }));
                 }
                 discovery.BeginReceive(OnBeacon, null);
             }
@@ -316,6 +341,7 @@ namespace MTGUnited
             while (budget-- > 0 && inbox.TryDequeue(out var item)) Handle(item.conn, item.msg);
             // Forget hosts we haven't heard from in a while.
             foreach (var k in Hosts.Where(h => Time.unscaledTime - h.Value.Seen > 4f).Select(h => h.Key).ToList()) { Hosts.Remove(k); LobbyChanged?.Invoke(); }
+            foreach (var k in ForgeHosts.Where(h => Time.unscaledTime - h.Value.Seen > 4f).Select(h => h.Key).ToList()) { ForgeHosts.Remove(k); LobbyChanged?.Invoke(); }
         }
 
         void Handle(int conn, Dictionary<string, object> m)
@@ -324,8 +350,9 @@ namespace MTGUnited
             if (t == "_beacon")
             {
                 string addr = m.Str("addr");
-                bool isNew = !Hosts.ContainsKey(addr);
-                Hosts[addr] = new FoundHost { Name = m.Str("name"), Address = addr, Players = m.Int("players"), Max = m.Int("max"), Started = m.Bool("started"), Seen = Time.unscaledTime };
+                var table = m.Bool("forge") ? ForgeHosts : Hosts;
+                bool isNew = !table.ContainsKey(addr);
+                table[addr] = new FoundHost { Name = m.Str("name"), Address = addr, Players = m.Int("players"), Max = m.Int("max"), Started = m.Bool("started"), Seen = Time.unscaledTime };
                 if (isNew) LobbyChanged?.Invoke();
                 return;
             }

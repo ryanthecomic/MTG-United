@@ -25,7 +25,10 @@ import forge.player.GamePlayerUtil;
 import forge.player.PlayerControllerHuman;
 import forge.util.Aggregates;
 
+import forge.item.PaperCard;
+
 import java.io.File;
+import java.util.Collections;
 import java.util.ArrayList;
 import java.util.EnumSet;
 import java.util.List;
@@ -41,6 +44,8 @@ public final class BridgeMain {
     private static BridgeGuiBase guiBase;
     private static volatile BridgeGuiGame gui;
     private static volatile HostedMatch match;
+    /** LAN play with the rules engine: other players connect here while the host's lobby is open. */
+    private static final LanServer lan = new LanServer(BridgeMain::onLanMessage, BridgeMain::onLanConnected, BridgeMain::onLanClosed);
 
     private BridgeMain() {}
 
@@ -143,17 +148,122 @@ public final class BridgeMain {
                 th.start();
             }
             case "stops" -> gui.setStops(msg);
+            case "lanOpen" -> setLanOpen(msg.has("open") && msg.get("open").getAsBoolean());
+            case "lanKick" -> {
+                final int id = msg.has("id") ? msg.get("id").getAsInt() : -1;
+                for (final LanServer.Peer p : lan.peers()) {
+                    if (p.id == id) { p.send(bye("The host removed you from the table.")); p.close(); }
+                }
+            }
             // Deck builder queries: answered off the game threads so searching never stalls a match.
             case "cardSearch" -> CATALOG.execute(() -> conn.send(CardCatalog.search(
                     msg.has("q") ? msg.get("q").getAsString() : "", msg.has("limit") ? msg.get("limit").getAsInt() : 60)));
             case "cardInfo" -> CATALOG.execute(() -> conn.send(CardCatalog.info(
                     msg.has("names") ? msg.getAsJsonArray("names") : null, msg.has("req") ? msg.get("req").getAsString() : null)));
-            default -> guiBase.invokeInEdtLater(() -> handleAction(t, msg));
+            default -> guiBase.invokeInEdtLater(() -> handleAction(gui, t, msg));
+        }
+    }
+
+    // ================================================================================================ LAN play
+
+    private static void setLanOpen(final boolean open) {
+        try {
+            if (open) { lan.open(); } else { lan.close(); }
+        } catch (final java.io.IOException ex) {
+            Log.warn("Could not open LAN play: " + ex.getMessage());
+            sendInfo("Couldn't open LAN play on port " + LanServer.PORT + ": " + ex.getMessage());
+        }
+        sendLanLobby();
+    }
+
+    private static JsonObject bye(final String text) {
+        final JsonObject m = new JsonObject();
+        m.addProperty("t", "bye");
+        m.addProperty("text", text);
+        return m;
+    }
+
+    /** Who is at the table: sent to the host and to every LAN player after any change. */
+    private static void sendLanLobby() {
+        final JsonObject m = new JsonObject();
+        m.addProperty("t", "lanLobby");
+        m.addProperty("open", lan.isOpen());
+        m.addProperty("port", LanServer.PORT);
+        final JsonArray arr = new JsonArray();
+        for (final LanServer.Peer p : lan.peers()) {
+            if (p.join == null) { continue; }
+            final JsonObject o = new JsonObject();
+            o.addProperty("id", p.id);
+            o.addProperty("name", p.name);
+            o.addProperty("deck", p.join.has("deckName") ? p.join.get("deckName").getAsString() : "");
+            arr.add(o);
+        }
+        m.add("players", arr);
+        conn.send(m);
+        for (final LanServer.Peer p : lan.peers()) { if (p.join != null) { p.send(m); } }
+    }
+
+    private static void onLanConnected(final LanServer.Peer peer) {
+        final JsonObject hello = new JsonObject();
+        hello.addProperty("t", "hello");
+        hello.addProperty("protocol", 1);
+        hello.addProperty("remote", true);
+        hello.addProperty("inGame", false);
+        peer.send(hello);
+    }
+
+    private static void onLanClosed(final LanServer.Peer peer) {
+        // A player who leaves mid-game concedes (the game carries on for everyone else).
+        final BridgeGuiGame g = peer.gui;
+        if (g != null && match != null && match.getGame() != null && !match.getGame().isGameOver()) {
+            guiBase.invokeInEdtLater(() -> {
+                final IGameController c = g.controller();
+                if (c != null) { c.concede(); }
+                g.abortPendingRequests();
+            });
+            sendInfo(peer.name + " left the game.");
+        } else if (peer.join != null) {
+            sendInfo(peer.name + " left the table.");
+        }
+        sendLanLobby();
+    }
+
+    private static void onLanMessage(final LanServer.Peer peer, final JsonObject msg) {
+        final String t = msg.has("t") ? msg.get("t").getAsString() : "";
+        switch (t) {
+            case "ping" -> {
+                final JsonObject pong = new JsonObject();
+                pong.addProperty("t", "pong");
+                peer.send(pong);
+            }
+            case "join" -> {
+                if (match != null && match.getGame() != null && !match.getGame().isGameOver()) {
+                    peer.send(bye("A game is already running at that table."));
+                    peer.close();
+                    return;
+                }
+                peer.name = msg.has("name") ? msg.get("name").getAsString() : "Player " + peer.id;
+                peer.join = msg;
+                if (peer.gui == null) { peer.gui = new BridgeGuiGame(peer); }
+                sendInfo(peer.name + " joined the table.");
+                sendLanLobby();
+            }
+            case "response" -> { if (peer.gui != null) { peer.gui.onResponse(msg); } }
+            case "stops" -> { if (peer.gui != null) { peer.gui.setStops(msg); } }
+            case "cardSearch" -> CATALOG.execute(() -> peer.send(CardCatalog.search(
+                    msg.has("q") ? msg.get("q").getAsString() : "", msg.has("limit") ? msg.get("limit").getAsInt() : 60)));
+            case "cardInfo" -> CATALOG.execute(() -> peer.send(CardCatalog.info(
+                    msg.has("names") ? msg.getAsJsonArray("names") : null, msg.has("req") ? msg.get("req").getAsString() : null)));
+            case "start", "lanOpen", "lanKick" -> { /* only the host decides */ }
+            default -> {
+                final BridgeGuiGame g = peer.gui;
+                if (g != null) { guiBase.invokeInEdtLater(() -> handleAction(g, t, msg)); }
+            }
         }
     }
 
     /** Player actions. Always run on the bridge EDT, as Forge expects. */
-    private static void handleAction(final String t, final JsonObject msg) {
+    private static void handleAction(final BridgeGuiGame gui, final String t, final JsonObject msg) {
         Log.info("<< " + t + (msg.has("id") ? " " + msg.get("id") : "") + (msg.has("color") ? " " + msg.get("color") : ""));
         final IGameController c = gui.controller();
         if (c == null) {
@@ -185,23 +295,29 @@ public final class BridgeMain {
                 if (c instanceof PlayerControllerHuman pch) { pch.autoPassUntilEndOfTurn(); }
                 c.selectButtonOk();
             }
-            case "concede" -> concede();
+            case "concede" -> concede(gui);
             default -> Log.warn("Unknown message type '" + t + "'");
         }
     }
 
-    private static void concede() {
+    private static void concede() { concede(gui); }
+
+    /** A player concedes. Alone against AIs that ends the game; with other people at the table they play on. */
+    private static void concede(final BridgeGuiGame who) {
         final HostedMatch m = match;
         if (m == null || m.getGame() == null) { return; }
         final Game game = m.getGame();
         if (game.isGameOver()) { return; }
-        final IGameController c = gui.controller();
+        final IGameController c = who.controller();
         if (c != null) { c.concede(); }
-        gui.abortPendingRequests();
+        who.abortPendingRequests();
+        if (humansInGame > 1) { return; }
         game.getAction().invoke(() -> {
             if (!game.isGameOver()) { game.setGameOver(GameEndReason.AllHumansLost); }
         });
     }
+
+    private static volatile int humansInGame = 1;
 
     private static synchronized void startGame(final JsonObject msg) {
         try {
@@ -225,19 +341,19 @@ public final class BridgeMain {
                 }
             }
 
+            // Format: commander (40 life, command zone), constructed (60 cards, 20 life) or limited (40 cards, 20 life).
+            final String format = msg.has("format") ? msg.get("format").getAsString() : "commander";
+            final boolean commanderGame = !"constructed".equals(format) && !"limited".equals(format);
+
             final Deck myDeck;
             if (deckText.isBlank()) {
-                myDeck = aiDeck("precon");
-                sendInfo("No decklist sent; you are playing a random precon: " + myDeck.getName());
+                myDeck = aiDeck(aiDeckMode, format);
+                sendInfo("No decklist sent; you are playing " + myDeck.getName());
             } else {
-                final DeckLoader.Result r = DeckLoader.load(deckText, msg.has("deckName") ? msg.get("deckName").getAsString() : null, commanders);
+                final DeckLoader.Result r = DeckLoader.load(deckText, msg.has("deckName") ? msg.get("deckName").getAsString() : null,
+                        commanderGame ? commanders : Collections.emptyList(), commanderGame ? "commander" : format);
                 if (!r.errors.isEmpty()) {
-                    final JsonObject err = new JsonObject();
-                    err.addProperty("t", "deckError");
-                    final JsonArray arr = new JsonArray();
-                    r.errors.forEach(arr::add);
-                    err.add("errors", arr);
-                    conn.send(err);
+                    conn.send(deckError(r.errors));
                     return;
                 }
                 for (final String w : r.warnings) { sendInfo("Deck warning: " + w); }
@@ -249,29 +365,74 @@ public final class BridgeMain {
             prefs.setPref(FPref.MATCH_AI_FLAT_MONTE_CARLO, !"fast".equals(aiStrength));
 
             final List<RegisteredPlayer> players = new ArrayList<>();
-            final RegisteredPlayer human = RegisteredPlayer.forCommander(myDeck);
+            final Map<RegisteredPlayer, IGuiGame> guis = new java.util.HashMap<>();
+            final RegisteredPlayer human = registered(myDeck, commanderGame);
             human.setPlayer(GamePlayerUtil.getGuiPlayer(playerName, 0, 0, false));
             players.add(human);
-            final JsonArray aiNames = new JsonArray();
-            for (int i = 0; i < opponents; i++) {
-                final Deck d = aiDeck(aiDeckMode);
-                final String aiName = "AI " + (i + 1) + " (" + d.getName() + ")";
-                final RegisteredPlayer rp = RegisteredPlayer.forCommander(d);
-                rp.setPlayer(GamePlayerUtil.createAiPlayer(aiName, i + 1));
-                players.add(rp);
-                aiNames.add(aiName);
+            guis.put(human, gui);
+            final JsonArray names = new JsonArray();
+
+            // LAN players at the host's table (each on their own PC, with their own view of the game).
+            final List<BridgeGuiGame> peerGuis = new ArrayList<>();
+            if (msg.has("lan") && msg.get("lan").getAsBoolean()) {
+                int seat = 1;
+                for (final LanServer.Peer peer : lan.peers()) {
+                    if (peer.join == null || !peer.isConnected()) { continue; }
+                    final JsonObject j = peer.join;
+                    final List<String> theirCmds = new ArrayList<>();
+                    if (commanderGame && j.has("commanders") && j.get("commanders").isJsonArray()) {
+                        for (final JsonElement e : j.getAsJsonArray("commanders")) { if (!e.getAsString().isBlank()) { theirCmds.add(e.getAsString()); } }
+                    }
+                    final String theirText = j.has("deck") ? j.get("deck").getAsString() : "";
+                    final Deck theirDeck;
+                    if (theirText.isBlank()) {
+                        theirDeck = aiDeck(aiDeckMode, format);
+                    } else {
+                        final DeckLoader.Result r = DeckLoader.load(theirText, j.has("deckName") ? j.get("deckName").getAsString() : null,
+                                theirCmds, commanderGame ? "commander" : format);
+                        if (!r.errors.isEmpty()) {
+                            peer.send(deckError(r.errors));
+                            sendInfo(peer.name + "'s deck can't be played (" + r.errors.get(0) + "); they sit this one out.");
+                            continue;
+                        }
+                        theirDeck = r.deck;
+                    }
+                    final RegisteredPlayer rp = registered(theirDeck, commanderGame);
+                    rp.setPlayer(GamePlayerUtil.getGuiPlayer(peer.name, seat, seat, false));
+                    seat++;
+                    if (peer.gui == null) { peer.gui = new BridgeGuiGame(peer); }
+                    players.add(rp);
+                    guis.put(rp, peer.gui);
+                    peerGuis.add(peer.gui);
+                    names.add(peer.name);
+                }
             }
 
-            final GameRules rules = new GameRules(GameType.Commander);
-            rules.setAppliedVariants(EnumSet.of(GameType.Commander));
+            // AI opponents fill the remaining seats (none needed if people are playing each other).
+            final int aiCount = peerGuis.isEmpty() ? Math.max(1, opponents) : Math.max(0, Math.min(5 - peerGuis.size(), msg.has("opponents") ? msg.get("opponents").getAsInt() : 0));
+            for (int i = 0; i < aiCount; i++) {
+                final Deck d = aiDeck(aiDeckMode, format);
+                final String aiName = "AI " + (i + 1) + " (" + d.getName() + ")";
+                final RegisteredPlayer rp = registered(d, commanderGame);
+                rp.setPlayer(GamePlayerUtil.createAiPlayer(aiName, players.size()));
+                players.add(rp);
+                names.add(aiName);
+            }
+
+            final GameType type = commanderGame ? GameType.Commander : GameType.Constructed;
+            final EnumSet<GameType> variants = commanderGame ? EnumSet.of(GameType.Commander) : EnumSet.noneOf(GameType.class);
+            final GameRules rules = new GameRules(type);
+            rules.setAppliedVariants(variants);
             rules.setGamesPerMatch(1);
 
             gui.abortPendingRequests();
             gui.resetForNewMatch();
+            for (final BridgeGuiGame g : peerGuis) { g.abortPendingRequests(); g.resetForNewMatch(); }
+            humansInGame = 1 + peerGuis.size();
             final HostedMatch hm = new HostedMatch();
             match = hm;
-            Log.info("Starting Commander game: " + playerName + " (" + myDeck.getName() + ") vs " + aiNames);
-            hm.startMatch(rules, EnumSet.of(GameType.Commander), players, Map.<RegisteredPlayer, IGuiGame>of(human, gui), null);
+            Log.info("Starting " + format + " game: " + playerName + " (" + myDeck.getName() + ") vs " + names);
+            hm.startMatch(rules, variants, players, guis, null);
             // HostedMatch always turns on maximum AI strength on desktop. The game thread is still dealing and
             // shuffling at this point, so this takes effect before the AI's first decision (its mulligan).
             final Game started = hm.getGame();
@@ -289,6 +450,52 @@ public final class BridgeMain {
             err.add("errors", arr);
             conn.send(err);
         }
+    }
+
+    private static RegisteredPlayer registered(final Deck deck, final boolean commanderGame) {
+        return commanderGame ? RegisteredPlayer.forCommander(deck) : new RegisteredPlayer(deck);
+    }
+
+    private static JsonObject deckError(final List<String> errors) {
+        final JsonObject err = new JsonObject();
+        err.addProperty("t", "deckError");
+        final JsonArray arr = new JsonArray();
+        errors.forEach(arr::add);
+        err.add("errors", arr);
+        return err;
+    }
+
+    /** An AI deck for the format: precons (Commander / Forge's theme and preconstructed decks) or random. */
+    private static Deck aiDeck(final String mode, final String format) {
+        if ("constructed".equals(format) || "limited".equals(format)) {
+            Deck d = null;
+            if (!"random".equalsIgnoreCase(mode)) {
+                try { d = DeckgenUtil.getRandomPreconDeck(); } catch (final RuntimeException ex) { d = null; }
+                if (d == null || d.getMain().countAll() < 40) {
+                    try { d = DeckgenUtil.getRandomThemeDeck(); } catch (final RuntimeException ex) { d = null; }
+                }
+            }
+            if (d == null || d.getMain().countAll() < 40) { d = DeckgenUtil.getRandomColorDeck(true); }
+            return "limited".equals(format) ? toForty(d) : d;
+        }
+        return aiDeck(mode);
+    }
+
+    /** Cuts a deck down to a 40-card limited deck: 17 lands, 23 spells, keeping its proportions. */
+    private static Deck toForty(final Deck full) {
+        final List<PaperCard> lands = new ArrayList<>(), spells = new ArrayList<>();
+        for (final PaperCard c : full.getMain().toFlatList()) {
+            if (c.getRules().getType().isLand()) { lands.add(c); } else { spells.add(c); }
+        }
+        if (lands.size() + spells.size() <= 40) { return full; }
+        Collections.shuffle(lands);
+        Collections.shuffle(spells);
+        final Deck d = new Deck(full.getName() + " (40)");
+        final int landCount = Math.min(17, lands.size());
+        final int spellCount = Math.min(40 - landCount, spells.size());
+        for (int i = 0; i < landCount; i++) { d.getMain().add(lands.get(i)); }
+        for (int i = 0; i < spellCount; i++) { d.getMain().add(spells.get(i)); }
+        return d;
     }
 
     private static Deck aiDeck(final String mode) {

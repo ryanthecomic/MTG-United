@@ -37,6 +37,15 @@ final class DeckLoader {
     private DeckLoader() {}
 
     static Result load(final String text, final String name, final List<String> explicitCommanders) {
+        return load(text, name, explicitCommanders, "commander");
+    }
+
+    /**
+     * @param format "commander" (needs a commander), "constructed" (60+) or "limited" (40+): in the last two a
+     *               Commander section is simply played as part of the main deck.
+     */
+    static Result load(final String text, final String name, final List<String> explicitCommanders, final String format) {
+        final boolean commanderGame = format == null || "commander".equals(format);
         final Result r = new Result();
         final List<String> lines = Arrays.asList(text.replace("\r", "").split("\n"));
 
@@ -96,6 +105,21 @@ final class DeckLoader {
                     default -> r.deck.getMain().add(card, count);
                 }
             }
+        }
+
+        if (!commanderGame) {
+            // 60 / 40 card formats: commanders are just cards in the deck; the sideboard isn't played.
+            if (r.deck.has(DeckSection.Commander)) {
+                r.deck.getMain().addAll(r.deck.get(DeckSection.Commander));
+                r.deck.get(DeckSection.Commander).clear();
+            }
+            if (r.deck.getMain().countAll() == 0) { r.errors.add("The deck has no cards."); }
+            if (r.errors.isEmpty()) {
+                final DeckFormat df = "limited".equals(format) ? DeckFormat.Limited : DeckFormat.Constructed;
+                final String problem = df.getDeckConformanceProblem(r.deck);
+                if (problem != null) { r.warnings.add(problem); }
+            }
+            return r;
         }
 
         // Explicit commander names from the client win over anything in the list.

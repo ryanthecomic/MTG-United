@@ -72,6 +72,7 @@ namespace MTGUnited
             m.aiStrength = PlayerPrefs.GetString("aiStrength", "normal");
             m.selectedDeckId = PlayerPrefs.GetString("selectedDeck", "");
             m.playMode = PlayerPrefs.GetString("playMode", "forge");
+            m.forgeFormat = PlayerPrefs.GetString("forgeFormat", DeckFormat.Commander);
             m.decks = DeckStore.LoadAll();
             m.Build();
             return m;
@@ -924,6 +925,17 @@ namespace MTGUnited
             ((RectTransform)random.transform).Place(416, 28, 156, 42);
             aiRandomBtn = random.GetComponent<Image>();
             forgeOnly.Add(aiText.gameObject); forgeOnly.Add(precon.gameObject); forgeOnly.Add(random.gameObject);
+            // Format (rules engine): Commander, 60 cards or 40 cards. The AI's decks follow it.
+            float fx = 330;
+            foreach (var (f, label) in new[] { (DeckFormat.Commander, "CMDR"), (DeckFormat.Constructed, "60"), (DeckFormat.Limited, "40") })
+            {
+                string ff = f;
+                var fb = UIKit.Button("Format" + label, pod, label, Theme.Secondary, () => SetForgeFormat(ff), 15);
+                ((RectTransform)fb.transform).Place(fx, 162, 76, 36);
+                formatButtons[f] = fb.GetComponent<Image>();
+                forgeOnly.Add(fb.gameObject);
+                fx += 82;
+            }
             // Kitchen table, playing alone: pick each other seat's deck (goldfishing / playtesting a matchup).
             var seatDecks = UIKit.Button("SeatDecks", pod, "CHOOSE THEIR DECKS", new Color(0.16f, 0.3f, 0.72f), () => SeatDeckMenu(Input.mousePosition), 16);
             ((RectTransform)seatDecks.transform).Place(26, 28, 546, 42);
@@ -969,6 +981,15 @@ namespace MTGUnited
 
             // The big button.
             playButton = UIKit.Pill("Play", playCluster, "Play", new Color(0.95f, 0.43f, 0.1f), OnPlay, 1520, 34, 340, 92, 46);
+            // LAN: the kitchen table's lobby, or a rules-engine table (people + AIs) in Forge mode.
+            var lanPlay = UIKit.Button("LanPlay", playCluster, "PLAY ON LAN", new Color(0.16f, 0.3f, 0.72f), () =>
+            {
+                var d = FindDeck(selectedDeckId);
+                if (d == null) { gc.Toasts.Show("Pick a deck first (Decks tab).", true); return; }
+                if (playMode == "table") gc.Lan.Open(d);
+                else ForgeLan.Instance.Open();
+            }, 18);
+            ((RectTransform)lanPlay.transform).Place(1260, 50, 244, 60);
         }
 
         /// <summary>A home tile: dark rounded panel with a soft shadow and a faint light rim.</summary>
@@ -989,7 +1010,8 @@ namespace MTGUnited
             PlayerPrefs.SetInt("opponents", opponents);
             PlayerPrefs.SetString("aiDecks", aiDecks);
             bool table = playMode == "table";
-            modeText.text = (table ? "Kitchen table · " : "Commander · ") + (opponents + 1) + " players";
+            modeText.text = (table ? "Table · " : "") + (opponents + 1) + " players";
+            foreach (var kv in formatButtons) kv.Value.color = kv.Key == forgeFormat ? Theme.Accent : Theme.Secondary;
             oppText.text = (table ? "OTHER SEATS   " : "OPPONENTS   ") + opponents;
             foreach (var go in forgeOnly) go.SetActive(!table);
             tableHint.gameObject.SetActive(table);
@@ -1178,24 +1200,69 @@ namespace MTGUnited
         void OnPlay()
         {
             if (playMode == "table") { StartTable(); return; }
+            if (gc.RemoteBridge) { gc.Toasts.Show("You're seated at someone's LAN table: the host starts the game."); return; }
+            var deck = FindDeck(selectedDeckId);
+            if (deck != null && (deck.Format ?? DeckFormat.Commander) != forgeFormat)
+                gc.Toasts.Show("Heads up: \"" + deck.Name + "\" is a " + DeckFormat.Label(deck.Format) + " deck, playing it as " + DeckFormat.Label(forgeFormat) + ".");
+            gc.BoardView.Clear();
+            gc.StartGame(ForgeStartMessage(false, opponents));
+        }
+
+        /// <summary>The bridge's "start" message for a rules-engine game (also used by the LAN host, with lan = true).</summary>
+        public Dictionary<string, object> ForgeStartMessage(bool lan, int aiCount)
+        {
             var deck = FindDeck(selectedDeckId);
             var commanders = new List<object>();
-            if (deck != null)
+            if (deck != null && forgeFormat == DeckFormat.Commander)
                 foreach (var c in (deck.Commander ?? "").Split(';'))
                     if (c.Trim().Length > 0) commanders.Add(c.Trim());
-
-            gc.BoardView.Clear();
-            gc.StartGame(new Dictionary<string, object>
+            return new Dictionary<string, object>
             {
                 { "t", "start" },
                 { "deck", deck?.List ?? "" },
                 { "deckName", deck?.Name ?? "" },
                 { "commanders", commanders },
                 { "name", PlayerPrefs.GetString("playerName", "Player") },
-                { "opponents", opponents },
+                { "opponents", aiCount },
                 { "aiDecks", aiDecks },
                 { "aiStrength", aiStrength },
-            });
+                { "format", forgeFormat },
+                { "lan", lan },
+            };
+        }
+
+        /// <summary>What a LAN player sends to take a seat at someone's Forge table.</summary>
+        public Dictionary<string, object> ForgeJoinMessage()
+        {
+            var deck = FindDeck(selectedDeckId);
+            var commanders = new List<object>();
+            if (deck != null)
+                foreach (var c in (deck.Commander ?? "").Split(';'))
+                    if (c.Trim().Length > 0) commanders.Add(c.Trim());
+            if (deck != null && commanders.Count == 0 && !string.IsNullOrEmpty(deck.CommanderName)) commanders.Add(deck.CommanderName);
+            return new Dictionary<string, object>
+            {
+                { "t", "join" },
+                { "name", PlayerPrefs.GetString("playerName", "Player") },
+                { "deck", deck?.List ?? "" },
+                { "deckName", deck?.Name ?? "" },
+                { "commanders", commanders },
+            };
+        }
+
+        public SavedDeck SelectedDeck => FindDeck(selectedDeckId);
+        public string ForgeFormat => forgeFormat;
+
+        // Rules-engine format: Commander, 60-card constructed or 40-card limited (AI decks follow it).
+        string forgeFormat = DeckFormat.Commander;
+        readonly Dictionary<string, Image> formatButtons = new Dictionary<string, Image>();
+
+        void SetForgeFormat(string f)
+        {
+            forgeFormat = f;
+            PlayerPrefs.SetString("forgeFormat", f);
+            Sound.Play(Sfx.UiClick, 0.6f);
+            RefreshPlayCluster();
         }
 
         public void Show()

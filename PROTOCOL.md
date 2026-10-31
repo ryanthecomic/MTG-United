@@ -108,3 +108,23 @@ When `reveal` is true the dialog only shows the cards. Answer it with an empty `
 | `stops` | `myTurn: [phase]`, `opponentTurn: [phase]` | Phases where you want priority when the stack is empty. Phase names are Forge's `PhaseType` names. |
 | `response` | `id`, plus the answer fields | Answer a `request` |
 | `ping` | none | Keep-alive |
+
+## Formats and LAN play (rules engine)
+
+`start` also takes:
+
+- `format`: `"commander"` (default, 40 life, command zone), `"constructed"` (60-card decks, 20 life) or `"limited"` (40-card decks, 20 life). AI decks follow it: Commander precons / random commander decks, or Forge's preconstructed / theme / random color decks (cut to 40 cards for limited).
+- `lan`: `true` to seat every player who joined the host's LAN table (see below) next to the host. `opponents` is then the number of AI players added.
+
+LAN players (other PCs, no Forge needed) connect to the host's bridge on TCP port **7792** while the host has the table open:
+
+| Direction | Message | Meaning |
+|---|---|---|
+| host → bridge | `{"t":"lanOpen","open":true}` | start / stop accepting LAN players |
+| host → bridge | `{"t":"lanKick","id":3}` | remove a player from the table |
+| bridge → peer | `{"t":"hello","protocol":1,"remote":true}` | sent on connect |
+| peer → bridge | `{"t":"join","name":"Ana","deck":"...","deckName":"...","commanders":["..."]}` | take a seat |
+| bridge → host & peers | `{"t":"lanLobby","open":true,"players":[{"id":1,"name":"Ana","deck":"..."}]}` | who is seated |
+| bridge → peer | `{"t":"bye","text":"..."}` | removed, or a game was already running |
+
+During the game each LAN player gets the same messages as the host (`state`, `request`, `gameStarted`...) for their own seat, and sends the same actions and `response`s. A player who disconnects mid-game concedes; the others play on. Tables are announced on UDP port 7791 as `MTGF|name|7792|people|max|started`.
