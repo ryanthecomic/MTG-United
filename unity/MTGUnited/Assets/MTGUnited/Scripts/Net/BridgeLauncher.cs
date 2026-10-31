@@ -41,23 +41,19 @@ namespace MTGUnited
             if (GameController.Instance != null && !GameController.Instance.Bridge.Connected) Launch();
         }
 
+        public bool Running => process != null && !process.HasExited;
+
+        /// <summary>Starts the bridge for whichever Forge setup is installed (see ForgeSetup).</summary>
         public void Launch()
         {
-            if (process != null && !process.HasExited) { lastLine = "already starting..."; return; }
-            string root = FindRepoRoot();
+            if (Running) { lastLine = "already starting..."; return; }
+            ForgeSetup.Load();
             string jar = Environment.GetEnvironmentVariable("MTGU_BRIDGE_JAR");
-            if (string.IsNullOrEmpty(jar) && root != null) jar = Path.Combine(root, "bridge", "target", "forge-bridge-all.jar");
             string forgeGui = Environment.GetEnvironmentVariable("FORGE_GUI_DIR");
-            if (string.IsNullOrEmpty(forgeGui) && root != null) forgeGui = Path.Combine(root, "forge", "forge-gui");
-
-            if (jar == null || !File.Exists(jar))
+            bool overridden = !string.IsNullOrEmpty(jar) && !string.IsNullOrEmpty(forgeGui);
+            if (!overridden && !ForgeSetup.Installed)
             {
-                lastLine = "Bridge jar not found. Run scripts\\setup.ps1 first (looked for " + (jar ?? "bridge/target/forge-bridge-all.jar") + ").";
-                return;
-            }
-            if (forgeGui == null || !Directory.Exists(Path.Combine(forgeGui, "res")))
-            {
-                lastLine = "Forge not found at " + forgeGui + ". Run scripts\\setup.ps1 first.";
+                lastLine = "Forge isn't set up yet: open the Forge tab to install it or point to your Forge.";
                 return;
             }
 
@@ -70,10 +66,27 @@ namespace MTGUnited
             }
 
             int port = GameController.Instance != null ? GameController.Instance.Bridge.Port : 7777;
+            string args;
+            if (overridden)
+                args = "-Xmx3g -jar \"" + jar + "\" --forge-gui \"" + forgeGui + "\" --port " + port;
+            else if (ForgeSetup.CurrentMode == ForgeSetup.Mode.Existing)
+            {
+                // Bridge compiled against the player's Forge: their program jar supplies the engine.
+                string sep = Path.PathSeparator.ToString();
+                string cp = ForgeSetup.BridgeJar + sep + ForgeSetup.GsonJar + sep + ForgeSetup.ForgeJar;
+                args = "-Xmx3g -cp \"" + cp + "\" mtgunited.bridge.BridgeMain --forge-gui \"" + ForgeSetup.Assets + "\" --port " + port;
+                jar = ForgeSetup.BridgeJar;
+            }
+            else
+            {
+                jar = ForgeSetup.BridgeJar;
+                args = "-Xmx3g -jar \"" + jar + "\" --forge-gui \"" + ForgeSetup.Assets + "\" --port " + port;
+            }
+
             var psi = new ProcessStartInfo
             {
                 FileName = java,
-                Arguments = "-Xmx3g -jar \"" + jar + "\" --forge-gui \"" + forgeGui + "\" --port " + port,
+                Arguments = args,
                 UseShellExecute = false,
                 RedirectStandardOutput = true,
                 RedirectStandardError = true,
@@ -89,6 +102,7 @@ namespace MTGUnited
                 process.BeginOutputReadLine();
                 process.BeginErrorReadLine();
                 lastLine = "starting Forge (loading cards takes ~30-60 s)...";
+                ForgeSetup.Log("==> Starting the bridge");
                 Debug.Log("[MTGUnited] Started bridge: " + psi.FileName + " " + psi.Arguments);
             }
             catch (Exception ex)
@@ -98,25 +112,21 @@ namespace MTGUnited
             }
         }
 
+        /// <summary>Stops a bridge this client started (before reinstalling, or from the Forge tab).</summary>
+        public void Stop()
+        {
+            try { if (Running) { process.Kill(); process.WaitForExit(3000); } }
+            catch { }
+            process = null;
+            lastLine = "Bridge stopped.";
+        }
+
         void OnLine(string line)
         {
             if (string.IsNullOrEmpty(line)) return;
             if (line.StartsWith("[bridge")) lastLine = line.Length > 120 ? line.Substring(0, 120) : line;
+            ForgeSetup.Log(line);
             Debug.Log("[Forge] " + line);
-        }
-
-        static string FindRepoRoot()
-        {
-            foreach (var start in new[] { Application.dataPath, Directory.GetCurrentDirectory() })
-            {
-                var dir = new DirectoryInfo(start);
-                for (int i = 0; i < 6 && dir != null; i++, dir = dir.Parent)
-                {
-                    if (Directory.Exists(Path.Combine(dir.FullName, "bridge")) && Directory.Exists(Path.Combine(dir.FullName, "unity")))
-                        return dir.FullName;
-                }
-            }
-            return null;
         }
 
         void OnApplicationQuit()

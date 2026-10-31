@@ -32,7 +32,9 @@ namespace MTGUnited
         public static Sprite Cross => cross ?? (cross = Make(p => Mathf.Min(Segment(p, new Vector2(-0.5f, -0.5f), new Vector2(0.5f, 0.5f), 0.12f),
                                                                        Segment(p, new Vector2(-0.5f, 0.5f), new Vector2(0.5f, -0.5f), 0.12f))));
         public static Sprite List => list ?? (list = Make(ListSdf));
-        static Sprite tap, untap, grave, spiral, cardIcon, library;
+        static Sprite tap, untap, grave, spiral, cardIcon, library, anvil;
+        /// <summary>Anvil (the Forge tab).</summary>
+        public static Sprite Anvil => anvil ?? (anvil = Make(AnvilSdf));
         /// <summary>Zone markers for player panels: hand (a card), library (a stack), graveyard (a headstone), exile (a spiral).</summary>
         public static Sprite Hand => cardIcon ?? (cardIcon = Make(p => Mathf.Abs(Box(Rotate(p, -8f), new Vector2(0.42f, 0.6f)) - 0.05f) - 0.09f));
         public static Sprite Library => library ?? (library = Make(LibrarySdf));
@@ -248,6 +250,17 @@ namespace MTGUnited
                 best = Mathf.Min(best, Mathf.Abs(r - rr));
             }
             return best - 0.055f;
+        }
+
+        static float AnvilSdf(Vector2 p)
+        {
+            // Face with a horn on the left, a waist, and a wide foot.
+            float face = Box(p - new Vector2(0.12f, 0.36f), new Vector2(0.5f, 0.15f)) - 0.03f;
+            float horn = Mathf.Max(Mathf.Max(-(p.x + 0.86f), p.x + 0.36f), Mathf.Abs(p.y - 0.42f) - (p.x + 0.86f) * 0.22f);
+            float waist = Box(p - new Vector2(0.12f, 0.02f), new Vector2(0.2f, 0.22f));
+            float foot = Box(p - new Vector2(0.12f, -0.38f), new Vector2(0.48f, 0.13f)) - 0.03f;
+            float flare = Mathf.Max(Box(p - new Vector2(0.12f, -0.18f), new Vector2(0.36f, 0.08f)), -(p.y + 0.26f));
+            return Mathf.Min(Mathf.Min(face, horn), Mathf.Min(waist, Mathf.Min(foot, flare)));
         }
     }
 }

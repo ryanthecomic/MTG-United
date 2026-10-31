@@ -83,6 +83,7 @@ namespace MTGUnited
             pages["home"] = BuildHome(content);
             pages["decks"] = BuildDecks(content);
             pages["profile"] = BuildProfile(content);
+            pages["forge"] = ForgePage.Create(content, gc);
             BuildPlayCluster(frame);
             builder = DeckBuilder.Create(content, gc);
 
@@ -161,9 +162,9 @@ namespace MTGUnited
             edge.rectTransform.sizeDelta = new Vector2(0, 2); edge.rectTransform.anchoredPosition = Vector2.zero;
             edge.raycastTarget = false;
 
-            string[] ids = { "home", "profile", "decks" };
-            string[] labels = { "Home", "Profile", "Decks" };
-            Sprite[] icons = { Icons.Home, Icons.Person, Icons.Decks };
+            string[] ids = { "home", "profile", "decks", "forge" };
+            string[] labels = { "Home", "Profile", "Decks", "Forge" };
+            Sprite[] icons = { Icons.Home, Icons.Person, Icons.Decks, Icons.Anvil };
             // Wordmark in the top-left corner, tabs after it.
             var logo = UIKit.Label("Logo", bar, "MTG UNITED", 30, new Color(0.95f, 0.75f, 0.45f), TextAnchor.MiddleLeft, FontStyle.Bold).Outline(1.5f).Titled();
             logo.rectTransform.Place(28, 22, 260, 50);
@@ -215,43 +216,108 @@ namespace MTGUnited
 
         // =================================================================================================== home
 
+        /// <summary>
+        /// Home: a carousel in the big panel. Slide 1 is the Forge bridge (status, and a way into the Forge tab);
+        /// slide 2 is the selected deck's commander art. Arrows, dots, and it advances on its own unless hovered.
+        /// </summary>
         RectTransform BuildHome(RectTransform parent)
         {
             var page = UIKit.Rect("Home", parent).Stretch();
 
-            // Hero banner: the selected deck's commander art, with a caption strip.
             var hero = UIKit.Panel("Hero", page, new Color(0.05f, 0.05f, 0.07f, 0.95f));
             hero.rectTransform.Place(70, 190, 1150, 690);
             hero.pixelsPerUnitMultiplier = 3f;
             UIKit.AddShadow(hero.transform, 26, new Vector2(0, -12), 0.7f);
             hero.gameObject.AddComponent<Mask>().showMaskGraphic = true;
-            var artRt = UIKit.Rect("Art", hero.transform);
+            var hpe = hero.gameObject.AddComponent<PointerEvents>();
+            hpe.OnEnter = () => heroHovered = true;
+            hpe.OnExit = () => heroHovered = false;
+
+            // ---- slide 1: Forge bridge
+            var forge = UIKit.Rect("ForgeSlide", hero.transform).Stretch();
+            var fbg = forge.gameObject.AddComponent<RawImage>();
+            fbg.texture = UIKit.Gradient(new Color(0.16f, 0.1f, 0.06f), new Color(0.04f, 0.03f, 0.03f));
+            forge.gameObject.AddComponent<PointerEvents>().OnClick = () => { Sound.Play(Sfx.UiClick, 0.6f); SelectTab("forge"); };
+            var mark = UIKit.Rect("Anvil", forge);
+            mark.Place(700, 150, 420, 420);
+            var markImg = mark.gameObject.AddComponent<Image>();
+            markImg.sprite = Icons.Anvil; markImg.color = new Color(1f, 0.6f, 0.25f, 0.13f); markImg.raycastTarget = false; markImg.preserveAspect = true;
+            var fk = UIKit.Label("Kicker", forge, "RULES ENGINE", 16, new Color(1f, 0.7f, 0.35f), TextAnchor.UpperLeft, FontStyle.Bold).Titled();
+            fk.rectTransform.Place(50, 590, 600, 30);
+            var ft = UIKit.Label("Title", forge, "Forge Bridge", 56, Theme.Text, TextAnchor.UpperLeft, FontStyle.Bold).Outline(1.5f).Titled();
+            ft.rectTransform.Place(46, 510, 700, 80);
+            forgeStatus = UIKit.Label("Status", forge, "", 26, Theme.Text, TextAnchor.UpperLeft, FontStyle.Bold);
+            forgeStatus.rectTransform.Place(52, 440, 700, 60);
+            forgeStatus.supportRichText = true;
+            launcherText = UIKit.Label("Detail", forge, "", 17, Theme.TextDim, TextAnchor.UpperLeft);
+            launcherText.rectTransform.Place(52, 300, 640, 130);
+            var manage = UIKit.Pill("Manage", forge, "Manage Forge", new Color(0.62f, 0.33f, 0.12f), () => SelectTab("forge"), 50, 70, 320, 70, 28);
+            launchButton = UIKit.Button("Launch", forge, "START FORGE", Theme.Secondary, () => gc.Launcher.Launch(), 18);
+            ((RectTransform)launchButton.transform).Place(400, 80, 240, 52);
+
+            // ---- slide 2: gather your pod (commander art)
+            var pod = UIKit.Rect("PodSlide", hero.transform).Stretch();
+            var artRt = UIKit.Rect("Art", pod);
             artRt.anchorMin = artRt.anchorMax = new Vector2(0.5f, 0.5f);
             artRt.sizeDelta = new Vector2(1150, 1610);        // card-shaped; the banner shows the art band
             artRt.anchoredPosition = new Vector2(0, -260);
             heroArt = artRt.gameObject.AddComponent<RawImage>();
             heroArt.raycastTarget = false;
-            var fade = UIKit.Rect("Fade", hero.transform).Stretch();
+            var fade = UIKit.Rect("Fade", pod).Stretch();
             var fadeImg = fade.gameObject.AddComponent<RawImage>();
             fadeImg.texture = UIKit.Gradient(new Color(0, 0, 0, 0f), new Color(0, 0, 0, 0.55f));
             fadeImg.raycastTarget = false;
-
-            var strip = UIKit.Panel("Caption", hero.transform, new Color(0.03f, 0.03f, 0.05f, 0.82f), false);
+            var strip = UIKit.Panel("Caption", pod, new Color(0.03f, 0.03f, 0.05f, 0.82f), false);
             strip.rectTransform.anchorMin = new Vector2(0, 0); strip.rectTransform.anchorMax = new Vector2(1, 0);
-            strip.rectTransform.pivot = new Vector2(0.5f, 0); strip.rectTransform.sizeDelta = new Vector2(0, 170);
+            strip.rectTransform.pivot = new Vector2(0.5f, 0); strip.rectTransform.sizeDelta = new Vector2(0, 150);
             var title = UIKit.Label("Title", strip.transform, "Gather your pod", 44, Theme.Text, TextAnchor.UpperLeft, FontStyle.Bold).Outline(1.5f).Titled();
             title.rectTransform.Stretch(30, 0, 30, 16);
             var body = UIKit.Label("Body", strip.transform,
                 "Commander with full rules from the Forge engine, against up to five AI opponents. Pick a deck, set the pod, press Play.",
                 20, new Color(0.88f, 0.9f, 0.95f), TextAnchor.UpperLeft);
-            body.rectTransform.Stretch(32, 50, 320, 76);
-            launcherText = UIKit.Label("Status", strip.transform, "", 15, Theme.TextDim, TextAnchor.LowerLeft);
-            launcherText.rectTransform.Stretch(32, 16, 320, 100);
-            launchButton = UIKit.Button("Launch", strip.transform, "START FORGE", Theme.Secondary, () => gc.Launcher.Launch(), 17);
-            var lr = (RectTransform)launchButton.transform;
-            lr.anchorMin = lr.anchorMax = new Vector2(1, 0); lr.pivot = new Vector2(1, 0);
-            lr.sizeDelta = new Vector2(260, 50); lr.anchoredPosition = new Vector2(-30, 24);
+            body.rectTransform.Stretch(32, 20, 40, 76);
+
+            slides.Add(forge); slides.Add(pod);
+
+            // ---- arrows + dots
+            var left = UIKit.Button("Prev", hero.transform, "‹", new Color(0, 0, 0, 0.45f), () => ShowSlide(slide - 1), 40);
+            ((RectTransform)left.transform).Place(14, 315, 50, 60);
+            var right = UIKit.Button("Next", hero.transform, "›", new Color(0, 0, 0, 0.45f), () => ShowSlide(slide + 1), 40);
+            ((RectTransform)right.transform).Place(1150 - 64, 315, 50, 60);
+            for (int i = 0; i < slides.Count; i++)
+            {
+                int k = i;
+                var dot = UIKit.Panel("Dot", hero.transform, Color.white);
+                dot.rectTransform.Place(1150 / 2f - slides.Count * 14 + i * 28, 14, 14, 14);
+                dot.pixelsPerUnitMultiplier = 32f / 14f;
+                dot.gameObject.AddComponent<PointerEvents>().OnClick = () => ShowSlide(k);
+                slideDots.Add(dot);
+            }
+            ShowSlide(0, true);
             return page;
+        }
+
+        readonly List<RectTransform> slides = new List<RectTransform>();
+        readonly List<Image> slideDots = new List<Image>();
+        int slide;
+        float slideShownAt;
+        bool heroHovered;
+        Text forgeStatus;
+
+        void ShowSlide(int i, bool instant = false)
+        {
+            int n = slides.Count;
+            i = ((i % n) + n) % n;
+            for (int k = 0; k < n; k++)
+            {
+                bool on = k == i;
+                slides[k].gameObject.SetActive(on);
+                slideDots[k].color = on ? new Color(1f, 0.75f, 0.4f) : new Color(1f, 1f, 1f, 0.35f);
+            }
+            // Cross-fade with a short slide in from the side it came from (travel, within budget).
+            if (!instant) FadeIn.Play(slides[i].gameObject, Motion.Travel, 1f, new Vector2(i > slide || (slide == n - 1 && i == 0) ? 50f : -50f, 0));
+            slide = i;
+            slideShownAt = Time.unscaledTime;
         }
 
         // =================================================================================================== decks
@@ -700,7 +766,7 @@ namespace MTGUnited
             connDot.color = isConnected ? Theme.Good : Theme.Danger;
             connText.text = isConnected ? "Connected to Forge" : "Waiting for Forge (port " + gc.Bridge.Port + ")";
             playButton.interactable = isConnected;
-            launchButton.SetVisible(!isConnected);
+
         }
 
         public void SetBusy(string text)
@@ -719,10 +785,24 @@ namespace MTGUnited
 
         void Update()
         {
+            if (slides.Count > 1 && !heroHovered && currentTab == "home" && Time.unscaledTime - slideShownAt > 8f) ShowSlide(slide + 1);
+            if (forgeStatus != null)
+            {
+                bool running = gc.Launcher.Running;
+                forgeStatus.text = connected ? "<color=#5fd47a>●</color>  Connected and ready"
+                    : ForgeSetup.Busy ? "<color=#f7a540>●</color>  " + ForgeSetup.TaskName + "..."
+                    : !ForgeSetup.Installed ? "<color=#e55>●</color>  Not installed. Set it up in the Forge tab"
+                    : running ? "<color=#f7a540>●</color>  Starting (loading cards)..."
+                    : "<color=#9aa0aa>●</color>  Installed, not running";
+                launchButton.SetVisible(!connected && ForgeSetup.Installed && !running && !ForgeSetup.Busy);
+            }
             if (launcherText != null)
             {
                 string line = gc.Launcher.StatusLine;
-                launcherText.text = connected ? "Forge is running and connected." : (string.IsNullOrEmpty(line) ? "Looking for the bridge..." : line);
+                string source = ForgeSetup.CurrentMode == ForgeSetup.Mode.Existing ? "your own Forge (" + ForgeSetup.ForgeDir + ")" : "MTG United's copy of Forge";
+                launcherText.text = connected ? "Using " + source + "."
+                    : !ForgeSetup.Installed ? "MTG United uses Forge as its rules engine. Install it, or point MTG United at a Forge you already have; nothing is downloaded twice."
+                    : (string.IsNullOrEmpty(line) ? "Looking for the bridge..." : line);
             }
         }
 

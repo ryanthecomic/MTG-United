@@ -1,6 +1,10 @@
 # Forge checkout and build tools fetched by scripts/setup.ps1
 /forge/
 /.tools/
+# Using an existing Forge: links to its card data (a junction; never commit it), bridge data, chosen setup
+/forge-ext/
+/mtgunited-data/
+/mtgunited-forge.json
 
 # Java build output
 /bridge/target/
