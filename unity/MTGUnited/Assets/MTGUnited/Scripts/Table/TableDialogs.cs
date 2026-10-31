@@ -181,4 +181,57 @@ namespace MTGUnited
 
         public void Close() => gameObject.SetActive(false);
     }
+
+    /// <summary>
+    /// A note on a card at the kitchen table ("+2/+2 until end of turn", "exiled with Oblivion Ring"...). Everyone
+    /// sees it under the card. A new note starts as the card's own text, to edit or trim down.
+    /// </summary>
+    public class NoteDialog : MonoBehaviour
+    {
+        InputField input;
+        Text title;
+        Action<string> onSave;
+
+        public bool IsOpen => gameObject.activeSelf;
+
+        public static NoteDialog Create(RectTransform parent)
+        {
+            var shade = UIKit.Panel("NoteDialog", parent, new Color(0, 0, 0, 0.6f), false);
+            shade.rectTransform.Stretch();
+            var d = shade.gameObject.AddComponent<NoteDialog>();
+            shade.gameObject.AddComponent<PointerEvents>().OnClick = d.Close;
+            var p = UIKit.Panel("Panel", shade.transform, Theme.Panel);
+            p.rectTransform.anchorMin = p.rectTransform.anchorMax = new Vector2(0.5f, 0.5f);
+            p.rectTransform.sizeDelta = new Vector2(760, 520);
+            p.gameObject.AddComponent<PointerEvents>();
+            d.title = UIKit.Label("Title", p.transform, "NOTE", 26, Theme.Accent, TextAnchor.UpperLeft, FontStyle.Bold).Titled();
+            d.title.rectTransform.Stretch(40, 0, 80, 22);
+            var sub = UIKit.Label("Sub", p.transform, "Everyone at the table sees it under the card. It's removed when the card leaves the battlefield.",
+                15, Theme.TextDim, TextAnchor.UpperLeft);
+            sub.rectTransform.Stretch(40, 0, 40, 66);
+            d.input = UIKit.Input("Note", p.transform, "Write a note...", true, 18);
+            d.input.GetComponent<RectTransform>().Place(40, 110, 680, 300);
+            d.input.characterLimit = 400;
+            var save = UIKit.Button("Save", p.transform, "SAVE NOTE", Theme.Accent, () => { d.onSave?.Invoke(d.input.text); d.Close(); }, 20);
+            ((RectTransform)save.transform).Place(500, 28, 220, 56);
+            var clear = UIKit.Button("Clear", p.transform, "REMOVE NOTE", ConfirmDialog.Danger, () => { d.onSave?.Invoke(""); d.Close(); }, 17);
+            ((RectTransform)clear.transform).Place(40, 28, 220, 56);
+            UIKit.CloseX(p.transform, d.Close);
+            shade.gameObject.SetActive(false);
+            return d;
+        }
+
+        public void Show(string cardName, string text, Action<string> save)
+        {
+            onSave = save;
+            title.text = "NOTE · " + cardName.ToUpperInvariant();
+            input.text = text ?? "";
+            gameObject.SetActive(true);
+            transform.SetAsLastSibling();
+            FadeIn.Play(gameObject, Motion.Short, 0.97f);
+            input.ActivateInputField();
+        }
+
+        public void Close() => gameObject.SetActive(false);
+    }
 }

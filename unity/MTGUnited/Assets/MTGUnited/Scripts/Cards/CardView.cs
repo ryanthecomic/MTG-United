@@ -741,7 +741,7 @@ namespace MTGUnited
             float w = rt.sizeDelta.x;
             if (Mathf.Abs(w - lastWidth) < 0.5f) return;
             lastWidth = w;
-            float mult = Mathf.Max(0.3f, 16f / Mathf.Max(1f, w * 0.055f));
+            float mult = Mathf.Max(0.3f, 16f / Mathf.Max(1f, w * 0.09f));
             frame.pixelsPerUnitMultiplier = mult;
             back.pixelsPerUnitMultiplier = mult;
             glow.pixelsPerUnitMultiplier = mult * 0.6f;

@@ -1,3 +1,4 @@
+using System;
 using System.Collections.Generic;
 using UnityEngine;
 using UnityEngine.UI;
@@ -58,6 +59,8 @@ namespace MTGUnited
 
         public bool IsOpen => gameObject.activeSelf;
 
+        public DeckBuilder Builder => builder;
+
         public static MainMenu Create(RectTransform parent, GameController gc)
         {
             var bg = UIKit.Rect("MainMenu", parent).Stretch();
@@ -91,8 +94,10 @@ namespace MTGUnited
             pages["decks"] = BuildDecks(content);
             pages["profile"] = BuildProfile(content);
             pages["forge"] = ForgePage.Create(content, gc);
+            pages["kitchen"] = BuildKitchen(content);
             BuildPlayCluster(frame);
             builder = DeckBuilder.Create(content, gc);
+            builder.DeckAdded = d => { decks.Insert(0, d); RebuildDeckGrid(); };
             customSets = CustomSetsPanel.Create(root, gc);
 
             SelectTab("home");
@@ -119,6 +124,10 @@ namespace MTGUnited
                 video.targetTexture = videoTarget;
                 video.audioOutputMode = VideoAudioOutputMode.None;
                 video.playOnAwake = true;
+                video.skipOnDrop = true;
+                video.waitForFirstFrame = true;
+                // If Windows can't decode it, keep the still table image instead of a black screen.
+                video.errorReceived += (vp, msg) => { if (raw != null && GameArt.TableBackground != null) raw.texture = GameArt.TableBackground; };
                 raw.texture = GameArt.TableBackground != null ? (Texture)GameArt.TableBackground : videoTarget;
                 // Show the still image until the first video frame is ready, then swap to the video.
                 video.prepareCompleted += vp => { raw.texture = videoTarget; vp.Play(); };
@@ -170,9 +179,9 @@ namespace MTGUnited
             edge.rectTransform.sizeDelta = new Vector2(0, 2); edge.rectTransform.anchoredPosition = Vector2.zero;
             edge.raycastTarget = false;
 
-            string[] ids = { "home", "profile", "decks", "forge" };
-            string[] labels = { "Home", "Profile", "Decks", "Forge" };
-            Sprite[] icons = { Icons.Home, Icons.Person, Icons.Decks, Icons.Anvil };
+            string[] ids = { "home", "profile", "decks", "forge", "kitchen" };
+            string[] labels = { "Home", "Profile", "Decks", "Forge", "Table" };
+            Sprite[] icons = { Icons.Home, Icons.Person, Icons.Decks, Icons.Anvil, Icons.Fork };
             // Wordmark in the top-left corner, tabs after it.
             var logo = UIKit.Label("Logo", bar, "MTG UNITED", 30, new Color(0.95f, 0.75f, 0.45f), TextAnchor.MiddleLeft, FontStyle.Bold).Outline(1.5f).Titled();
             logo.rectTransform.Place(28, 22, 260, 50);
@@ -285,7 +294,29 @@ namespace MTGUnited
                 20, new Color(0.88f, 0.9f, 0.95f), TextAnchor.UpperLeft);
             body.rectTransform.Stretch(32, 20, 40, 76);
 
-            slides.Add(forge); slides.Add(pod);
+            // ---- slide 3: kitchen table & custom sets
+            var kt = UIKit.Rect("KitchenSlide", hero.transform).Stretch();
+            var kbg = kt.gameObject.AddComponent<RawImage>();
+            kbg.texture = UIKit.Gradient(new Color(0.08f, 0.13f, 0.12f), new Color(0.02f, 0.04f, 0.04f));
+            kt.gameObject.AddComponent<PointerEvents>().OnClick = () => { Sound.Play(Sfx.UiClick, 0.6f); SelectTab("kitchen"); };
+            var kmark = UIKit.Rect("Cards", kt);
+            kmark.Place(690, 130, 440, 440);
+            var kmarkImg = kmark.gameObject.AddComponent<Image>();
+            kmarkImg.sprite = Icons.Table; kmarkImg.color = new Color(0.45f, 1f, 0.8f, 0.12f); kmarkImg.raycastTarget = false; kmarkImg.preserveAspect = true;
+            var kk = UIKit.Label("Kicker", kt, "NEW · KITCHEN TABLE", 16, new Color(0.5f, 1f, 0.82f), TextAnchor.UpperLeft, FontStyle.Bold).Titled();
+            kk.rectTransform.Place(50, 590, 600, 30);
+            var ktTitle = UIKit.Label("Title", kt, "Play your own cards", 56, Theme.Text, TextAnchor.UpperLeft, FontStyle.Bold).Outline(1.5f).Titled();
+            ktTitle.rectTransform.Place(46, 510, 800, 80);
+            var ktBody = UIKit.Label("Body", kt,
+                "Import custom sets from Magic Set Editor and playtest them at a free table, like Cockatrice: alone with several seats, " +
+                "or with friends over your local network. No rules engine and no Forge needed.",
+                21, new Color(0.86f, 0.9f, 0.9f), TextAnchor.UpperLeft);
+            ktBody.rectTransform.Place(52, 330, 640, 170);
+            UIKit.Pill("Learn", kt, "How it works", new Color(0.12f, 0.45f, 0.38f), () => SelectTab("kitchen"), 50, 70, 320, 70, 28);
+            var imp = UIKit.Button("Import", kt, "IMPORT A SET", Theme.Secondary, () => { SelectTab("kitchen"); customSets.Import(); }, 18);
+            ((RectTransform)imp.transform).Place(400, 80, 240, 52);
+
+            slides.Add(forge); slides.Add(pod); slides.Add(kt);
 
             // ---- arrows + dots
             var left = UIKit.Button("Prev", hero.transform, "‹", new Color(0, 0, 0, 0.45f), () => ShowSlide(slide - 1), 40);
@@ -328,6 +359,94 @@ namespace MTGUnited
             slideShownAt = Time.unscaledTime;
         }
 
+        // =================================================================================================== kitchen table
+
+        Text kitchenSets;
+
+        /// <summary>
+        /// The Kitchen Table tab: what the mode is, how to bring in a Magic Set Editor set, and buttons to do it
+        /// (import, see your sets, start a table alone or on the LAN).
+        /// </summary>
+        RectTransform BuildKitchen(RectTransform parent)
+        {
+            var page = UIKit.Rect("Kitchen", parent).Stretch();
+            var shade = UIKit.Panel("Shade", page, new Color(0.02f, 0.02f, 0.04f, 0.5f), false);
+            shade.rectTransform.Stretch();
+            shade.raycastTarget = false;
+
+            var icon = UIKit.Rect("Icon", page); icon.Place(76, 868, 64, 64);
+            var ii = icon.gameObject.AddComponent<Image>(); ii.sprite = Icons.Fork; ii.color = new Color(0.5f, 1f, 0.82f); ii.preserveAspect = true; ii.raycastTarget = false;
+            var title = UIKit.Label("Title", page, "Kitchen Table", 54, Theme.Text, TextAnchor.MiddleLeft, FontStyle.Bold).Outline(1.5f).Titled();
+            title.rectTransform.Place(156, 860, 800, 80);
+            var sub = UIKit.Label("Sub", page, "A free table for playtesting and casual games, like Cockatrice: you move the cards, nothing is enforced.",
+                18, Theme.TextDim, TextAnchor.UpperLeft);
+            sub.rectTransform.Place(80, 812, 1300, 44);
+
+            // ---- how it works (left)
+            var how = Card(page, 70, 150, 860, 640);
+            var ht = UIKit.Label("Title", how, "HOW IT WORKS", 16, new Color(0.5f, 1f, 0.82f), TextAnchor.UpperLeft, FontStyle.Bold).Titled();
+            ht.rectTransform.Place(30, 590, 800, 30);
+            var hb = UIKit.Label("Body", how,
+                "<b>No rules engine.</b> Unlike Forge games, the table doesn't know the rules: you play the cards like on a real table. " +
+                "That's what lets it use cards that don't exist anywhere else.\n\n" +
+                "<b>Start a table:</b> on Home, set the mode to KITCHEN TABLE, pick your deck and press Play. Each other seat gets a deck " +
+                "(CHOOSE THEIR DECKS picks them, great for goldfishing a matchup). Ctrl + click a seat's nameplate to play from their side.\n\n" +
+                "<b>Moving cards:</b> drag cards anywhere on your battlefield, into your hand, onto a pile, or to another player. " +
+                "Drag a pile to take its top card. Click to tap, double-click a hand card to play it, right-click anything for every action. " +
+                "Hold Alt to zoom, Q / E to turn a card, F to transform double-faced cards. Ctrl + Z undoes.\n\n" +
+                "<b>With friends:</b> PLAY ON LAN (HOST / JOIN) on Home. Everyone on the same network; custom sets are copied to " +
+                "the others automatically, so everybody plays with the same cards.\n\n" +
+                "<b>Decks:</b> build them in Decks like any other. Set the format (Commander, 60 or 40 cards) and the card pool " +
+                "(your custom sets, real cards, or both).",
+                17, new Color(0.86f, 0.88f, 0.92f), TextAnchor.UpperLeft);
+            hb.rectTransform.Place(30, 24, 800, 556);
+            hb.supportRichText = true;
+
+            // ---- custom sets (right)
+            var sets = Card(page, 960, 150, 890, 640);
+            var st = UIKit.Label("Title", sets, "CUSTOM SETS FROM MAGIC SET EDITOR", 16, new Color(0.5f, 1f, 0.82f), TextAnchor.UpperLeft, FontStyle.Bold).Titled();
+            st.rectTransform.Place(30, 590, 830, 30);
+            var steps = UIKit.Label("Steps", sets,
+                "<b>1.</b>  In Magic Set Editor, open your set and choose <b>File → Export → Cockatrice</b>. Keep the card images it " +
+                "exports in the same folder as the .xml (or a folder inside it).\n\n" +
+                "<b>2.</b>  Press <b>Import a set</b> below and choose that .xml file. MTG United copies the cards and finds their images by name.\n\n" +
+                "<b>3.</b>  In Decks, open a deck, set <b>POOL</b> to your set, and build. Search works with Scryfall words too " +
+                "(t:creature c:r mv<=3).\n\n" +
+                "<b>4.</b>  Play it here at the kitchen table. Tokens and double-faced cards from the set work: right-click a card " +
+                "to create its tokens, press F to transform.\n\n" +
+                "Changed the set in MSE? Export again and import over it: same set code, it's replaced.",
+                17, new Color(0.86f, 0.88f, 0.92f), TextAnchor.UpperLeft);
+            steps.rectTransform.Place(30, 170, 830, 410);
+            steps.supportRichText = true;
+            kitchenSets = UIKit.Label("Sets", sets, "", 16, Theme.Text, TextAnchor.UpperLeft, FontStyle.Bold);
+            kitchenSets.rectTransform.Place(30, 112, 830, 50);
+            kitchenSets.supportRichText = true;
+            UIKit.Pill("Import", sets, "Import a set", new Color(0.12f, 0.45f, 0.38f), () => customSets.Import(), 30, 26, 300, 70, 26);
+            var manage = UIKit.Button("Manage", sets, "MY SETS", Theme.Secondary, () => customSets.Open(), 17);
+            ((RectTransform)manage.transform).Place(350, 36, 200, 52);
+            var play = UIKit.Button("Play", sets, "PLAY AT THE TABLE", new Color(0.62f, 0.33f, 0.12f), () =>
+            {
+                SetPlayMode("table");
+                SelectTab("home");
+            }, 17);
+            ((RectTransform)play.transform).Place(570, 36, 290, 52);
+
+            CustomSets.Changed += RefreshKitchen;
+            RefreshKitchen();
+            return page;
+        }
+
+        void RefreshKitchen()
+        {
+            if (kitchenSets == null) return;
+            var all = CustomSets.All;
+            if (all.Count == 0) { kitchenSets.text = "<color=#9aa0aa>No custom sets yet.</color>"; return; }
+            var names = new List<string>();
+            int cards = 0;
+            foreach (var s in all) { names.Add(s.Name); cards += s.Cards.Count; }
+            kitchenSets.text = "Your sets: " + string.Join(", ", names) + "  <color=#9aa0aa>(" + cards + " cards)</color>";
+        }
+
         // =================================================================================================== decks
 
         RectTransform BuildDecks(RectTransform parent)
@@ -358,11 +477,33 @@ namespace MTGUnited
             sr.movementType = ScrollRect.MovementType.Clamped;
             UIKit.AddScrollbar(sr);
 
-            // Footer: delete on the left, Edit Deck on the right.
+            // Footer: deck tools on the left (act on the selected deck), custom sets, Edit Deck on the right.
             decksFooter = UIKit.Rect("Footer", page).Stretch();
-            UIKit.IconButton("Delete", decksFooter, Icons.Trash, 80, 34, 64, DeleteSelected);
+            float fx = 80;
+            void Tool(string label, Sprite icon, UnityEngine.Events.UnityAction a)
+            {
+                UIKit.IconButton(label, decksFooter, icon, fx, 44, 58, a, label);
+                var l = UIKit.Label(label + "Label", decksFooter, label, 13, Theme.TextDim, TextAnchor.UpperCenter);
+                l.rectTransform.Place(fx - 20, 14, 98, 26);
+                fx += 80;
+            }
+            Tool("Delete", Icons.Trash, DeleteSelected);
+            Tool("Rename", Icons.Pencil, () =>
+            {
+                var d = FindDeck(selectedDeckId);
+                if (d == null) { gc.Toasts.Show("Select a deck to rename."); return; }
+                StartRename(d);
+            });
+            Tool("Duplicate", Icons.Copy, DuplicateSelected);
+            Tool("Export", Icons.Export, () =>
+            {
+                var d = FindDeck(selectedDeckId);
+                if (d == null) { gc.Toasts.Show("Select a deck to export."); return; }
+                DeckFiles.Export(d.Name, DeckModel.From(d), gc.Toasts);
+            });
+            Tool("Import", Icons.Import, ImportDeckFile);
             var sets = UIKit.Button("CustomSets", decksFooter, "CUSTOM SETS", new Color(0.55f, 0.3f, 0.12f), () => customSets.Open(), 18);
-            ((RectTransform)sets.transform).Place(170, 40, 240, 54);
+            ((RectTransform)sets.transform).Place(fx + 20, 46, 240, 54);
             UIKit.Pill("EditDeck", decksFooter, "Edit Deck", new Color(0.16f, 0.3f, 0.72f), () => OpenBuilder(FindDeck(selectedDeckId)), 1530, 30, 330, 80, 36);
 
             RebuildDeckGrid();
@@ -372,6 +513,7 @@ namespace MTGUnited
         void RebuildDeckGrid()
         {
             foreach (Transform c in deckGrid) Destroy(c.gameObject);
+            nameBanners.Clear();
             deckCountText.text = decks.Count + (decks.Count == 1 ? " deck" : " decks");
 
             // "New deck" tile
@@ -403,7 +545,9 @@ namespace MTGUnited
             bool selected = deck.Id == selectedDeckId;
             var tile = UIKit.Rect("Deck", deckGrid);
             var hit = tile.gameObject.AddComponent<Image>(); hit.color = Color.clear;
-            tile.gameObject.AddComponent<PointerEvents>().OnClick = () => OnDeckBoxClick(deck);
+            var tilePe = tile.gameObject.AddComponent<PointerEvents>();
+            tilePe.OnClick = () => OnDeckBoxClick(deck);
+            tilePe.OnRightClick = () => DeckBoxMenu(deck);
 
             if (selected)
             {
@@ -416,8 +560,7 @@ namespace MTGUnited
             box.raycastTarget = false;
             box.gameObject.AddComponent<Mask>().showMaskGraphic = true;
             var artRt = UIKit.Rect("Art", box.transform);
-            artRt.anchorMin = artRt.anchorMax = new Vector2(0.5f, 0.5f);
-            artRt.sizeDelta = new Vector2(316, 442); artRt.anchoredPosition = new Vector2(0, -60);
+            UIKit.CropToArt(artRt, new Vector2(316, 254));   // just the illustration, no card frame
             var art = artRt.gameObject.AddComponent<RawImage>();
             art.raycastTarget = false;
             art.texture = GameArt.CardBack;
@@ -444,14 +587,40 @@ namespace MTGUnited
             var name = UIKit.Label("Name", banner.transform, deck.Name, 23, new Color(1f, 0.86f, 0.55f), TextAnchor.MiddleCenter, FontStyle.Bold).Titled();
             name.rectTransform.Stretch(18, 0, 18, 0);
             name.resizeTextForBestFit = true; name.resizeTextMinSize = 14; name.resizeTextMaxSize = 23;
+            nameBanners[deck.Id ?? ""] = banner.rectTransform;
+            // Click the name of the selected deck to rename it right here.
+            banner.raycastTarget = true;
+            var bannerPe = banner.gameObject.AddComponent<PointerEvents>();
+            bannerPe.OnClick = () =>
+            {
+                if (deck.Id == selectedDeckId && Time.unscaledTime - selectedAt > 0.5f) StartRename(deck);
+                else OnDeckBoxClick(deck);
+            };
+            bannerPe.OnRightClick = () => DeckBoxMenu(deck);
 
             var count = UIKit.Label("Count", box.transform, deck.CardCount + "", 15, Color.white, TextAnchor.UpperRight, FontStyle.Bold).Outline(1.5f);
             count.rectTransform.Stretch(0, 0, 36, 10);
 
+            // Favourite star (top-left): click to star / unstar; starred decks come first.
+            var starRt = UIKit.Rect("Favorite", tile);
+            starRt.anchorMin = starRt.anchorMax = new Vector2(0, 1); starRt.pivot = new Vector2(0, 1);
+            starRt.sizeDelta = new Vector2(44, 44); starRt.anchoredPosition = new Vector2(8, -8);
+            var starImg = starRt.gameObject.AddComponent<Image>();
+            starImg.sprite = deck.Favorite ? Icons.Star : Icons.StarOutline;
+            starImg.color = deck.Favorite ? new Color(1f, 0.8f, 0.3f) : new Color(1f, 1f, 1f, 0.55f);
+            var starShadow = UIKit.AddShadow(starRt, 10, new Vector2(0, -2), 0.5f);
+            starShadow.raycastTarget = false;
+            starRt.gameObject.AddComponent<HoverPop>().Scale = 1.2f;
+            var starPe = starRt.gameObject.AddComponent<PointerEvents>();
+            var starPop = starRt.GetComponent<HoverPop>();
+            starPe.OnEnter = () => starPop.Hovered = true;
+            starPe.OnExit = () => starPop.Hovered = false;
+            starPe.OnClick = () => ToggleFavorite(deck);
+
             var model = DeckModel.From(deck);
-            string cmd = model.Commanders.Count > 0 ? model.Commanders[0] : null;
+            string cmd = !string.IsNullOrWhiteSpace(deck.Cover) ? deck.Cover.Trim() : model.Commanders.Count > 0 ? model.Commanders[0] : null;
             if (cmd != null && CardImageCache.Instance != null)
-                CardImageCache.Instance.Get(cmd, null, tex => { if (art != null) art.texture = tex; });
+                CardImageCache.Instance.Get(cmd, CustomSets.Get(cmd)?.Set, tex => { if (art != null) art.texture = tex; });
             if (model.Commanders.Count > 0)
                 CardCatalog.Ensure(model.Commanders, () => { if (pips != null) FillPips(pips, model.Commanders); });
         }
@@ -477,8 +646,9 @@ namespace MTGUnited
                 pip.anchorMin = pip.anchorMax = new Vector2(0.5f, 0.5f); pip.sizeDelta = new Vector2(28, 28);
                 pip.anchoredPosition = new Vector2(x, 0);
                 var ring = pip.gameObject.AddComponent<Image>(); ring.sprite = Icons.Circle; ring.color = new Color(0.05f, 0.05f, 0.05f); ring.raycastTarget = false;
-                var fill = UIKit.Rect("Fill", pip).Stretch(3, 3, 3, 3).gameObject.AddComponent<Image>();
-                fill.sprite = Icons.Circle; fill.color = Theme.ForManaColor(ch.ToString()); fill.raycastTarget = false;
+                var forgePip = ManaSprites.Get(ch.ToString());   // Forge's mana symbol art
+                var fill = UIKit.Rect("Fill", pip).Stretch(forgePip != null ? 1 : 3, forgePip != null ? 1 : 3, forgePip != null ? 1 : 3, forgePip != null ? 1 : 3).gameObject.AddComponent<Image>();
+                fill.sprite = forgePip != null ? forgePip : Icons.Circle; fill.color = forgePip != null ? Color.white : Theme.ForManaColor(ch.ToString()); fill.raycastTarget = false;
                 x += 30f;
             }
         }
@@ -508,7 +678,7 @@ namespace MTGUnited
                     if (!decks.Contains(d)) decks.Insert(0, d);
                     if (string.IsNullOrEmpty(selectedDeckId)) selectedDeckId = d.Id;
                 }
-                decks.Sort((a, b) => b.Updated.CompareTo(a.Updated));
+                DeckStore.Sort(decks);
                 PlayerPrefs.SetString("selectedDeck", selectedDeckId);
                 RebuildDeckGrid();
                 RefreshPlayCluster();
@@ -522,23 +692,119 @@ namespace MTGUnited
         {
             var deck = FindDeck(selectedDeckId);
             if (deck == null) { gc.Toasts.Show("Select a deck to delete."); return; }
-            // Two clicks within 3 s confirm, so a deck is never lost to one stray click.
-            if (pendingDelete != deck.Id || Time.unscaledTime - pendingDeleteAt > 3f)
+            ConfirmDialog.Instance.Show("Delete this deck?", "\"" + deck.Name + "\" will be deleted for good.",
+                ("Delete", ConfirmDialog.Danger, () => DeleteDeck(deck)),
+                ("Cancel", Theme.Secondary, null));
+        }
+
+        void DuplicateSelected()
+        {
+            var deck = FindDeck(selectedDeckId);
+            if (deck == null) { gc.Toasts.Show("Select a deck to duplicate."); return; }
+            var copy = new SavedDeck
             {
-                pendingDelete = deck.Id; pendingDeleteAt = Time.unscaledTime;
-                gc.Toasts.Show("Click the trash again to delete \"" + deck.Name + "\".");
-                return;
-            }
-            pendingDelete = null;
+                Name = deck.Name + " (copy)", List = deck.List, Commander = deck.Commander, Format = deck.Format,
+                Pool = deck.Pool, Cover = deck.Cover,
+            };
+            DeckStore.Save(copy);
+            decks.Add(copy);
+            DeckStore.Sort(decks);
+            Sound.Play(Sfx.Token, 0.6f);
+            SelectDeck(copy.Id);
+        }
+
+        /// <summary>A deck list file (.txt / .dck / .dec) becomes a new deck.</summary>
+        void ImportDeckFile()
+        {
+            ImportDialog.Instance.Open((model, name) =>
+            {
+                var d = new SavedDeck { Name = string.IsNullOrWhiteSpace(name) ? "Imported Deck" : name };
+                model.WriteTo(d);
+                if (model.Commanders.Count == 0 && model.Total <= 60) d.Format = model.Total <= 40 ? DeckFormat.Limited : DeckFormat.Constructed;
+                DeckStore.Save(d);
+                decks.Add(d);
+                DeckStore.Sort(decks);
+                SelectDeck(d.Id);
+                gc.Toasts.Show("Imported " + model.Total + " cards. Type a name for the deck.");
+                StartRename(d);   // name it right away (the list itself has no name)
+            });
+        }
+
+        readonly Dictionary<string, RectTransform> nameBanners = new Dictionary<string, RectTransform>();
+        float selectedAt;
+
+        /// <summary>Turns the deck's name banner into a text field; Enter or clicking away saves, Esc cancels.</summary>
+        void StartRename(SavedDeck deck)
+        {
+            if (!nameBanners.TryGetValue(deck.Id ?? "", out var banner) || banner == null) return;
+            if (banner.Find("Rename") != null) return;
+            var field = UIKit.Input("Rename", banner, "Deck name", false, 20);
+            var fr = (RectTransform)field.transform;
+            fr.Stretch(10, 6, 10, 6);
+            field.GetComponent<Image>().color = new Color(0f, 0f, 0f, 0.85f);
+            field.textComponent.alignment = TextAnchor.MiddleCenter;
+            field.characterLimit = 60;
+            field.text = deck.Name;
+            var label = banner.Find("Name");
+            if (label != null) label.gameObject.SetActive(false);
+            bool done = false;
+            field.onEndEdit.AddListener(text =>
+            {
+                if (done) return;
+                done = true;
+                string name = (text ?? "").Trim();
+                bool cancelled = Input.GetKeyDown(KeyCode.Escape);
+                if (!cancelled && name.Length > 0 && name != deck.Name)
+                {
+                    deck.Name = name;
+                    DeckStore.Save(deck);
+                    DeckStore.Sort(decks);
+                    Sound.Play(Sfx.CardPlace, 0.5f);
+                }
+                RebuildDeckGrid();
+                RefreshPlayCluster();
+            });
+            field.Select();
+            field.ActivateInputField();
+            Sound.Play(Sfx.UiClick, 0.5f);
+        }
+
+        /// <summary>Right-click a deck box: every deck action in one place.</summary>
+        void DeckBoxMenu(SavedDeck deck)
+        {
+            if (selectedDeckId != deck.Id) SelectDeck(deck.Id);
+            PopupMenu.Instance.Show(Input.mousePosition, new List<(string, Action)>
+            {
+                (deck.Name.ToUpperInvariant(), null),
+                ("Edit", () => OpenBuilder(deck)),
+                ("Rename", () => StartRename(deck)),
+                (deck.Favorite ? "Remove from favourites" : "Add to favourites", () => ToggleFavorite(deck)),
+                ("Duplicate", DuplicateSelected),
+                ("Export...", () => DeckFiles.Export(deck.Name, DeckModel.From(deck), gc.Toasts)),
+                ("Delete", DeleteSelected),
+            });
+        }
+
+        void ToggleFavorite(SavedDeck deck)
+        {
+            deck.Favorite = !deck.Favorite;
+            DeckStore.Save(deck);
+            DeckStore.Sort(decks);
+            Sound.Play(deck.Favorite ? Sfx.Counter : Sfx.UiClick, 0.6f);
+            RebuildDeckGrid();
+        }
+
+        void DeleteDeck(SavedDeck deck)
+        {
             DeckStore.Delete(deck);
             decks.Remove(deck);
             SelectDeck(decks.Count > 0 ? decks[0].Id : "");
             gc.Toasts.Show("Deleted \"" + deck.Name + "\"");
         }
-        string pendingDelete; float pendingDeleteAt;
 
         void SelectDeck(string id)
         {
+            if (selectedDeckId != (id ?? "")) selectedAt = Time.unscaledTime;   // a click that selects doesn't also rename
             selectedDeckId = id ?? "";
             PlayerPrefs.SetString("selectedDeck", selectedDeckId);
             RebuildDeckGrid();
@@ -627,9 +893,7 @@ namespace MTGUnited
             artMask.raycastTarget = false;
             artMask.gameObject.AddComponent<Mask>().showMaskGraphic = true;
             var artImg = UIKit.Rect("Img", artMask.transform);
-            artImg.anchorMin = artImg.anchorMax = new Vector2(0.5f, 0.5f);
-            artImg.sizeDelta = new Vector2(600, 840);
-            artImg.anchoredPosition = new Vector2(0, -150);
+            UIKit.CropToArt(artImg, new Vector2(600, 218));
             deckArt = artImg.gameObject.AddComponent<RawImage>();
             deckArt.raycastTarget = false;
             var cap = UIKit.Panel("Caption", deckTile, new Color(0.02f, 0.02f, 0.04f, 0.8f), false);
@@ -660,6 +924,10 @@ namespace MTGUnited
             ((RectTransform)random.transform).Place(416, 28, 156, 42);
             aiRandomBtn = random.GetComponent<Image>();
             forgeOnly.Add(aiText.gameObject); forgeOnly.Add(precon.gameObject); forgeOnly.Add(random.gameObject);
+            // Kitchen table, playing alone: pick each other seat's deck (goldfishing / playtesting a matchup).
+            var seatDecks = UIKit.Button("SeatDecks", pod, "CHOOSE THEIR DECKS", new Color(0.16f, 0.3f, 0.72f), () => SeatDeckMenu(Input.mousePosition), 16);
+            ((RectTransform)seatDecks.transform).Place(26, 28, 546, 42);
+            seatDecksButton = seatDecks.gameObject;
 
             // Tile 3: AI skill. Strong is Forge's maximum (simulates mulligans and combat) and is slow in big pods.
             var skill = Tile(playCluster, 1260, 190, 600, 216);
@@ -726,6 +994,7 @@ namespace MTGUnited
             foreach (var go in forgeOnly) go.SetActive(!table);
             tableHint.gameObject.SetActive(table);
             lanButton.SetActive(table);
+            seatDecksButton.SetActive(table);
             skillTitle.text = table ? "Mode" : "Mode & AI skill";
             modeForgeBtn.color = table ? Theme.Secondary : Theme.Accent;
             modeTableBtn.color = table ? Theme.Accent : Theme.Secondary;
@@ -748,8 +1017,9 @@ namespace MTGUnited
                 deckTitle.text = deck.Name;
                 string cmd = deck.CommanderName;
                 deckSub.text = (cmd ?? "No commander set") + "  ·  " + deck.CardCount + " cards";
-                if (!string.IsNullOrEmpty(cmd) && CardImageCache.Instance != null)
-                    CardImageCache.Instance.Get(cmd, null, tex =>
+                string artCard = deck.ArtCard;
+                if (!string.IsNullOrEmpty(artCard) && CardImageCache.Instance != null)
+                    CardImageCache.Instance.Get(artCard, CustomSets.Get(artCard)?.Set, tex =>
                     {
                         if (deckArt != null) deckArt.texture = tex;
                         if (heroArt != null) heroArt.texture = tex;
@@ -774,8 +1044,10 @@ namespace MTGUnited
         void SelectTab(string id)
         {
             if (id == "options") { gc.Options.Open(); return; }   // a pop-up, not a page
+            // Leaving the builder with unsaved changes asks first, then switches.
+            if (builder != null && builder.IsOpen && builder.Dirty) { builder.RequestClose(() => SelectTab(id)); return; }
             currentTab = id;
-            if (builder != null && builder.IsOpen) builder.Done();   // leaving the builder saves the deck
+            if (builder != null && builder.IsOpen) builder.Done();
             foreach (var kv in tabs)
             {
                 bool on = kv.Key == id;
@@ -856,14 +1128,51 @@ namespace MTGUnited
         {
             var deck = FindDeck(selectedDeckId);
             if (deck == null) { gc.Toasts.Show("Pick a deck first (Decks tab).", true); return; }
-            var others = decks.FindAll(d => d.Id != deck.Id);
             var seats = new List<(string, SavedDeck)> { (PlayerPrefs.GetString("playerName", "Player"), deck) };
-            for (int i = 0; i < opponents; i++)
-            {
-                var d = others.Count > 0 ? others[i % others.Count] : deck;
-                seats.Add(("Player " + (i + 2), d));
-            }
+            for (int i = 0; i < opponents; i++) seats.Add(("Player " + (i + 2), SeatDeck(i + 2, deck)));
             gc.Table.Begin(seats);
+        }
+
+        GameObject seatDecksButton;
+
+        /// <summary>The deck chosen for a seat (2, 3...), else your other decks in turn, else your own.</summary>
+        SavedDeck SeatDeck(int seat, SavedDeck mine)
+        {
+            string id = PlayerPrefs.GetString("seatDeck" + seat, "");
+            if (id == "same") return mine;
+            var chosen = FindDeck(id);
+            if (chosen != null) return chosen;
+            var others = decks.FindAll(d => d.Id != mine.Id);
+            return others.Count > 0 ? others[(seat - 2) % others.Count] : mine;
+        }
+
+        void SeatDeckMenu(Vector2 at)
+        {
+            var mine = FindDeck(selectedDeckId);
+            if (mine == null) { gc.Toasts.Show("Pick your deck first (Decks tab).", true); return; }
+            var items = new List<(string, Action)> { ("OTHER SEATS' DECKS", null) };
+            for (int s = 2; s <= opponents + 1; s++)
+            {
+                int seat = s;
+                string id = PlayerPrefs.GetString("seatDeck" + seat, "");
+                string label = id == "same" ? "same as yours" : FindDeck(id) != null ? FindDeck(id).Name : "auto: " + SeatDeck(seat, mine).Name;
+                items.Add(("Seat " + seat + ":  " + label, () => SeatDeckChoice(seat, at)));
+            }
+            PopupMenu.Instance.Show(at, items);
+        }
+
+        void SeatDeckChoice(int seat, Vector2 at)
+        {
+            var items = new List<(string, Action)> { ("SEAT " + seat, null) };
+            void Pick(string id) { PlayerPrefs.SetString("seatDeck" + seat, id); Sound.Play(Sfx.UiClick, 0.6f); SeatDeckMenu(at); }
+            items.Add(("Automatic (your other decks in turn)", () => Pick("")));
+            items.Add(("Same deck as yours (mirror)", () => Pick("same")));
+            foreach (var d in decks)
+            {
+                var deck = d;
+                items.Add((deck.Name + "  ·  " + DeckFormat.Label(deck.Format), () => Pick(deck.Id)));
+            }
+            PopupMenu.Instance.Show(at, items);
         }
 
         void OnPlay()

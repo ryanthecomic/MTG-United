@@ -102,10 +102,20 @@ namespace MTGUnited
             artMask.rectTransform.Place(8, 8, 110, 70);
             artMask.gameObject.AddComponent<Mask>().showMaskGraphic = true;
             var artRt = UIKit.Rect("Art", artMask.transform);
-            artRt.anchorMin = artRt.anchorMax = new Vector2(0.5f, 0.5f);
-            artRt.sizeDelta = new Vector2(110, 154); artRt.anchoredPosition = new Vector2(0, -22);
+            UIKit.CropToArt(artRt, new Vector2(110, 70));   // just the illustration
             headerArt = artRt.gameObject.AddComponent<RawImage>();
             headerArt.raycastTarget = false;
+            coverSlot = artMask.rectTransform;
+            coverGlow = artMask.gameObject.AddComponent<UnityEngine.UI.Outline>();
+            coverGlow.effectColor = new Color(1f, 0.75f, 0.3f, 0f); coverGlow.effectDistance = new Vector2(3, -3);
+            var coverPe = artMask.gameObject.AddComponent<PointerEvents>();
+            coverPe.OnRightClick = () =>
+            {
+                if (string.IsNullOrWhiteSpace(deck.Cover)) return;
+                deck.Cover = "";   // right-click: back to the commander's art
+                Sound.Play(Sfx.CardSlide, 0.5f);
+                Refresh();
+            };
             nameInput = UIKit.Input("Name", plate.transform, "Deck name", false, 26);
             nameInput.GetComponent<RectTransform>().Place(128, 34, 400, 46);
             nameInput.GetComponent<Image>().color = new Color(0, 0, 0, 0.25f);
@@ -152,7 +162,10 @@ namespace MTGUnited
             poolButton.GetComponent<Image>().pixelsPerUnitMultiplier = 32f / 52f;
 
             hintText = UIKit.Label("Hint", root, "", 15, Theme.TextDim, TextAnchor.MiddleLeft);
-            hintText.rectTransform.Place(600, Top - 118, 700, 30);
+            hintText.rectTransform.Place(1070, Top - 150, 360, 30);
+            hintText.resizeTextForBestFit = true; hintText.resizeTextMinSize = 10; hintText.resizeTextMaxSize = 15;
+
+            BuildFilters();
         }
 
         void BuildCollection()
@@ -217,10 +230,22 @@ namespace MTGUnited
 
         void BuildFooter()
         {
-            UIKit.IconButton("Delete", root, Icons.Trash, 40, 30, 60, DeleteDeck);
-            UIKit.Pill("Done", root, "Done", new Color(0.93f, 0.42f, 0.1f), Done, 1560, 26, 320, 84, 40);
-            // X in the top-right corner: back to the deck list (saves, like Done).
-            var x = UIKit.IconButton("Close", root, Icons.Cross, 1838, Top - 82, 52, Done);
+            // Bottom-left: delete, duplicate, export to a file, import from a file.
+            float fx = 40;
+            void Tool(string label, Sprite icon, UnityEngine.Events.UnityAction a)
+            {
+                UIKit.IconButton(label, root, icon, fx, 36, 56, a, label);
+                var l = UIKit.Label(label + "Label", root, label, 13, Theme.TextDim, TextAnchor.UpperCenter);
+                l.rectTransform.Place(fx - 20, 8, 96, 26);
+                fx += 76;
+            }
+            Tool("Delete", Icons.Trash, DeleteDeck);
+            Tool("Duplicate", Icons.Copy, Duplicate);
+            Tool("Export", Icons.Export, ExportDeck);
+            Tool("Import", Icons.Import, ImportDeck);
+            UIKit.Pill("Done", root, "Save", new Color(0.93f, 0.42f, 0.1f), () => CloseEditor(true), 1560, 26, 320, 84, 40);
+            // X in the top-right corner: leave (asks to save changes, if there are any).
+            var x = UIKit.IconButton("Close", root, Icons.Cross, 1920 - 8 - 52, Top - 8 - 52, 52, () => RequestClose());
             x.GetComponent<Image>().color = new Color(0f, 0f, 0f, 0.45f);
         }
 
@@ -264,18 +289,99 @@ namespace MTGUnited
             transform.SetAsLastSibling();
             FadeIn.Play(gameObject, Motion.Travel, 0.94f);   // the deck box opens into the editor
             textDialog.gameObject.SetActive(false);
+            Remember();
             Refresh();
             CardCatalog.Ensure(model.AllNames(), Refresh);
         }
 
-        /// <summary>Saves and leaves (also used when the player switches tab).</summary>
-        public void Done()
+        // ---------------------------------------------------------------- unsaved changes
+
+        string openSnapshot, origName, origList, origCommander, origFormat, origPool, origCover;
+
+        /// <summary>Everything the editor can change, as one string (compared to tell if there are unsaved changes).</summary>
+        string Snapshot()
+        {
+            var tmp = new SavedDeck();
+            model.WriteTo(tmp);
+            return (nameInput.text ?? "").Trim() + "\u0001" + tmp.List + "\u0001" + deck.Format + "\u0001" + deck.Pool + "\u0001" + deck.Cover;
+        }
+
+        void Remember()
+        {
+            openSnapshot = Snapshot();
+            origName = deck.Name; origList = deck.List; origCommander = deck.Commander;
+            origFormat = deck.Format; origPool = deck.Pool; origCover = deck.Cover;
+        }
+
+        public bool Dirty => IsOpen && deck != null && Snapshot() != openSnapshot;
+
+        /// <summary>Leaves the editor (tab switch, X, Esc): asks first when there are unsaved changes.</summary>
+        public void Done() => RequestClose();
+
+        public void RequestClose(Action after = null)
+        {
+            if (!IsOpen) { after?.Invoke(); return; }
+            if (!Dirty) { CloseEditor(false); after?.Invoke(); return; }
+            ConfirmDialog.Instance.Show("Save changes?",
+                "\"" + CurrentName + "\" has changes that aren't saved yet.",
+                ("Save", Theme.Accent, () => { CloseEditor(true); after?.Invoke(); }),
+                ("Discard", ConfirmDialog.Danger, () => { Revert(); CloseEditor(false); after?.Invoke(); }),
+                ("Keep editing", Theme.Secondary, null));
+        }
+
+        string CurrentName => string.IsNullOrWhiteSpace(nameInput.text) ? deck.Name : nameInput.text.Trim();
+
+        void Revert()
+        {
+            deck.Name = origName; deck.List = origList; deck.Commander = origCommander;
+            deck.Format = origFormat; deck.Pool = origPool; deck.Cover = origCover;
+        }
+
+        void CloseEditor(bool save)
         {
             if (!IsOpen) return;
-            Save();
+            if (save) Save();
+            textDialog.gameObject.SetActive(false);
             gameObject.SetActive(false);
             gc.Preview.Hide();
             onDone?.Invoke(deck);
+        }
+
+        /// <summary>Esc: closes the text dialog first, then the editor.</summary>
+        public void Escape()
+        {
+            if (textDialog.gameObject.activeSelf) { textDialog.gameObject.SetActive(false); return; }
+            RequestClose();
+        }
+
+        // ---------------------------------------------------------------- duplicate / export / import
+
+        /// <summary>Called with a new deck made here (a duplicate) so the deck list can show it.</summary>
+        public Action<SavedDeck> DeckAdded;
+
+        void Duplicate()
+        {
+            var copy = new SavedDeck { Name = CurrentName + " (copy)", Format = deck.Format, Pool = deck.Pool, Cover = deck.Cover };
+            model.WriteTo(copy);
+            DeckStore.Save(copy);
+            DeckAdded?.Invoke(copy);
+            Sound.Play(Sfx.Token, 0.6f);
+            gc.Toasts.Show("Saved a copy: " + copy.Name);
+        }
+
+        void ExportDeck() => DeckFiles.Export(CurrentName, model, gc.Toasts);
+
+        /// <summary>Replaces this deck's cards with a list from a file (.txt Arena/Moxfield/MTGO, Forge .dck, .dec).</summary>
+        void ImportDeck()
+        {
+            ImportDialog.Instance.Open((imported, fileName) =>
+            {
+                model = imported;
+                if (nameInput.text.Trim() == "New Deck" || nameInput.text.Trim().Length == 0) nameInput.text = fileName;
+                Refresh();
+                CardCatalog.Ensure(model.AllNames(), Refresh);
+                gc.Toasts.Show("Imported " + model.Total + " cards. Save to keep them, or close and discard.");
+            });
         }
 
         void Save()
@@ -286,6 +392,13 @@ namespace MTGUnited
         }
 
         void DeleteDeck()
+        {
+            ConfirmDialog.Instance.Show("Delete this deck?", "\"" + CurrentName + "\" will be deleted for good.",
+                ("Delete", ConfirmDialog.Danger, DeleteNow),
+                ("Cancel", Theme.Secondary, null));
+        }
+
+        void DeleteNow()
         {
             DeckStore.Delete(deck);
             gameObject.SetActive(false);
@@ -302,12 +415,22 @@ namespace MTGUnited
             query = text.Trim();
             if (query.Length > 0 && scope == Scope.Deck) scope = Scope.All;   // typing means "find cards"
             if (query.Length > 0 && columnsLayout) SetLayout(false);
-            searchAt = Time.unscaledTime + 0.25f;   // debounce: one request after typing pauses
+            searchAt = Time.unscaledTime + (ScryfallSearch.LooksLikeSyntax(query) ? 0.6f : 0.25f);   // debounce: one request after typing pauses
             if (query.Length == 0) { results.Clear(); searching = false; Refresh(); }
         }
 
         void Update()
         {
+#if ENABLE_LEGACY_INPUT_MANAGER
+            bool ctrl = Input.GetKey(KeyCode.LeftControl) || Input.GetKey(KeyCode.RightControl);
+            if (ctrl && Input.GetKeyDown(KeyCode.S) && !(ConfirmDialog.Instance != null && ConfirmDialog.Instance.IsOpen))
+            {
+                Save();
+                Remember();
+                Sound.Play(Sfx.CardPlace, 0.6f);
+                gc.Toasts.Show("Deck saved");
+            }
+#endif
             if (searchAt > 0 && Time.unscaledTime >= searchAt)
             {
                 searchAt = -1f;
@@ -315,8 +438,124 @@ namespace MTGUnited
                 {
                     searching = true;
                     UpdateHint();
-                    CardCatalog.Search(query, (q, list) => { results = list; searching = false; if (scope == Scope.All) Refresh(); });
+                    searchError = null;
+                    if (ScryfallSearch.LooksLikeSyntax(query))
+                    {
+                        // Scryfall syntax: custom sets locally, real cards from Scryfall itself.
+                        string q = query;
+                        var custom = ScryfallSearch.SearchCustom(q, 200);
+                        var pool = Pool();
+                        bool real = pool.Count == 0 || pool.Contains("REAL");
+                        if (!real) { results = custom; searching = false; if (scope == Scope.All) Refresh(); }
+                        else
+                        {
+                            if (scryfallRun != null) StopCoroutine(scryfallRun);
+                            scryfallRun = StartCoroutine(ScryfallSearch.SearchReal(q, 175, (list, error) =>
+                            {
+                                scryfallRun = null;
+                                if (q != query) return;   // typed on since
+                                custom.AddRange(list);
+                                results = custom;
+                                searchError = error;
+                                searching = false;
+                                if (scope == Scope.All) Refresh(); else UpdateHint();
+                            }));
+                        }
+                    }
+                    else CardCatalog.Search(query, (q, list) => { results = list; searching = false; if (scope == Scope.All) Refresh(); });
                 }
+            }
+        }
+
+        // ---------------------------------------------------------------- colour / land filters (Arena's pip row)
+
+        readonly HashSet<char> colorFilter = new HashSet<char>();   // W U B R G, C = colourless, M = multicolour
+        int landFilter;                                             // 0 any, 1 lands only, 2 nonlands only
+        readonly Dictionary<string, Image> filterButtons = new Dictionary<string, Image>();
+        string searchError;
+        Coroutine scryfallRun;
+
+        bool FiltersOn => colorFilter.Count > 0 || landFilter != 0;
+
+        /// <summary>A card passes if it has any of the picked colours (C: colourless, M: two or more), and matches land / nonland.</summary>
+        bool PassesFilter(CardInfo c)
+        {
+            if (c == null) return false;
+            if (landFilter == 1 && !c.Land) return false;
+            if (landFilter == 2 && c.Land) return false;
+            if (colorFilter.Count == 0) return true;
+            string cols = (c.Colors ?? "").ToUpperInvariant();
+            foreach (char f in colorFilter)
+            {
+                if (f == 'C' && cols.Length == 0) return true;
+                if (f == 'M' && cols.Length > 1) return true;
+                if ("WUBRG".IndexOf(f) >= 0 && cols.IndexOf(f) >= 0) return true;
+            }
+            return false;
+        }
+
+        void BuildFilters()
+        {
+            float fx = 600, y = Top - 150, size = 34;
+            Image Pip(string key, Sprite sprite, Color fallback, string letter)
+            {
+                var b = UIKit.Rect("Filter" + key, root);
+                b.Place(fx, y, size, size);
+                var img = b.gameObject.AddComponent<Image>();
+                img.sprite = sprite != null ? sprite : Icons.Circle;
+                img.color = sprite != null ? Color.white : fallback;
+                img.preserveAspect = true;
+                if (sprite == null && letter != null)
+                {
+                    var t = UIKit.Label("L", b, letter, 15, new Color(0.1f, 0.08f, 0.06f), TextAnchor.MiddleCenter, FontStyle.Bold);
+                    t.rectTransform.Stretch();
+                }
+                b.gameObject.AddComponent<HoverPop>().Scale = 1.15f;
+                var pe = b.gameObject.AddComponent<PointerEvents>();
+                var pop = b.GetComponent<HoverPop>();
+                pe.OnEnter = () => pop.Hovered = true;
+                pe.OnExit = () => pop.Hovered = false;
+                pe.OnClick = () => ToggleFilter(key);
+                filterButtons[key] = img;
+                fx += size + 6;
+                return img;
+            }
+            foreach (var k in new[] { "W", "U", "B", "R", "G", "C" }) Pip(k, ManaSprites.Get(k), Theme.ForManaColor(k), k);
+            Pip("M", null, new Color(0.9f, 0.75f, 0.35f), "M");
+            fx += 8;
+            Btn("LAND", 66);
+            Btn("NONLAND", 92);
+
+            void Btn(string key, float w)
+            {
+                var b = UIKit.Button("Filter" + key, root, key, Theme.Secondary, () => ToggleFilter(key), 12);
+                ((RectTransform)b.transform).Place(fx, y + 2, w, size - 4);
+                filterButtons[key] = b.GetComponent<Image>();
+                fx += w + 6;
+            }
+            RefreshFilterButtons();
+        }
+
+        void ToggleFilter(string key)
+        {
+            if (key == "LAND") landFilter = landFilter == 1 ? 0 : 1;
+            else if (key == "NONLAND") landFilter = landFilter == 2 ? 0 : 2;
+            else if (!colorFilter.Remove(key[0])) colorFilter.Add(key[0]);
+            Sound.Play(Sfx.UiClick, 0.5f);
+            RefreshFilterButtons();
+            Refresh();
+        }
+
+        void RefreshFilterButtons()
+        {
+            foreach (var kv in filterButtons)
+            {
+                bool on = kv.Key == "LAND" ? landFilter == 1 : kv.Key == "NONLAND" ? landFilter == 2 : colorFilter.Contains(kv.Key[0]);
+                if (kv.Key.Length > 1) { kv.Value.color = on ? new Color(0.55f, 0.32f, 0.1f) : Theme.Secondary; continue; }
+                var c = kv.Value.color;
+                // Off: dimmed, unless nothing is picked (then every pip shows at full strength, like Arena).
+                c.a = on || colorFilter.Count == 0 ? 1f : 0.35f;
+                kv.Value.color = c;
             }
         }
 
@@ -362,7 +601,7 @@ namespace MTGUnited
         {
             if (pool.Count == 0) return true;
             var custom = CustomSets.Get(c.Name);
-            return custom != null ? pool.Contains(custom.Set) : pool.Contains("REAL");
+            return custom != null ? pool.Contains(custom.SetCode) || pool.Contains(custom.Set ?? "") : pool.Contains("REAL");
         }
 
         /// <summary>Only custom sets in the pool: "all cards" lists them whole, no search needed.</summary>
@@ -379,7 +618,7 @@ namespace MTGUnited
                 var all = new List<CardInfo>();
                 foreach (var set in CustomSets.All)
                     if (pool.Contains(set.Code))
-                        foreach (var c in set.Cards) if (!c.Token) all.Add(c.ToInfo());
+                        foreach (var c in set.Cards) if (!c.Token && !c.IsBack) all.Add(c.ToInfo());
                 all.Sort((a, b) => string.Compare(a.Name, b.Name, StringComparison.OrdinalIgnoreCase));
                 return all.Count > 400 ? all.GetRange(0, 400) : all;
             }
@@ -394,6 +633,14 @@ namespace MTGUnited
             return p.Count + " SETS";
         }
 
+        /// <summary>Changing the pool shows its cards (the deck view wouldn't change, so it looked like nothing happened).</summary>
+        void ShowPool()
+        {
+            if (columnsLayout) { columnsLayout = false; PlayerPrefs.SetInt("deckLayoutColumns", 0); }
+            scope = Scope.All;
+            Refresh();
+        }
+
         /// <summary>Tick sets in or out of the pool (stays open so several can be toggled).</summary>
         void PoolMenu(Vector2 at)
         {
@@ -403,15 +650,16 @@ namespace MTGUnited
             {
                 if (!pool.Remove(code)) pool.Add(code);
                 deck.Pool = string.Join(",", pool);
-                Refresh();
+                ShowPool();
                 PoolMenu(at);
             }
-            items.Add(((pool.Count == 0 ? "(•) " : "( ) ") + "Everything", () => { deck.Pool = ""; Refresh(); PoolMenu(at); }));
+            items.Add(((pool.Count == 0 ? "(•) " : "( ) ") + "Everything", () => { deck.Pool = ""; ShowPool(); PoolMenu(at); }));
             items.Add(((pool.Contains("REAL") ? "[x] " : "[  ] ") + "Real cards (Forge)", () => Toggle("REAL")));
             foreach (var set in CustomSets.All)
             {
                 string code = set.Code;
-                items.Add(((pool.Contains(code) ? "[x] " : "[  ] ") + code + " · " + set.Name + " (" + set.Cards.Count + ")", () => Toggle(code)));
+                string label = string.Equals(code, set.Name, StringComparison.OrdinalIgnoreCase) ? code : code + " · " + set.Name;
+                items.Add(((pool.Contains(code) ? "[x] " : "[  ] ") + label + " (" + set.Cards.Count + ")", () => Toggle(code)));
             }
             if (CustomSets.All.Count == 0) items.Add(("Import custom sets in Decks → Custom Sets", null));
             PopupMenu.Instance.Show(at, items);
@@ -436,7 +684,93 @@ namespace MTGUnited
 
         // ---------------------------------------------------------------- deck-builder motion (doc 8.1)
 
-        RectTransform listRect, curveRoot;
+        RectTransform listRect, curveRoot, coverSlot;
+        UnityEngine.UI.Outline coverGlow;
+
+        // ---------------------------------------------------------------- dragging cards
+        //  grid (all cards) → deck list: add · deck card → away from where it was: remove one
+        //  any card → the art next to the deck name: that card becomes the deck's cover
+
+        RectTransform ghost;
+        RawImage ghostArt;
+        CardInfo dragCard;
+        bool dragFromDeck;
+        RectTransform dragArea;
+        Vector2 ghostVel;
+
+        internal void BeginCardDrag(CardInfo c, bool fromDeck, RectTransform area, Vector2 screen)
+        {
+            if (c == null) return;
+            dragCard = c; dragFromDeck = fromDeck; dragArea = area;
+            gc.Preview.Hide();
+            if (ghost == null)
+            {
+                ghost = UIKit.Rect("DragGhost", root);
+                ghost.anchorMin = ghost.anchorMax = new Vector2(0, 0);
+                ghost.sizeDelta = new Vector2(TileW * 0.8f, TileH * 0.8f);
+                var frame = UIKit.Panel("Frame", ghost, new Color(0.1f, 0.1f, 0.12f));
+                frame.rectTransform.Stretch();
+                frame.raycastTarget = false;
+                frame.pixelsPerUnitMultiplier = 16f / Mathf.Max(3f, TileW * 0.8f * 0.085f);
+                frame.gameObject.AddComponent<Mask>().showMaskGraphic = true;
+                ghostArt = UIKit.Rect("Art", frame.transform).Stretch(-2, -2, -2, -2).gameObject.AddComponent<RawImage>();
+                ghostArt.raycastTarget = false;
+                UIKit.AddShadow(ghost, 20, new Vector2(0, -14), 0.6f);
+                var cg = ghost.gameObject.AddComponent<CanvasGroup>();
+                cg.blocksRaycasts = false; cg.interactable = false;
+            }
+            ghost.gameObject.SetActive(true);
+            ghost.SetAsLastSibling();
+            ghostArt.texture = null;
+            string want = c.Name;
+            CardImageCache.Instance?.Get(c.Name, CustomSets.Get(c.Name)?.Set ?? c.Set, tex => { if (ghostArt != null && dragCard != null && dragCard.Name == want) ghostArt.texture = tex; });
+            ghost.anchoredPosition = ToRoot(screen);
+            ghost.localRotation = Quaternion.identity;
+            Sound.Play(Sfx.CardSlide, 0.5f, 0.85f);
+        }
+
+        internal void MoveCardDrag(Vector2 screen)
+        {
+            if (ghost == null || dragCard == null) return;
+            var p = ToRoot(screen);
+            var prev = ghost.anchoredPosition;
+            ghost.anchoredPosition = p;
+            // A little weight: lean into the movement, like the table cards.
+            float dt = Mathf.Max(Time.unscaledDeltaTime, 0.001f);
+            ghostVel = Vector2.Lerp(ghostVel, (p - prev) / dt, 0.25f);
+            float lean = Motion.ReduceMotion ? 0f : Mathf.Clamp(-ghostVel.x * 0.008f, -14f, 14f);
+            ghost.localRotation = Quaternion.Euler(0, 0, lean);
+            bool overCover = RectTransformUtility.RectangleContainsScreenPoint(coverSlot, screen, null);
+            coverGlow.effectColor = new Color(1f, 0.75f, 0.3f, overCover ? 0.95f : 0.35f);
+        }
+
+        internal void EndCardDrag(Vector2 screen)
+        {
+            if (ghost != null) ghost.gameObject.SetActive(false);
+            coverGlow.effectColor = new Color(1f, 0.75f, 0.3f, 0f);
+            var c = dragCard;
+            dragCard = null;
+            if (c == null) return;
+            bool Over(RectTransform r) => r != null && r.gameObject.activeInHierarchy && RectTransformUtility.RectangleContainsScreenPoint(r, screen, null);
+
+            if (Over(coverSlot))
+            {
+                deck.Cover = c.Name;
+                Sound.Play(Sfx.CardPlace, 0.7f);
+                FadeIn.Play(coverSlot.gameObject, Motion.Short, 1.12f);
+                Refresh();
+                return;
+            }
+            if (!dragFromDeck && Over(listRect)) { AddCard(c); Sound.Play(Sfx.CardSlide, 0.5f, 0.85f); return; }
+            if (dragFromDeck && !Over(dragArea) && !(Over(listRect) && dragArea != listRect)) { RemoveCard(c.Name); return; }
+            Sound.Play(Sfx.CardSlide, 0.5f, 0.85f);   // dropped back where it came from
+        }
+
+        Vector2 ToRoot(Vector2 screen)
+        {
+            RectTransformUtility.ScreenPointToLocalPointInRectangle(root, screen, null, out var local);
+            return local + root.rect.size * 0.5f;
+        }
         readonly Image[] curveBars = new Image[8];
         readonly Text[] curveCounts = new Text[8];
         readonly TweenF[] curveH = new TweenF[8];
@@ -549,6 +883,7 @@ namespace MTGUnited
 
         void Hover(CardInfo c, bool right)
         {
+            if (dragCard != null) return;   // no previews popping up under a dragged card
             if (c == null) gc.Preview.Hide();
             else gc.Preview.Request(c.ToCardData(), right);
         }
@@ -591,11 +926,11 @@ namespace MTGUnited
             UIKit.LabelOf(formatButton).text = DeckFormat.Label(Format).ToUpperInvariant();
             UIKit.LabelOf(poolButton).text = "POOL: " + PoolLabel();
             countText.supportRichText = true;
-            string cmd = model.Commanders.Count > 0 ? model.Commanders[0] : null;
+            string cmd = !string.IsNullOrWhiteSpace(deck.Cover) ? deck.Cover.Trim() : model.Commanders.Count > 0 ? model.Commanders[0] : null;
             if (cmd != null && CardImageCache.Instance != null)
             {
                 var info = CardCatalog.Get(cmd);
-                CardImageCache.Instance.Get(cmd, info?.Set, tex => { if (headerArt != null) headerArt.texture = tex; });
+                CardImageCache.Instance.Get(cmd, CustomSets.Get(cmd)?.Set ?? info?.Set, tex => { if (headerArt != null) headerArt.texture = tex; });
             }
             else headerArt.texture = GameArt.CardBack;
 
@@ -614,15 +949,17 @@ namespace MTGUnited
 
         void UpdateHint()
         {
-            if (columnsLayout) hintText.text = "Click a card to remove one copy  ·  right-click to zoom";
+            if (columnsLayout) hintText.text = "Click a card for − / +  ·  drag it out to remove one  ·  right-click to zoom";
             else if (scope == Scope.All && query.Length == 0 && WholeSetView)
                 hintText.text = "All " + PoolResults().Count + " cards of " + PoolLabel() + "  ·  click to add  ·  type to filter";
             else if (scope == Scope.All)
-                hintText.text = query.Length == 0 ? "Type a card name to search all cards (shows the 60 closest matches)"
+                hintText.text = query.Length == 0 ? "Type a name, or Scryfall syntax: t:creature c:rg mv<=3 o:draw"
                     : searching ? "Searching..."
+                    : searchError != null ? "Scryfall: " + searchError
                     : results.Count == 0 ? "No cards match \"" + query + "\""
-                    : results.Count + " closest matches  ·  click to add  ·  ◆ = already in your deck" + (gc.Bridge.Connected ? "" : "  (Forge isn't running: only custom sets searched)");
-            else hintText.text = "Click a card to remove one copy  ·  search to add cards";
+                    : ScryfallSearch.LooksLikeSyntax(query) ? results.Count + " cards (Scryfall search)  ·  click or drag to add"
+                    : results.Count + " closest matches  ·  click or drag to the list to add  ·  ◆ = in your deck" + (gc.Bridge.Connected ? "" : "  (Forge isn't running: only custom sets searched)");
+            else hintText.text = "Click (or drag out) to remove one copy  ·  drag a card onto the art by the name to make it the cover";
         }
 
         // ---------------------------------------------------------------- collection grid
@@ -641,6 +978,8 @@ namespace MTGUnited
                 if (query.Length > 0) shown = shown.Where(s => s.info.Name.IndexOf(query, StringComparison.OrdinalIgnoreCase) >= 0).ToList();
             }
 
+            if (FiltersOn) shown = shown.Where(t => PassesFilter(t.info)).ToList();
+
             while (gridPool.Count < shown.Count) gridPool.Add(Tile.Create(gridContent, TileW, TileH, true));
             for (int i = 0; i < gridPool.Count; i++)
             {
@@ -652,6 +991,7 @@ namespace MTGUnited
                 tile.Bind(info, count, scope == Scope.All && count > 0, commander,
                     () => { if (scope == Scope.All) AddCard(ci, tile.Root); else RemoveCard(ci.Name); },
                     () => Inspect(ci), h => Hover(h ? ci : null, false));
+                tile.Drag.Set(this, ci, scope == Scope.Deck, (RectTransform)gridScroll.transform);
                 tile.Root.gameObject.SetActive(true);
             }
         }
@@ -673,7 +1013,9 @@ namespace MTGUnited
                 var info = InfoFor(name);
                 string n = name;
                 row.Bind(info, count, commander,
-                    () => RemoveCard(n), () => Inspect(info), () => ToggleCommander(n), h => Hover(h ? info : null, false));
+                    () => RemoveCard(n), () => Inspect(info), () => ToggleCommander(n), h => Hover(h ? info : null, false),
+                    commander ? (Action)null : () => AddCard(info));
+                row.Drag.Set(this, info, true, listRect);
                 row.Root.gameObject.SetActive(true);
             }
         }
@@ -689,30 +1031,39 @@ namespace MTGUnited
 
         // ---------------------------------------------------------------- columns
 
+        /// <summary>Column view: the card that was clicked shows − xN + over its art.</summary>
+        string columnSelected;
+        RectTransform countEditor;
+        Text countEditorText;
+
         void RefreshColumns()
         {
             const float colW = 186, cardW = 172, cardH = 240, step = 34, gap = 14, maxPerColumn = 14;
-            var columns = new List<(string label, List<string> cards)>();
-            if (model.Commanders.Count > 0) columns.Add(("COMMANDER", new List<string>(model.Commanders)));
+            const float openStep = 150;   // the selected card opens up so its art (and the − / + controls) show
+            // One tile per card name (copies are a count on it), like Arena's column view.
+            var columns = new List<(string label, List<(string name, int count)> cards)>();
+            if (model.Commanders.Count > 0) columns.Add(("COMMANDER", model.Commanders.Select(c => (c, 1)).ToList()));
 
-            var groups = new SortedDictionary<int, List<string>>();
-            var lands = new List<string>();
+            var groups = new SortedDictionary<int, List<(string, int)>>();
+            var lands = new List<(string, int)>();
             foreach (var (count, name) in Sorted())
             {
                 var info = InfoFor(name);
-                for (int k = 0; k < count; k++)
+                if (FiltersOn && !PassesFilter(info)) continue;
+                if (info.Land) lands.Add((name, count));
+                else
                 {
-                    if (info.Land) lands.Add(name);
-                    else
-                    {
-                        int key = Mathf.Min(info.Cmc, 7);
-                        if (!groups.TryGetValue(key, out var g)) groups[key] = g = new List<string>();
-                        g.Add(name);
-                    }
+                    int key = Mathf.Min(info.Cmc, 7);
+                    if (!groups.TryGetValue(key, out var g)) groups[key] = g = new List<(string, int)>();
+                    g.Add((name, count));
                 }
             }
             foreach (var kv in groups) Split(columns, kv.Key == 7 ? "7+" : kv.Key.ToString(), kv.Value, (int)maxPerColumn);
             Split(columns, "LANDS", lands, (int)maxPerColumn);
+
+            if (columnSelected != null && !model.Contains(columnSelected) && !model.Commanders.Contains(columnSelected)) columnSelected = null;
+            EnsureCountEditor();
+            countEditor.gameObject.SetActive(false);
 
             int used = 0;
             float x = 0, maxH = 0;
@@ -723,29 +1074,43 @@ namespace MTGUnited
                 {
                     if (used >= columnPool.Count) columnPool.Add(Tile.Create(columnsContent, cardW, cardH, false));
                     var tile = columnPool[used++];
-                    var info = InfoFor(cards[i]);
+                    var (n, count) = cards[i];
+                    var info = InfoFor(n);
                     bool commander = label == "COMMANDER";
-                    string n = cards[i];
+                    bool selected = string.Equals(n, columnSelected, StringComparison.OrdinalIgnoreCase);
                     bool previewRight = x < 900;   // preview on the side away from the card
-                    tile.Bind(info, 1, false, commander, () => RemoveCard(n), () => Inspect(info), h => Hover(h ? info : null, previewRight));
+                    tile.Bind(info, count, false, commander, () => SelectInColumns(n), () => Inspect(info), h => Hover(h ? info : null, previewRight));
+                    tile.Drag.Set(this, info, true, (RectTransform)columnsScroll.transform);
                     var rt = tile.Root;
                     rt.anchorMin = rt.anchorMax = new Vector2(0, 1); rt.pivot = new Vector2(0, 1);
                     rt.anchoredPosition = new Vector2(x + (colW - cardW) / 2, y);
                     rt.gameObject.SetActive(true);
                     rt.SetAsLastSibling();   // later cards overlap earlier ones, leaving their title bars visible
-                    y -= (i == cards.Count - 1) ? cardH : step;
+                    if (selected)
+                    {
+                        // − xN + over the art of the clicked card.
+                        countEditor.SetParent(rt, false);
+                        countEditor.anchorMin = countEditor.anchorMax = new Vector2(0.5f, 1); countEditor.pivot = new Vector2(0.5f, 0.5f);
+                        countEditor.anchoredPosition = new Vector2(0, -(step + (openStep - step) / 2f + 10f));
+                        countEditor.SetAsLastSibling();
+                        countEditorText.text = "x" + count;
+                        countEditor.gameObject.SetActive(true);
+                    }
+                    y -= (i == cards.Count - 1) ? cardH : selected ? openStep : step;
                 }
                 maxH = Mathf.Max(maxH, -y + 20);
                 x += colW + gap;
             }
             for (int i = used; i < columnPool.Count; i++) columnPool[i].Root.gameObject.SetActive(false);
 
+
             // Column headings.
             foreach (Transform c in columnsContent) if (c.name == "Heading") Destroy(c.gameObject);
             float hx = 0;
             foreach (var (label, cards) in columns)
             {
-                var h = UIKit.Label("Heading", columnsContent, label + "  <color=#8a90a0>" + cards.Count + "</color>", 16, Theme.Accent, TextAnchor.MiddleCenter, FontStyle.Bold);
+                int copies = cards.Sum(c => c.count);
+                var h = UIKit.Label("Heading", columnsContent, label.Length == 0 ? "" : label + "  <color=#8a90a0>" + copies + "</color>", 16, Theme.Accent, TextAnchor.MiddleCenter, FontStyle.Bold);
                 h.rectTransform.anchorMin = h.rectTransform.anchorMax = new Vector2(0, 1); h.rectTransform.pivot = new Vector2(0, 1);
                 h.rectTransform.sizeDelta = new Vector2(colW, 26); h.rectTransform.anchoredPosition = new Vector2(hx, 0);
                 hx += colW + gap;
@@ -753,7 +1118,53 @@ namespace MTGUnited
             columnsContent.sizeDelta = new Vector2(Mathf.Max(x, 100), Mathf.Max(maxH, 100));
         }
 
-        static void Split(List<(string, List<string>)> columns, string label, List<string> cards, int max)
+        void SelectInColumns(string name)
+        {
+            columnSelected = string.Equals(columnSelected, name, StringComparison.OrdinalIgnoreCase) ? null : name;
+            Sound.Play(Sfx.CardSlide, 0.45f);
+            RefreshColumns();
+        }
+
+        /// <summary>The − xN + control shown on the selected card in column view (built once, moved between tiles).</summary>
+        void EnsureCountEditor()
+        {
+            if (countEditor != null) return;
+            countEditor = UIKit.Rect("CountEditor", columnsContent);
+            countEditor.sizeDelta = new Vector2(168, 64);
+            Button Round(string label, float x, Action a)
+            {
+                var b = UIKit.Button(label, countEditor, "", new Color(0.12f, 0.12f, 0.15f, 0.92f), () => a(), 30);
+                var r = (RectTransform)b.transform;
+                r.anchorMin = r.anchorMax = new Vector2(0.5f, 0.5f); r.pivot = new Vector2(0.5f, 0.5f);
+                r.sizeDelta = new Vector2(58, 58); r.anchoredPosition = new Vector2(x, 0);
+                var img = b.GetComponent<Image>();
+                img.pixelsPerUnitMultiplier = 32f / 58f;   // a circle
+                var rim = b.gameObject.AddComponent<UnityEngine.UI.Outline>();
+                rim.effectColor = new Color(1f, 1f, 1f, 0.35f); rim.effectDistance = new Vector2(1.5f, -1.5f);
+                var icon = UIKit.Rect("Icon", b.transform);
+                icon.anchorMin = icon.anchorMax = new Vector2(0.5f, 0.5f); icon.sizeDelta = new Vector2(26, 26);
+                var ii = icon.gameObject.AddComponent<Image>();
+                ii.sprite = label == "Plus" ? Icons.Plus : Icons.Minus; ii.raycastTarget = false;
+                b.gameObject.AddComponent<HoverPop>().Scale = 1.1f;
+                var pe = b.gameObject.AddComponent<PointerEvents>();
+                var pop = b.GetComponent<HoverPop>();
+                pe.OnEnter = () => pop.Hovered = true;
+                pe.OnExit = () => pop.Hovered = false;
+                return b;
+            }
+            Round("Minus", -56, () => { if (columnSelected != null) RemoveCard(columnSelected); });
+            Round("Plus", 56, () =>
+            {
+                if (columnSelected == null) return;
+                var info = InfoFor(columnSelected);
+                AddCard(info);
+            });
+            countEditorText = UIKit.Label("Count", countEditor, "", 30, Color.white, TextAnchor.MiddleCenter, FontStyle.Bold).Outline(2f);
+            countEditorText.rectTransform.anchorMin = countEditorText.rectTransform.anchorMax = new Vector2(0.5f, 0.5f);
+            countEditorText.rectTransform.sizeDelta = new Vector2(60, 50);
+        }
+
+        static void Split<T>(List<(string, List<T>)> columns, string label, List<T> cards, int max)
         {
             if (cards.Count == 0) return;
             int parts = Mathf.CeilToInt(cards.Count / (float)max);
@@ -768,6 +1179,7 @@ namespace MTGUnited
         class Tile
         {
             public RectTransform Root;
+            public CardDragSource Drag;
             RawImage art;
             Image frame, marker, crown;
             Text fallback, badge;
@@ -786,11 +1198,13 @@ namespace MTGUnited
                 var fr = t.frame.rectTransform;
                 fr.anchorMin = new Vector2(0, 0); fr.anchorMax = new Vector2(1, 0); fr.pivot = new Vector2(0.5f, 0);
                 fr.sizeDelta = new Vector2(0, h); fr.anchoredPosition = Vector2.zero;
-                t.frame.pixelsPerUnitMultiplier = 2.2f;
+                // Corner radius matched to a real card's (~4.5% of the width) plus a little, so the white
+                // corners some card scans have never peek out.
+                t.frame.pixelsPerUnitMultiplier = 16f / Mathf.Max(3f, w * 0.085f);
                 t.frame.gameObject.AddComponent<Mask>().showMaskGraphic = true;
                 t.fallback = UIKit.Label("Text", t.frame.transform, "", 15, Theme.Text, TextAnchor.UpperCenter, FontStyle.Bold);
                 t.fallback.rectTransform.Stretch(8, 8, 8, 10);
-                t.art = UIKit.Rect("Art", t.frame.transform).Stretch().gameObject.AddComponent<RawImage>();
+                t.art = UIKit.Rect("Art", t.frame.transform).Stretch(-2, -2, -2, -2).gameObject.AddComponent<RawImage>();   // trims the scan's outer edge
                 t.art.raycastTarget = false;
                 if (withMarker)
                 {
@@ -808,6 +1222,13 @@ namespace MTGUnited
                 b.raycastTarget = false;
                 t.badge = UIKit.Label("N", b.transform, "", 17, Color.white, TextAnchor.MiddleCenter, FontStyle.Bold);
                 t.badge.rectTransform.Stretch();
+                if (!withMarker)
+                {
+                    // Column view: cards overlap, so the count sits in the visible title strip.
+                    b.rectTransform.anchorMin = b.rectTransform.anchorMax = new Vector2(1, 1); b.rectTransform.pivot = new Vector2(1, 1);
+                    b.rectTransform.anchoredPosition = new Vector2(-6, -4);
+                    b.rectTransform.sizeDelta = new Vector2(42, 26);
+                }
                 var c = UIKit.Rect("Crown", t.frame.transform);
                 c.anchorMin = c.anchorMax = new Vector2(0, 0); c.pivot = new Vector2(0, 0);
                 c.sizeDelta = new Vector2(30, 30); c.anchoredPosition = new Vector2(6, 6);
@@ -819,6 +1240,7 @@ namespace MTGUnited
                 t.pe.OnRightClick = () => t.right?.Invoke();
                 t.pe.OnEnter = () => t.hover?.Invoke(true);
                 t.pe.OnExit = () => t.hover?.Invoke(false);
+                t.Drag = t.frame.gameObject.AddComponent<CardDragSource>();
                 return t;
             }
 
@@ -852,9 +1274,12 @@ namespace MTGUnited
         class Row
         {
             public RectTransform Root;
-            Image band, crown;
+            public CardDragSource Drag;
+            Image band, crown, countBg;
             Text count, name, cost;
-            Action click, right, crownClick;
+            Action click, right, crownClick, add;
+            string countLabel = "";
+            bool countHover;
             Action<bool> hover;
 
             public static Row Create(Transform parent)
@@ -866,7 +1291,12 @@ namespace MTGUnited
                 var cnt = UIKit.Panel("CountBg", root, new Color(0.08f, 0.08f, 0.1f));
                 cnt.rectTransform.anchorMin = new Vector2(0, 0); cnt.rectTransform.anchorMax = new Vector2(0, 1);
                 cnt.rectTransform.pivot = new Vector2(0, 0.5f); cnt.rectTransform.sizeDelta = new Vector2(48, 0);
-                cnt.raycastTarget = false;
+                r.countBg = cnt;
+                // Hover the count: it turns into a + that adds another copy.
+                var cpe = cnt.gameObject.AddComponent<PointerEvents>();
+                cpe.OnEnter = () => { r.countHover = true; r.ShowCount(); };
+                cpe.OnExit = () => { r.countHover = false; r.ShowCount(); };
+                cpe.OnClick = () => r.add?.Invoke();
                 r.count = UIKit.Label("Count", cnt.transform, "", 18, Theme.Text, TextAnchor.MiddleCenter, FontStyle.Bold);
                 r.count.rectTransform.Stretch();
                 r.band = UIKit.Panel("Band", root, Color.gray);
@@ -882,6 +1312,7 @@ namespace MTGUnited
                 pe.OnRightClick = () => r.right?.Invoke();
                 pe.OnEnter = () => r.hover?.Invoke(true);
                 pe.OnExit = () => r.hover?.Invoke(false);
+                r.Drag = r.band.gameObject.AddComponent<CardDragSource>();
 
                 var cr = UIKit.Rect("Crown", r.band.transform);
                 cr.anchorMin = cr.anchorMax = new Vector2(0, 0.5f); cr.pivot = new Vector2(0, 0.5f);
@@ -892,10 +1323,19 @@ namespace MTGUnited
                 return r;
             }
 
-            public void Bind(CardInfo info, int n, bool commander, Action onClick, Action onRight, Action onCrown, Action<bool> onHover)
+            void ShowCount()
             {
-                click = onClick; right = onRight; crownClick = onCrown; hover = onHover;
-                count.text = commander ? "" : n + "x";
+                bool plus = countHover && add != null;
+                count.text = plus ? "<size=26>+</size>" : countLabel;
+                countBg.color = plus ? new Color(0.95f, 0.55f, 0.15f) : new Color(0.08f, 0.08f, 0.1f);
+            }
+
+            public void Bind(CardInfo info, int n, bool commander, Action onClick, Action onRight, Action onCrown, Action<bool> onHover, Action onAdd)
+            {
+                click = onClick; right = onRight; crownClick = onCrown; hover = onHover; add = onAdd;
+                countLabel = commander ? "" : n + "x";
+                countBg.raycastTarget = onAdd != null;
+                ShowCount();
                 name.text = info.Name;
                 cost.text = ManaShort(info.Cost);
                 band.color = commander ? new Color(1f, 0.83f, 0.45f) : Color.Lerp(FrameColor(info), Color.white, 0.45f);
@@ -918,5 +1358,51 @@ namespace MTGUnited
 
         /// <summary>"{2}{R}{G}" or "2 R G" → "2RG" for the deck list.</summary>
         static string ManaShort(string cost) => CardView.ManaText(cost);   // drawn as symbols by the label
+    }
+
+    /// <summary>
+    /// Lets a deck-builder tile or row be dragged. Mostly-vertical drags are handed to the list's scroll view
+    /// instead, so the lists still scroll by dragging.
+    /// </summary>
+    public class CardDragSource : MonoBehaviour, UnityEngine.EventSystems.IInitializePotentialDragHandler,
+        UnityEngine.EventSystems.IBeginDragHandler, UnityEngine.EventSystems.IDragHandler, UnityEngine.EventSystems.IEndDragHandler,
+        UnityEngine.EventSystems.IScrollHandler
+    {
+        DeckBuilder owner;
+        CardInfo card;
+        bool fromDeck;
+        RectTransform area;
+        bool dragging;
+        ScrollRect scroll;
+
+        internal void Set(DeckBuilder b, CardInfo c, bool deck, RectTransform from) { owner = b; card = c; fromDeck = deck; area = from; }
+
+        ScrollRect Scroll => scroll != null ? scroll : (scroll = GetComponentInParent<ScrollRect>());
+
+        public void OnInitializePotentialDrag(UnityEngine.EventSystems.PointerEventData e) { if (Scroll != null) Scroll.OnInitializePotentialDrag(e); }
+
+        public void OnBeginDrag(UnityEngine.EventSystems.PointerEventData e)
+        {
+            var d = e.position - e.pressPosition;
+            dragging = e.button == UnityEngine.EventSystems.PointerEventData.InputButton.Left && owner != null && card != null
+                       && Mathf.Abs(d.x) >= Mathf.Abs(d.y) * 0.8f;
+            if (dragging) owner.BeginCardDrag(card, fromDeck, area, e.position);
+            else if (Scroll != null) Scroll.OnBeginDrag(e);
+        }
+
+        public void OnDrag(UnityEngine.EventSystems.PointerEventData e)
+        {
+            if (dragging) owner.MoveCardDrag(e.position);
+            else if (Scroll != null) Scroll.OnDrag(e);
+        }
+
+        public void OnEndDrag(UnityEngine.EventSystems.PointerEventData e)
+        {
+            if (dragging) { dragging = false; owner.EndCardDrag(e.position); }
+            else if (Scroll != null) Scroll.OnEndDrag(e);
+        }
+
+        // Without this the drag handler would swallow mouse-wheel scrolling over the tile.
+        public void OnScroll(UnityEngine.EventSystems.PointerEventData e) { if (Scroll != null) Scroll.OnScroll(e); }
     }
 }

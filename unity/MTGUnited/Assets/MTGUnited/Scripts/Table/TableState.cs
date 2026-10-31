@@ -14,6 +14,9 @@ namespace MTGUnited
         public string Zone;            // Library, Hand, Battlefield, Graveyard, Exile, Command
         public Vector2 Pos;            // battlefield: 0..1 across the owner's field (x left→right, y near→far)
         public bool Tapped, FaceDown, Token, Revealed;
+        public int Rot;
+        public bool Flipped;           // double-faced card showing its back
+        public string Note = "";       // a sticky note everyone at the table sees (battlefield)                // extra quarter turns clockwise (Q / E at the table), on top of tapping
         public string TokenPT = "", TokenColors = "";   // for tokens made up at the table
         public Dictionary<string, int> Counters = new Dictionary<string, int>();
 
@@ -190,6 +193,9 @@ namespace MTGUnited
                 // Leaving the battlefield resets the card (owner's zones, untapped, no counters).
                 c.Controller = c.Owner;
                 c.Tapped = false;
+                c.Rot = 0;
+                c.Flipped = false;   // double-faced cards return to their front face
+                c.Note = "";         // notes belong to the permanent, not the card
                 c.Counters.Clear();
                 if (zone != "Library") c.FaceDown = false;
                 var list = Player(c.Owner).ZoneList(zone);
@@ -200,7 +206,8 @@ namespace MTGUnited
                 }
                 else list.Add(cardId);
             }
-            if (log && from != zone) Say(Player(toPlayer)?.Name + ": " + Describe(c) + " " + Arrow(from, zone, index));
+            if (log && from == "Library" && zone == "Hand") Say(Player(c.Owner)?.Name + " drew a card.");   // the name stays secret
+            else if (log && from != zone) Say(Player(toPlayer)?.Name + ": " + Describe(c) + " " + Arrow(from, zone, index));
         }
 
         static string Arrow(string from, string to, int index)

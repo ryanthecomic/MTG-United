@@ -13,6 +13,11 @@ namespace MTGUnited
         public string Name, Set, ManaCost = "", Type = "", Colors = "", PT = "", Loyalty = "", Text = "", PicUrl, ImagePath;
         public int Cmc;
         public bool Token;
+        /// <summary>Code of the imported set this card belongs to (may differ from <see cref="Set"/>, the card's own set field).</summary>
+        public string SetCode = "";
+        /// <summary>Double-faced cards: the other face's name; IsBack marks the back face (not deck-buildable on its own).</summary>
+        public string FlipName;
+        public bool IsBack;
         public readonly List<string> Related = new List<string>();
 
         public string MainType = "";
@@ -89,7 +94,7 @@ namespace MTGUnited
             foreach (var set in sets)
                 foreach (var c in set.Cards)
                 {
-                    if (tokensOnly != c.Token) continue;
+                    if (tokensOnly != c.Token || c.IsBack) continue;
                     string n = c.Name.ToLowerInvariant();
                     int score = q.Length == 0 ? 5 : n == q ? 0 : n.StartsWith(q) ? 1 : n.Contains(" " + q) ? 2 : n.Contains(q) ? 3
                         : c.Type.ToLowerInvariant().Contains(q) || c.Set.ToLowerInvariant() == q ? 4 : -1;
@@ -182,8 +187,33 @@ namespace MTGUnited
 
             var set = new CustomSet();
             var setNode = doc.SelectSingleNode("//sets/set");
-            set.Code = Text(setNode, "name") ?? Path.GetFileNameWithoutExtension(path).ToUpperInvariant();
-            set.Name = Text(setNode, "longname") ?? set.Code;
+            // Set code: Magic Set Editor exports often leave <name> blank (or a space). Then use the code most cards
+            // carry in their own <set>, else the long name, else the file / folder name. A blank code made the set
+            // impossible to pick in the deck builder's card pool.
+            string code = (Text(setNode, "name") ?? "").Trim();
+            string longName = (Text(setNode, "longname") ?? "").Trim();
+            if (code.Length == 0)
+            {
+                var counts = new Dictionary<string, int>();
+                foreach (XmlNode s in doc.SelectNodes("//cards/card/set"))
+                {
+                    string t = (s.InnerText ?? "").Trim();
+                    if (t.Length == 0) continue;
+                    counts.TryGetValue(t, out int k);
+                    counts[t] = k + 1;
+                }
+                foreach (var kv in counts) if (code.Length == 0 || kv.Value > counts[code]) code = kv.Key;
+            }
+            if (code.Length == 0) code = longName;
+            if (code.Length == 0)
+            {
+                string file = Path.GetFileNameWithoutExtension(path);
+                if (string.Equals(file, "cards", StringComparison.OrdinalIgnoreCase)) file = Path.GetFileName(Path.GetDirectoryName(path)) ?? "";
+                code = file.Trim();
+            }
+            if (code.Length == 0) code = "CUSTOM";
+            set.Code = code;
+            set.Name = longName.Length > 0 ? longName : set.Code;
 
             var cards = doc.SelectNodes("//cards/card");
             if (cards == null) return set;
@@ -207,12 +237,52 @@ namespace MTGUnited
                 c.Token = c.Token || (Text(n, "token") ?? "0").Trim() == "1";
                 var setEl = n.SelectSingleNode("set");
                 c.Set = setEl != null && !string.IsNullOrWhiteSpace(setEl.InnerText) ? setEl.InnerText.Trim() : set.Code;
+                c.SetCode = set.Code;   // the set it was imported with (what the card pool filters on)
                 c.PicUrl = setEl?.Attributes?["picurl"]?.Value ?? setEl?.Attributes?["picURL"]?.Value;
-                foreach (XmlNode r in n.SelectNodes("related|reverse-related")) if (!string.IsNullOrWhiteSpace(r.InnerText)) c.Related.Add(r.InnerText.Trim());
+                foreach (XmlNode r in n.SelectNodes("related|reverse-related"))
+                {
+                    if (string.IsNullOrWhiteSpace(r.InnerText)) continue;
+                    string attach = r.Attributes?["attach"]?.Value ?? "";
+                    // attach="transform": the other face of a double-faced card, not a token to create.
+                    if (attach.Equals("transform", StringComparison.OrdinalIgnoreCase)) c.FlipName = r.InnerText.Trim();
+                    else c.Related.Add(r.InnerText.Trim());
+                }
                 if (c.Cmc == 0 && c.ManaCost.Length > 0) c.Cmc = CmcOf(c.ManaCost);
                 set.Cards.Add(c);
             }
+            MarkBackFaces(set);
             return set;
+        }
+
+        /// <summary>
+        /// Double-faced cards come out of Magic Set Editor as two cards that point at each other. The back is the one
+        /// whose text ends in "(Front): ..." (else the one listed second). Backs are hidden from searches and decks;
+        /// at the table you play the front and flip it (F). The "---  (Back): name" footer is dropped from the text.
+        /// </summary>
+        static void MarkBackFaces(CustomSet set)
+        {
+            var byName = new Dictionary<string, (CustomCard card, int index)>(StringComparer.OrdinalIgnoreCase);
+            for (int i = 0; i < set.Cards.Count; i++) byName[set.Cards[i].Name] = (set.Cards[i], i);
+            for (int i = 0; i < set.Cards.Count; i++)
+            {
+                var c = set.Cards[i];
+                if (string.IsNullOrEmpty(c.FlipName)) continue;
+                bool saysBack = c.Text.IndexOf("(Front):", StringComparison.OrdinalIgnoreCase) >= 0;
+                bool saysFront = c.Text.IndexOf("(Back):", StringComparison.OrdinalIgnoreCase) >= 0;
+                if (saysBack && !saysFront) c.IsBack = true;
+                else if (!saysFront && byName.TryGetValue(c.FlipName, out var other) && other.index < i
+                         && string.Equals(other.card.FlipName, c.Name, StringComparison.OrdinalIgnoreCase)) c.IsBack = true;
+                int cut = c.Text.LastIndexOf("\n---", StringComparison.Ordinal);
+                if (cut >= 0 && (c.Text.IndexOf("(Front):", cut, StringComparison.OrdinalIgnoreCase) > 0 || c.Text.IndexOf("(Back):", cut, StringComparison.OrdinalIgnoreCase) > 0))
+                    c.Text = c.Text.Substring(0, cut).TrimEnd();
+            }
+        }
+
+        /// <summary>The other face of a custom double-faced card (null for single-faced and real cards).</summary>
+        public static string OtherFace(string name)
+        {
+            var c = Get(name);
+            return c != null && !string.IsNullOrEmpty(c.FlipName) && Get(c.FlipName) != null ? c.FlipName : null;
         }
 
         static string Text(XmlNode parent, string child)

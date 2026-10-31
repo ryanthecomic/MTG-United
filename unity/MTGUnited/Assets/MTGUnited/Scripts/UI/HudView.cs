@@ -321,6 +321,9 @@ namespace MTGUnited
             var f = go.GetComponent<FadeIn>();
             if (f == null) f = go.AddComponent<FadeIn>();
             if (f.group == null) { f.group = go.GetComponent<CanvasGroup>(); if (f.group == null) f.group = go.AddComponent<CanvasGroup>(); }
+            // Rest position = where the element is now (it may have been moved since last time, e.g. a menu reopened
+            // somewhere else), unless a slide-in is still running and the current spot includes its offset.
+            if (!f.enabled || f.fromOffset == Vector2.zero) f.basePos = ((RectTransform)go.transform).anchoredPosition;
             f.start = Motion.Now; f.duration = Mathf.Min(duration, Motion.Budget);
             f.fromScale = Motion.ReduceMotion ? 1f : fromScale;
             f.fromOffset = Motion.ReduceMotion ? Vector2.zero : fromOffset;

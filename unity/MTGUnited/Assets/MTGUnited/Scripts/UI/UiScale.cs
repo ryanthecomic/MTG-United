@@ -34,7 +34,12 @@ namespace MTGUnited
         /// <summary>Seconds of hovering before the large card preview appears.</summary>
         public static float PreviewDelay
         {
-            get => PlayerPrefs.GetFloat("previewDelay", 1.5f);
+            get
+            {
+                // New default 0.5 s (was 1.5 s): applied once to existing installs too.
+                if (PlayerPrefs.GetInt("previewDelayV2", 0) == 0) { PlayerPrefs.SetFloat("previewDelay", 0.5f); PlayerPrefs.SetInt("previewDelayV2", 1); }
+                return PlayerPrefs.GetFloat("previewDelay", 0.5f);
+            }
             set => PlayerPrefs.SetFloat("previewDelay", Mathf.Clamp(value, 0f, 3f));
         }
 
@@ -50,6 +55,8 @@ namespace MTGUnited
     public class UiScaled : MonoBehaviour
     {
         public Vector2 Origin;
+        /// <summary>Cap so a big panel never grows past the screen (1080 board units tall).</summary>
+        public float MaxScale = 99f;
         Vector2 basePos, applied;
         bool has;
 
@@ -64,7 +71,7 @@ namespace MTGUnited
         void LateUpdate()
         {
             var rt = (RectTransform)transform;
-            float s = UiScale.Value;
+            float s = Mathf.Min(UiScale.Value, MaxScale);
             if (!has || rt.anchoredPosition != applied) { basePos = rt.anchoredPosition; has = true; }
             applied = Origin + (basePos - Origin) * s;
             rt.anchoredPosition = applied;

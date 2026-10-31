@@ -16,6 +16,9 @@ param(
     [switch]$KeepData
 )
 
+# MTG United reads this output as UTF-8 (so folders with accented letters are logged correctly).
+try { [Console]::OutputEncoding = [System.Text.Encoding]::UTF8; $OutputEncoding = [System.Text.Encoding]::UTF8 } catch {}
+
 $ErrorActionPreference = "Stop"
 $Root = Split-Path -Parent $PSScriptRoot
 $ForgeDir = Join-Path $Root "forge"
@@ -95,11 +98,17 @@ if ($ForgeInstall -ne "") {
     $classes = Join-Path $Root "bridge\target\ext-classes"
     if (Test-Path $classes) { Remove-Item -Recurse -Force $classes }
     New-Item -ItemType Directory -Force -Path $classes | Out-Null
-    $sources = Get-ChildItem -Recurse -Path (Join-Path $Root "bridge\src\main\java") -Filter *.java | ForEach-Object { '"' + $_.FullName.Replace('\', '/') + '"' }
+    # Source paths relative to the source folder: they stay plain ASCII even when MTG United sits in a folder
+    # with accented letters (an ASCII list of absolute paths mangled accented folder names and javac failed).
+    $srcRoot = Join-Path $Root "bridge\src\main\java"
+    $sources = Get-ChildItem -Recurse -Path $srcRoot -Filter *.java | ForEach-Object { '"' + $_.FullName.Substring($srcRoot.Length + 1).Replace('\', '/') + '"' }
     $argFile = Join-Path $Root "bridge\target\sources.txt"
     Set-Content -Path $argFile -Value $sources -Encoding ASCII
+    Push-Location $srcRoot
     & javac -encoding UTF-8 -proc:none -nowarn -d $classes -cp "$($forgeJar.FullName);$gson" "@$argFile"
-    if ($LASTEXITCODE -ne 0) { Fail "The bridge doesn't compile against this Forge version. Use 'Install Forge' in the Forge tab instead (it downloads the version MTG United was made for)." }
+    $javacExit = $LASTEXITCODE
+    Pop-Location
+    if ($javacExit -ne 0) { Fail "The bridge doesn't compile against this Forge version. Use 'Install Forge' in the Forge tab instead (it downloads the version MTG United was made for)." }
     $extJar = Join-Path $Root "bridge\target\forge-bridge-ext.jar"
     & jar cf $extJar -C $classes .
     if ($LASTEXITCODE -ne 0) { Fail "Packaging the bridge failed." }

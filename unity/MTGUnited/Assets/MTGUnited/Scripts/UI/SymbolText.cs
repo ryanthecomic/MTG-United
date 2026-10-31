@@ -29,9 +29,20 @@ namespace MTGUnited
         // Captured on the first frame, after the creating code has set its sizes and best-fit limits.
         protected override void Start() { base.Start(); ApplyScale(); }
 
+        /// <summary>Set by labels that should drop lines that don't fit (logs) instead of spilling over.</summary>
+        public bool KeepTruncate;
+
         void ApplyScale()
         {
-            if (baseSize < 0) { baseSize = fontSize; baseMin = resizeTextMinSize; baseMax = resizeTextMaxSize; }
+            // A line taller than its box is dropped entirely by Truncate: with bigger text that made names vanish.
+            // Spill over instead (best-fit labels shrink to fit and keep their setting).
+            if (!KeepTruncate && !resizeTextForBestFit && verticalOverflow == VerticalWrapMode.Truncate) verticalOverflow = VerticalWrapMode.Overflow;
+            if (baseSize < 0)
+            {
+                baseSize = fontSize; baseMin = resizeTextMinSize; baseMax = resizeTextMaxSize;
+                // Titles in the display font (Georgia) read small next to the body text: 2 points bigger.
+                if (GameArt.TitleFont != null && font == GameArt.TitleFont) { baseSize += 2; baseMax += 2; }
+            }
             float k = UiScale.TextScale;
             fontSize = Mathf.Max(6, Mathf.RoundToInt(baseSize * k));
             resizeTextMaxSize = Mathf.Max(6, Mathf.RoundToInt(baseMax * k));
@@ -185,6 +196,16 @@ namespace MTGUnited
                 root.anchorMin = root.anchorMax = parentPivot;   // anchored position = mesh position (pivot space)
                 root.sizeDelta = new Vector2(size, size);
                 root.anchoredPosition = center;
+                // Forge's own symbol art when there is one.
+                var forge = ManaSprites.Get(code);
+                if (forge != null)
+                {
+                    disc.sprite = forge;
+                    disc.color = new Color(1, 1, 1, alpha);
+                    half.enabled = false; icon.enabled = false; label.enabled = false;
+                    return;
+                }
+                disc.sprite = Icons.Circle;
                 var look = ManaSymbols.Look(code);
                 disc.color = WithAlpha(look.a, alpha);
                 half.enabled = look.hybrid;

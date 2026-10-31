@@ -15,6 +15,13 @@ namespace MTGUnited
         public string Format = DeckFormat.Commander;
         /// <summary>Card pool for the builder: custom set codes plus "REAL" for real cards. Empty = everything.</summary>
         public string Pool = "";
+        /// <summary>Card shown on the deck box and in the builder (drag a card onto the art). Empty = the commander.</summary>
+        public string Cover = "";
+        /// <summary>Starred decks are listed first.</summary>
+        public bool Favorite;
+
+        /// <summary>The card whose art represents this deck: the chosen cover, else the commander.</summary>
+        public string ArtCard => !string.IsNullOrWhiteSpace(Cover) ? Cover.Trim() : CommanderName;
 
         /// <summary>Commander name for art and labels: the override, else the first card under a "Commander" heading.</summary>
         public string CommanderName
@@ -98,6 +105,8 @@ namespace MTGUnited
                         List = d.Str("list"),
                         Format = d.Str("format", DeckFormat.Commander),
                         Pool = d.Str("pool", ""),
+                        Cover = d.Str("cover", ""),
+                        Favorite = d.Bool("favorite"),
                         Updated = (long)(d.TryGetValue("updated", out var u) && u is double ud ? ud : 0),
                     });
                 }
@@ -111,8 +120,14 @@ namespace MTGUnited
                 Save(migrated);
                 list.Add(migrated);
             }
-            list.Sort((a, b) => b.Updated.CompareTo(a.Updated));
+            Sort(list);
             return list;
+        }
+
+        /// <summary>Favourites first, then the most recently changed.</summary>
+        public static void Sort(List<SavedDeck> list)
+        {
+            list.Sort((a, b) => a.Favorite != b.Favorite ? (a.Favorite ? -1 : 1) : b.Updated.CompareTo(a.Updated));
         }
 
         public static void Save(SavedDeck deck)
@@ -123,7 +138,7 @@ namespace MTGUnited
             var d = new Dictionary<string, object>
             {
                 { "name", deck.Name }, { "commander", deck.Commander }, { "list", deck.List }, { "updated", deck.Updated },
-                { "format", deck.Format ?? DeckFormat.Commander }, { "pool", deck.Pool ?? "" },
+                { "format", deck.Format ?? DeckFormat.Commander }, { "pool", deck.Pool ?? "" }, { "cover", deck.Cover ?? "" }, { "favorite", deck.Favorite },
             };
             File.WriteAllText(Path.Combine(Dir, deck.Id + ".json"), Json.Write(d));
         }

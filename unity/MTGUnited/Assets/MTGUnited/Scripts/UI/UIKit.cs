@@ -357,6 +357,12 @@ namespace MTGUnited
             b.colors = cb;
             b.onClick.AddListener(() => Sound.Play(Sfx.UiClick, 0.6f));
             if (onClick != null) b.onClick.AddListener(onClick);
+            b.navigation = new Navigation { mode = Navigation.Mode.None };
+            b.onClick.AddListener(() =>
+            {
+                var es = UnityEngine.EventSystems.EventSystem.current;
+                if (es != null && b != null && es.currentSelectedGameObject == b.gameObject) es.SetSelectedGameObject(null);
+            });
             var ic = Rect("Icon", disc.transform).Stretch(size * 0.2f, size * 0.2f, size * 0.2f, size * 0.2f);
             var img = ic.gameObject.AddComponent<Image>();
             img.sprite = icon;
@@ -384,22 +390,37 @@ namespace MTGUnited
         /// Rounds a card-shaped frame like a real card (corner radius about 4.5% of the width) and clips the art
         /// inside it to the same shape. Call again when the frame changes size.
         /// </summary>
+        /// <summary>
+        /// Sizes and places a full card image (centre-anchored, inside a masked box) so that only the card's
+        /// illustration fills the box: no frame, title bar or text box.
+        /// </summary>
+        public static void CropToArt(RectTransform card, Vector2 box)
+        {
+            // A Magic card's art window: about 8–92 % across, 11–55 % down (centre at 33 % from the top).
+            float h = Mathf.Max(box.x / (0.84f * 0.716f), box.y / 0.44f);
+            card.anchorMin = card.anchorMax = new Vector2(0.5f, 0.5f);
+            card.pivot = new Vector2(0.5f, 0.5f);
+            card.sizeDelta = new Vector2(h * 0.716f, h);
+            card.anchoredPosition = new Vector2(0, -(0.5f - 0.333f) * h);
+        }
+
         public static void RoundCard(Image frame, float width)
         {
             frame.sprite = Rounded;
             frame.type = Image.Type.Sliced;
-            frame.pixelsPerUnitMultiplier = 16f / Mathf.Max(3f, width * 0.045f);
+            frame.pixelsPerUnitMultiplier = 16f / Mathf.Max(3f, width * 0.08f);
             if (frame.GetComponent<Mask>() == null) frame.gameObject.AddComponent<Mask>().showMaskGraphic = true;
         }
 
         /// <summary>A round "X" close button in the top-right corner of a panel.</summary>
-        public static Button CloseX(Transform panel, UnityAction onClick, float size = 46, float inset = 12)
+        public static Button CloseX(Transform panel, UnityAction onClick, float size = 46, float inset = 8)
         {
             var b = IconButton("Close", panel, Icons.Cross, 0, 0, size, onClick);
             var r = (RectTransform)b.transform;
             r.anchorMin = r.anchorMax = new Vector2(1, 1); r.pivot = new Vector2(1, 1);
             r.anchoredPosition = new Vector2(-inset, -inset);
             b.GetComponent<Image>().color = new Color(0f, 0f, 0f, 0.35f);
+            b.transform.SetAsLastSibling();
             return b;
         }
 
@@ -416,6 +437,13 @@ namespace MTGUnited
             b.colors = colors;
             b.onClick.AddListener(() => Sound.Play(Sfx.UiClick, 0.6f));
             if (onClick != null) b.onClick.AddListener(onClick);
+            // Don't stay "selected" after a click: Space / Enter would press it again (Space is a game shortcut).
+            b.navigation = new Navigation { mode = Navigation.Mode.None };
+            b.onClick.AddListener(() =>
+            {
+                var es = UnityEngine.EventSystems.EventSystem.current;
+                if (es != null && b != null && es.currentSelectedGameObject == b.gameObject) es.SetSelectedGameObject(null);
+            });
             var t = Label("Label", img.transform, label, fontSize, Theme.Text, TextAnchor.MiddleCenter, FontStyle.Bold);
             t.rectTransform.Stretch(8, 4, 8, 4);
             return b;
@@ -472,6 +500,7 @@ namespace MTGUnited
         public void OnPointerExit(UnityEngine.EventSystems.PointerEventData e) => OnExit?.Invoke();
         public void OnPointerClick(UnityEngine.EventSystems.PointerEventData e)
         {
+            if (e.dragging) return;   // releasing a drag (a card, a scroll) is not a click
             if (e.button == UnityEngine.EventSystems.PointerEventData.InputButton.Right) OnRightClick?.Invoke();
             else OnClick?.Invoke();
         }

@@ -44,7 +44,26 @@ namespace MTGUnited
                     Vector2? pos = a.ContainsKey("x") ? new Vector2(F(a, "x"), F(a, "y")) : (Vector2?)null;
                     Move(id, a.Str("zone"), a.Int("to", p.Id), a.Int("index", 0), pos, a.Bool("log", true));
                     if (c != null && a.Bool("facedown")) c.FaceDown = true;
+                    if (c != null && a.ContainsKey("hindex") && c.Zone == "Hand")
+                    {
+                        // Dropped into a hand at a spot: put it there instead of at the end.
+                        var hand = Player(c.Owner).Hand;
+                        hand.Remove(id);
+                        hand.Insert(Mathf.Clamp(a.Int("hindex"), 0, hand.Count), id);
+                    }
                     break;
+                case "flip":
+                    if (c == null) break;
+                    c.Flipped = !c.Flipped;
+                    string other = CustomSets.OtherFace(c.Name);
+                    Say((by?.Name ?? "") + ": " + (c.Flipped ? c.Name + " transformed into " + (other ?? "its back") : (other ?? "it") + " transformed back into " + c.Name) + ".");
+                    break;
+                case "note":
+                    if (c == null) break;
+                    c.Note = (a.Str("text") ?? "").Trim();
+                    Say((by?.Name ?? "") + (c.Note.Length > 0 ? " put a note on " : " removed the note from ") + (c.FaceDown ? "a face-down card" : c.Name) + ".");
+                    break;
+                case "rotate": if (c != null) c.Rot = ((c.Rot + a.Int("d", 1)) % 4 + 4) % 4; break;
                 case "pos": if (c != null) c.Pos = new Vector2(F(a, "x"), F(a, "y")); break;
                 case "give":
                     if (c == null) break;
@@ -135,7 +154,7 @@ namespace MTGUnited
                 cards.Add(new Dictionary<string, object>
                 {
                     { "id", c.Id }, { "name", hidden ? "" : c.Name }, { "owner", c.Owner }, { "ctrl", c.Controller }, { "zone", c.Zone },
-                    { "x", (double)c.Pos.x }, { "y", (double)c.Pos.y }, { "tap", c.Tapped }, { "fd", c.FaceDown }, { "tok", c.Token },
+                    { "x", (double)c.Pos.x }, { "y", (double)c.Pos.y }, { "tap", c.Tapped }, { "rot", c.Rot }, { "flip", c.Flipped }, { "note", c.Note ?? "" }, { "fd", c.FaceDown }, { "tok", c.Token },
                     { "rev", c.Revealed }, { "pt", c.TokenPT }, { "col", c.TokenColors }, { "ctr", counters },
                 });
             }
@@ -168,7 +187,7 @@ namespace MTGUnited
                 var c = new TableCard
                 {
                     Id = j.Int("id"), Name = j.Str("name"), Owner = j.Int("owner"), Controller = j.Int("ctrl"), Zone = j.Str("zone"),
-                    Pos = new Vector2(F(j, "x"), F(j, "y")), Tapped = j.Bool("tap"), FaceDown = j.Bool("fd"), Token = j.Bool("tok"),
+                    Pos = new Vector2(F(j, "x"), F(j, "y")), Tapped = j.Bool("tap"), Rot = j.Int("rot"), Flipped = j.Bool("flip"), Note = j.Str("note"), FaceDown = j.Bool("fd"), Token = j.Bool("tok"),
                     Revealed = j.Bool("rev"), TokenPT = j.Str("pt"), TokenColors = j.Str("col"),
                 };
                 var ctr = j.Obj("ctr");

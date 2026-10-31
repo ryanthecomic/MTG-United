@@ -44,6 +44,81 @@ namespace MTGUnited
         public static Sprite Tap => tap ?? (tap = Make(p => TurnArrowSdf(p, false)));
         public static Sprite Untap => untap ?? (untap = Make(p => TurnArrowSdf(p, true)));
 
+        static Sprite copy, export, import, minus, star, starOutline, pencil, fork;
+        /// <summary>Kitchen Table tab: a fork (four tines, a rounded neck, a long handle).</summary>
+        public static Sprite Fork => fork ?? (fork = Make(p =>
+        {
+            float handle = Segment(p, new Vector2(0, -0.92f), new Vector2(0, -0.12f), 0.085f);
+            // The neck: a rounded bar joining the tines to the handle.
+            float neck = Box(p - new Vector2(0, 0.04f), new Vector2(0.22f, 0.07f)) - 0.07f;
+            float tines = float.MaxValue;
+            for (int i = 0; i < 4; i++)
+            {
+                float x = -0.24f + i * 0.16f;
+                tines = Mathf.Min(tines, Segment(p, new Vector2(x, 0.1f), new Vector2(x, 0.86f), 0.045f));
+            }
+            float taper = Segment(p, new Vector2(0, -0.14f), new Vector2(0, 0.02f), 0.13f);
+            return Mathf.Min(Mathf.Min(handle, neck), Mathf.Min(tines, taper));
+        }));
+        /// <summary>Kitchen table pictures (Home slide, Table tab): the same fork.</summary>
+        public static Sprite Table => Fork;
+        /// <summary>Rename: a pencil.</summary>
+        public static Sprite Pencil => pencil ?? (pencil = Make(p =>
+        {
+            var q = Rotate(p, -45f);
+            float body = Box(q - new Vector2(0.1f, 0), new Vector2(0.5f, 0.16f));
+            float tip = Mathf.Max(Mathf.Abs(q.y) - (q.x + 0.78f) * 0.16f / 0.38f, Mathf.Max(-(q.x + 0.78f), q.x + 0.4f));
+            return Mathf.Min(body, tip);
+        }));
+        public static Sprite Minus => minus ?? (minus = Make(p => Box(p, new Vector2(0.62f, 0.13f))));
+        /// <summary>Favourite: a filled star, and its outline for "not a favourite".</summary>
+        public static Sprite Star => star ?? (star = Make(StarSdf));
+        public static Sprite StarOutline => starOutline ?? (starOutline = Make(p => Mathf.Abs(StarSdf(p) + 0.06f) - 0.07f));
+
+        static float StarSdf(Vector2 p)
+        {
+            // Five-pointed star: distance to the polygon, sign from a winding test.
+            const int n = 10;
+            var pts = new Vector2[n];
+            for (int i = 0; i < n; i++)
+            {
+                float a = Mathf.PI / 2f + i * Mathf.PI * 2f / n;
+                float r = i % 2 == 0 ? 0.92f : 0.4f;
+                pts[i] = new Vector2(Mathf.Cos(a) * r, Mathf.Sin(a) * r - 0.06f);
+            }
+            float d = float.MaxValue;
+            bool inside = false;
+            for (int i = 0, j = n - 1; i < n; j = i++)
+            {
+                Vector2 a = pts[j], b = pts[i];
+                Vector2 pa = p - a, ba = b - a;
+                float h = Mathf.Clamp01(Vector2.Dot(pa, ba) / Vector2.Dot(ba, ba));
+                d = Mathf.Min(d, (pa - ba * h).magnitude);
+                if ((b.y > p.y) != (a.y > p.y) && p.x < (a.x - b.x) * (p.y - b.y) / (a.y - b.y) + b.x) inside = !inside;
+            }
+            return inside ? -d : d;
+        }
+        /// <summary>Duplicate: two overlapping card outlines.</summary>
+        public static Sprite Copy => copy ?? (copy = Make(p => Mathf.Min(
+            Mathf.Abs(Box(p - new Vector2(0.14f, -0.14f), new Vector2(0.4f, 0.5f)) - 0.06f) - 0.07f,
+            Mathf.Max(Mathf.Abs(Box(p - new Vector2(-0.18f, 0.18f), new Vector2(0.4f, 0.5f)) - 0.06f) - 0.07f,
+                      -(Box(p - new Vector2(0.14f, -0.14f), new Vector2(0.4f, 0.5f)) - 0.2f)))));
+        /// <summary>Export: an arrow rising out of a tray. Import: an arrow dropping into it.</summary>
+        public static Sprite Export => export ?? (export = Make(p => TrayArrowSdf(p, true)));
+        public static Sprite Import => import ?? (import = Make(p => TrayArrowSdf(p, false)));
+
+        static float TrayArrowSdf(Vector2 p, bool up)
+        {
+            float tray = Mathf.Min(Segment(p, new Vector2(-0.62f, -0.2f), new Vector2(-0.62f, -0.66f), 0.09f),
+                         Mathf.Min(Segment(p, new Vector2(-0.62f, -0.66f), new Vector2(0.62f, -0.66f), 0.09f),
+                                   Segment(p, new Vector2(0.62f, -0.66f), new Vector2(0.62f, -0.2f), 0.09f)));
+            float tip = up ? 0.72f : -0.38f, tail = up ? -0.38f : 0.72f, dir = up ? -1f : 1f;
+            float shaft = Segment(p, new Vector2(0, tail), new Vector2(0, tip), 0.09f);
+            float h1 = Segment(p, new Vector2(0, tip), new Vector2(-0.3f, tip + dir * 0.3f), 0.09f);
+            float h2 = Segment(p, new Vector2(0, tip), new Vector2(0.3f, tip + dir * 0.3f), 0.09f);
+            return Mathf.Min(tray, Mathf.Min(shaft, Mathf.Min(h1, h2)));
+        }
+
         const int Size = 64;
 
         /// <summary>Rasterises a signed distance function (negative = inside) over [-1,1]^2 with soft edges.</summary>

@@ -38,7 +38,10 @@ namespace MTGUnited
             loaded = true;
             tableBg = Resources.Load<Texture2D>(Root + "Images/BG_Table");
             cardBack = Resources.Load<Texture2D>(Root + "Images/sleeve_weathered_cardback");
-            menuVideo = Resources.Load<VideoClip>(Root + "Videos/TableBG");
+            // MenuLoop: the menu video re-encoded with proper colour tags and a keyframe every second, so Windows'
+            // decoder neither warns about unknown colour primaries nor runs dry when the loop jumps back to the start.
+            menuVideo = Resources.Load<VideoClip>(Root + "Videos/MenuLoop");
+            if (menuVideo == null) menuVideo = Resources.Load<VideoClip>(Root + "Videos/TableBG");
             // Preferred title font by file name (without extension); otherwise the first font in the folder.
             titleFont = Resources.Load<Font>(Root + "Fonts/" + PreferredTitleFont);
             if (titleFont == null)

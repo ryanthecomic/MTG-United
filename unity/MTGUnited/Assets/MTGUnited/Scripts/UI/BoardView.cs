@@ -19,9 +19,13 @@ namespace MTGUnited
         // (Library, graveyard and exile now sit in my nameplate, so the field runs up to the HUD column.)
         static float MyFieldRight => 1560f - Mathf.Max(0f, UiScale.Value - 1f) * 480f;
         // Card sizes follow Options > card size; the two battlefield rows re-space around them.
-        static float MyCardH => 150f * UiScale.CardScale;
-        static float MyOtherRowY => 223f + MyCardH / 2f;
-        static float MyCreatureRowY => MyOtherRowY + MyCardH + 18f;
+        // Two rows must fit between the hand band (215) and the opponents' area, whatever the card size; focusing
+        // my own board (scroll up over it, or F) gives it the whole table below the opponents' nameplates.
+        const float MyFieldBottom = 215f;
+        float MyFieldTop => focusMe ? 1080f - OppHeaderH * UiScale.Value - 24f : OppBandBottom - 8f;
+        float MyCardH => Mathf.Min((focusMe ? 200f : 150f) * UiScale.CardScale, (MyFieldTop - MyFieldBottom - 18f - 12f) / 2f);
+        float MyOtherRowY => MyFieldBottom + 8f + MyCardH / 2f;
+        float MyCreatureRowY => MyOtherRowY + MyCardH + 18f;
         static float HandCardH => 220f * UiScale.CardScale;
         static float HandY => 70f + (HandCardH - 220f) * 0.25f;
         const float HandLeft = 410;   // clear of my nameplate
@@ -106,7 +110,7 @@ namespace MTGUnited
                 UiScaled.Add(myPanel, MyCorner);
                 myPanel.Render(me, s, true);
                 panelCenters[me.Id] = MyPortraitPos;
-                myFieldBg.rectTransform.Place(MyFieldLeft - 10, 215, MyFieldRight - MyFieldLeft + 20, 340);
+                myFieldBg.rectTransform.Place(MyFieldLeft - 10, MyFieldBottom, MyFieldRight - MyFieldLeft + 20, MyFieldTop - MyFieldBottom);
 
                 LayoutHand(me.Hand, placements);
                 LayoutField(me, MyFieldLeft, MyFieldRight, MyCreatureRowY, MyOtherRowY, MyCardH, placements, false);
@@ -127,7 +131,8 @@ namespace MTGUnited
                 float x0 = fi < 0 ? i * baseW : i == fi ? 0f : i < fi ? -(fi - i) * baseW - 40f : 1920f + 40f + (i - fi - 1) * baseW;
                 columnSpans[p.Id] = (x0, colW);
                 var bg = zoneBackgrounds[i];
-                bg.rectTransform.Place(x0 + 6, OppBandBottom, colW - 12, 1080 - OppBandBottom - 6);
+                float lift = focusMe ? 760f : 0f;   // my board focused: their cards slide up off the table
+                bg.rectTransform.Place(x0 + 6, OppBandBottom + lift, colW - 12, 1080 - OppBandBottom - 6);
                 var seat = Theme.PlayerColor(s.Players.IndexOf(p));
                 bg.color = new Color(seat.r, seat.g, seat.b, p.Id == s.ActivePlayer ? 0.11f : 0.05f);   // each player's area in their colour
 
@@ -153,7 +158,7 @@ namespace MTGUnited
                 float cardH = Mathf.Min(Mathf.Clamp(colW / 5.6f, 70, focused ? 190 : 150) * UiScale.CardScale, (room - 22f) / 2.05f);
                 float otherY = fieldTop - cardH * 0.55f - 4;
                 float creatureY = otherY - cardH - 18;
-                LayoutField(p, fieldLeft, x0 + colW - 14, creatureY, otherY, cardH, placements, true);
+                LayoutField(p, fieldLeft, x0 + colW - 14, creatureY + lift, otherY + lift, cardH, placements, true);
             }
 
             // ---------------------------------------------------------------- selection tray
@@ -384,6 +389,17 @@ namespace MTGUnited
         // ---------------------------------------------------------------- focus (scroll over an opponent)
 
         int focusedOpp = -1;
+        bool focusMe;
+
+        /// <summary>Keyboard (F): toggle the focus on my own board.</summary>
+        public void ToggleFocusMe()
+        {
+            if (last == null) return;
+            focusMe = !focusMe;
+            if (focusMe) focusedOpp = -1;
+            Sound.Play(Sfx.Draw, 0.4f);
+            Render(last);
+        }
         readonly Dictionary<int, (float x0, float w)> columnSpans = new Dictionary<int, (float, float)>();
 
         /// <summary>Keyboard: focus the n-th opponent (0-based), or -1 to show every board.</summary>
@@ -392,8 +408,9 @@ namespace MTGUnited
             if (last == null) return;
             var opps = last.Opponents.ToList();
             int id = index >= 0 && index < opps.Count ? opps[index].Id : -1;
-            if (id == focusedOpp) return;
+            if (id == focusedOpp && !focusMe) return;
             focusedOpp = id;
+            focusMe = false;
             Render(last);
         }
 
@@ -416,18 +433,24 @@ namespace MTGUnited
             if (gc.Tray.gameObject.activeSelf) return;
             if (!RectTransformUtility.ScreenPointToLocalPointInRectangle(root, Input.mousePosition, null, out var local)) return;
             var p = local + new Vector2(960, 540);
-            if (p.y < OppBandBottom) return;
             if (wheel < 0f)
             {
-                if (focusedOpp >= 0) { focusedOpp = -1; Render(last); }
+                if (focusedOpp >= 0 || focusMe) { focusedOpp = -1; focusMe = false; Render(last); }
+                return;
+            }
+            if (p.y < (focusMe ? MyFieldTop : OppBandBottom))
+            {
+                // Over my own battlefield (not the hand): focus my board.
+                if (!focusMe && p.y > MyFieldBottom && p.x > MyFieldLeft - 20 && p.x < MyFieldRight + 20) { focusMe = true; focusedOpp = -1; Sound.Play(Sfx.Draw, 0.4f); Render(last); }
                 return;
             }
             foreach (var kv in columnSpans)
             {
                 if (last.Player(kv.Key) == null || kv.Key == last.Me) continue;
-                if (p.x >= kv.Value.x0 && p.x < kv.Value.x0 + kv.Value.w && focusedOpp != kv.Key)
+                if (p.x >= kv.Value.x0 && p.x < kv.Value.x0 + kv.Value.w && (focusedOpp != kv.Key || focusMe))
                 {
                     focusedOpp = kv.Key;
+                    focusMe = false;
                     Sound.Play(Sfx.Draw, 0.4f);
                     Render(last);
                     return;
@@ -968,6 +991,7 @@ namespace MTGUnited
             hoveredHandId = -1;
             hoverCandidate = null;
             focusedOpp = -1;
+            focusMe = false;
             columnSpans.Clear();
         }
     }

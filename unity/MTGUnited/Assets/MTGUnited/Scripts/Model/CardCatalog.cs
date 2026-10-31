@@ -50,6 +50,12 @@ namespace MTGUnited
             return known.TryGetValue(name, out var c) ? c : null;
         }
 
+        /// <summary>Remembers card details found elsewhere (Scryfall search) unless Forge already told us.</summary>
+        public static void Remember(CardInfo c)
+        {
+            if (c != null && !string.IsNullOrEmpty(c.Name) && !known.ContainsKey(c.Name)) known[c.Name] = c;
+        }
+
         public static void Search(string query, Action<string, List<CardInfo>> onResults)
         {
             searchCallback = onResults;

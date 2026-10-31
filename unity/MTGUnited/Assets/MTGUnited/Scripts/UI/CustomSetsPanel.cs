@@ -71,7 +71,7 @@ namespace MTGUnited
 
         public void Close() => gameObject.SetActive(false);
 
-        void Import()
+        public void Import()
         {
             ForgeSetup.BrowseFile("Choose a Cockatrice set export (.xml)", "Cockatrice card database (*.xml)|*.xml|All files (*.*)|*.*", path =>
             {

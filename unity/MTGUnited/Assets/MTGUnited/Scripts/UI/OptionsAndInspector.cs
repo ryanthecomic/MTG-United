@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using UnityEngine;
 using UnityEngine.UI;
 
@@ -11,9 +12,9 @@ namespace MTGUnited
     public class CardInspector : MonoBehaviour
     {
         public static CardInspector Instance { get; private set; }
-        RectTransform card;
-        RawImage art;
-        Text text;
+        RectTransform card, card2;
+        RawImage art, art2;
+        Text text, text2;
         CardData showing;
         float openedAt;
 
@@ -30,48 +31,98 @@ namespace MTGUnited
             pe.OnClick = ins.Hide;
             pe.OnRightClick = ins.Hide;
 
-            var frame = UIKit.Panel("Card", shade.transform, new Color(0.06f, 0.06f, 0.08f, 0.98f));
-            frame.raycastTarget = false;
-            ins.card = frame.rectTransform;
-            ins.card.anchorMin = ins.card.anchorMax = new Vector2(0.5f, 0.5f);
-            ins.text = UIKit.Label("Text", frame.transform, "", 26, Theme.Text, TextAnchor.UpperLeft);
-            ins.text.rectTransform.Stretch(28, 28, 28, 28);
-            ins.text.supportRichText = true;
-            var artRt = UIKit.Rect("Art", frame.transform).Stretch();
-            ins.art = artRt.gameObject.AddComponent<RawImage>();
-            ins.art.raycastTarget = false;
-            var x = UIKit.CloseX(frame.transform, () => { ins.openedAt = -1f; ins.Hide(); }, 52, 14);   // inside: the card is clipped round
-            x.transform.SetAsLastSibling();
+            MakeFace(shade.transform, "Card", out ins.card, out ins.art, out ins.text);
+            // Double-faced cards: the other face, right beside the first.
+            MakeFace(shade.transform, "OtherFace", out ins.card2, out ins.art2, out ins.text2);
+            // X in the top-right corner of the screen (the board space is 1920x1080 centred in the shade).
+            var x = UIKit.IconButton("Close", shade.transform, Icons.Cross, 0, 0, 56, () => { ins.openedAt = -1f; ins.Hide(); });
+            var xr = (RectTransform)x.transform;
+            xr.anchorMin = xr.anchorMax = new Vector2(0.5f, 0.5f); xr.pivot = new Vector2(1, 1);
+            xr.anchoredPosition = new Vector2(960 - 10, 540 - 10);
+            x.GetComponent<Image>().color = new Color(0f, 0f, 0f, 0.55f);
             shade.gameObject.SetActive(false);
             return ins;
+        }
+
+        /// <summary>
+        /// Kitchen table, Alt held: the same big view, but it doesn't block the mouse, so moving over other cards
+        /// switches the view to them.
+        /// </summary>
+        public void ShowPassive(CardData c)
+        {
+            if (c == null || c.Hidden || c == showing) return;
+            Show(c);
+            SetBlocking(false);
+        }
+
+        void SetBlocking(bool on)
+        {
+            foreach (var g in GetComponentsInChildren<Graphic>(true)) if (g.GetComponent<Button>() == null) g.raycastTarget = on && g.gameObject == gameObject;
+            var x = transform.Find("Close");
+            if (x != null) x.gameObject.SetActive(on);
+        }
+
+        static void MakeFace(Transform parent, string name, out RectTransform rt, out RawImage img, out Text label)
+        {
+            var frame = UIKit.Panel(name, parent, new Color(0.06f, 0.06f, 0.08f, 0.98f));
+            frame.raycastTarget = false;
+            rt = frame.rectTransform;
+            rt.anchorMin = rt.anchorMax = new Vector2(0.5f, 0.5f);
+            label = UIKit.Label("Text", frame.transform, "", 26, Theme.Text, TextAnchor.UpperLeft);
+            label.rectTransform.Stretch(28, 28, 28, 28);
+            label.supportRichText = true;
+            var artRt = UIKit.Rect("Art", frame.transform).Stretch();
+            img = artRt.gameObject.AddComponent<RawImage>();
+            img.raycastTarget = false;
         }
 
         public void Show(CardData c)
         {
             if (c == null || c.Hidden) return;
+            SetBlocking(true);
             showing = c;
             openedAt = Time.unscaledTime;
             gameObject.SetActive(true);
             transform.SetAsLastSibling();
             // Board space is 1920x1080 centred on the screen; the card hugs the left edge.
             float h = Mathf.Min(1040f, 940f * UiScale.Value), w = h * 0.716f;
-            card.sizeDelta = new Vector2(w, h);
-            UIKit.RoundCard(card.GetComponent<Image>(), w);
-            card.anchoredPosition = new Vector2(-960 + 20 + w / 2f, 0);
-            art.enabled = false;
-            text.text = "<b>" + c.Name + "</b>   " + CardView.ManaText(c.ManaCost) + "\n<i>" + c.TypeLine + "</i>\n\n" + c.Text
-                        + (c.HasPT ? "\n\n<b>" + c.Power + "/" + c.Toughness + "</b>" : "");
-            Sound.Play(Sfx.Popup, 0.5f);
-            if (CardImageCache.Instance != null)
+            Fill(card, art, text, c, w, h, new Vector2(-960 + 20 + w / 2f, 0));
+
+            // A double-faced card (custom set): its other face next to it.
+            string other = c.Token ? null : CustomSets.OtherFace(c.Name);
+            card2.gameObject.SetActive(other != null);
+            if (other != null)
             {
-                var target = c;
-                CardImageCache.Instance.GetFor(c, tex =>
-                {
-                    if (showing != target || tex == null) return;
-                    art.texture = tex;
-                    art.enabled = true;
-                });
+                var info = CardCatalog.Get(other);
+                var back = info != null ? info.ToCardData() : new CardData { Name = other };
+                Fill(card2, art2, text2, back, w, h, new Vector2(-960 + 20 + w * 1.5f + 24, 0));
             }
+            Sound.Play(Sfx.Popup, 0.5f);
+        }
+
+        void Fill(RectTransform frame, RawImage img, Text label, CardData c, float w, float h, Vector2 pos)
+        {
+            frame.sizeDelta = new Vector2(w, h);
+            UIKit.RoundCard(frame.GetComponent<Image>(), w);
+            frame.anchoredPosition = pos;
+            img.enabled = false;
+            label.text = "<b>" + c.Name + "</b>   " + CardView.ManaText(c.ManaCost ?? "") + "\n<i>" + c.TypeLine + "</i>\n\n" + c.Text
+                         + (c.HasPT ? "\n\n<b>" + c.Power + "/" + c.Toughness + "</b>" : "");
+            if (CardImageCache.Instance == null) return;
+            var target = showing;
+            CardImageCache.Instance.GetFor(c, tex =>
+            {
+                if (showing != target || tex == null || img == null) return;
+                img.texture = tex;
+                img.enabled = true;
+            });
+        }
+
+        /// <summary>Closes right away (releasing Alt at the kitchen table).</summary>
+        public void ForceHide()
+        {
+            showing = null;
+            gameObject.SetActive(false);
         }
 
         public void Hide()
@@ -103,9 +154,9 @@ namespace MTGUnited
             var p = UIKit.Panel("Panel", shade.transform, Theme.Panel);
             o.panel = p.rectTransform;
             o.panel.anchorMin = o.panel.anchorMax = new Vector2(0.5f, 0.5f);
-            o.panel.sizeDelta = new Vector2(680, 880);
+            o.panel.sizeDelta = new Vector2(680, PanelH);
             p.gameObject.AddComponent<PointerEvents>();   // clicks inside the panel don't close it
-            UiScaled.Add(p, Vector2.zero);
+            UiScaled.Add(p, Vector2.zero).MaxScale = 1040f / PanelH;   // always fits on screen
 
             var title = UIKit.Label("Title", p.transform, "OPTIONS", 30, Theme.Accent, TextAnchor.UpperCenter, FontStyle.Bold).Titled();
             title.rectTransform.Stretch(20, 0, 20, 24);
@@ -114,12 +165,15 @@ namespace MTGUnited
             o.settingsPage = UIKit.Rect("Settings", p.transform).Stretch();
             o.shortcutsPage = UIKit.Rect("Shortcuts", p.transform).Stretch();
             o.tabSettings = UIKit.Button("TabSettings", p.transform, "SETTINGS", Theme.Accent, () => o.ShowTab(false), 18);
-            ((RectTransform)o.tabSettings.transform).Place(150, 880 - 124, 180, 44);
+            ((RectTransform)o.tabSettings.transform).Place(150, PanelH - 124, 180, 44);
             o.tabShortcuts = UIKit.Button("TabShortcuts", p.transform, "SHORTCUTS", Theme.Secondary, () => o.ShowTab(true), 18);
-            ((RectTransform)o.tabShortcuts.transform).Place(350, 880 - 124, 180, 44);
+            ((RectTransform)o.tabShortcuts.transform).Place(350, PanelH - 124, 180, 44);
             o.BuildShortcuts(o.shortcutsPage);
 
-            float y = 680;
+            float y = PanelH - 200;
+            // Screen: resolution and window mode (the board always fits inside, letterboxed if needed).
+            o.resText = o.Row(o.settingsPage, "Resolution", ref y, () => o.StepResolution(-1), () => o.StepResolution(1));
+            o.modeText = o.ToggleRow(o.settingsPage, "Display mode", ref y, o.CycleDisplayMode);
             o.scaleText = o.Row(o.settingsPage, "Interface size", ref y, () => o.Step(-1, Setting.Scale), () => o.Step(1, Setting.Scale));
             o.cardText = o.Row(o.settingsPage, "Card size", ref y, () => o.Step(-1, Setting.Cards), () => o.Step(1, Setting.Cards));
             o.textSizeText = o.Row(o.settingsPage, "Text size", ref y, () => o.Step(-1, Setting.Text), () => o.Step(1, Setting.Text));
@@ -150,6 +204,69 @@ namespace MTGUnited
         }
 
         enum Setting { Scale, Cards, Text, Delay, Volume }
+        const float PanelH = 960;
+        Text resText, modeText;
+
+        static readonly FullScreenMode[] Modes = { FullScreenMode.FullScreenWindow, FullScreenMode.ExclusiveFullScreen, FullScreenMode.Windowed };
+
+        static string ModeName(FullScreenMode m) => m == FullScreenMode.Windowed ? "WINDOWED" : m == FullScreenMode.ExclusiveFullScreen ? "FULLSCREEN" : m == FullScreenMode.MaximizedWindow ? "MAXIMIZED" : "BORDERLESS";
+
+        /// <summary>Every size the monitor offers (plus the current one), smallest first.</summary>
+        static List<Vector2Int> Sizes()
+        {
+            var list = new List<Vector2Int>();
+            foreach (var r in Screen.resolutions)
+            {
+                var v = new Vector2Int(r.width, r.height);
+                if (v.x >= 1024 && v.y >= 576 && !list.Contains(v)) list.Add(v);
+            }
+            var cur = new Vector2Int(Screen.width, Screen.height);
+            if (!list.Contains(cur)) list.Add(cur);
+            list.Sort((a, b) => (a.x * a.y).CompareTo(b.x * b.y));
+            return list;
+        }
+
+        void StepResolution(int dir)
+        {
+            var sizes = Sizes();
+            int i = sizes.IndexOf(new Vector2Int(Screen.width, Screen.height));
+            i = Mathf.Clamp(i + dir, 0, sizes.Count - 1);
+            Screen.SetResolution(sizes[i].x, sizes[i].y, Screen.fullScreenMode);
+            pendingRes = sizes[i];
+            Refresh();
+        }
+
+        void CycleDisplayMode()
+        {
+            int i = System.Array.IndexOf(Modes, Screen.fullScreenMode);
+            var next = Modes[(i + 1 + Modes.Length) % Modes.Length];
+            int w = Screen.width, h = Screen.height;
+            if (next == FullScreenMode.Windowed && w >= Display.main.systemWidth)
+            {
+                // A window as big as the monitor would hide its own title bar: start a bit smaller.
+                w = Mathf.RoundToInt(Display.main.systemWidth * 0.8f); h = Mathf.RoundToInt(w * 9f / 16f);
+            }
+            else if (next != FullScreenMode.Windowed) { w = Display.main.systemWidth; h = Display.main.systemHeight; }
+            Screen.SetResolution(w, h, next);
+            pendingMode = next;
+            pendingRes = new Vector2Int(w, h);
+            Refresh();
+        }
+
+        Vector2Int? pendingRes;
+        FullScreenMode? pendingMode;
+
+        void Update()
+        {
+            // The screen changes a frame or two after asking; keep the labels honest.
+            if (pendingRes.HasValue && Screen.width == pendingRes.Value.x && Screen.height == pendingRes.Value.y) pendingRes = null;
+            if (pendingMode.HasValue && Screen.fullScreenMode == pendingMode.Value) pendingMode = null;
+            var r = pendingRes ?? new Vector2Int(Screen.width, Screen.height);
+            string res = r.x + " × " + r.y;
+            if (resText.text != res) resText.text = res;
+            string mode = ModeName(pendingMode ?? Screen.fullScreenMode);
+            if (modeText.text != mode) modeText.text = mode;
+        }
         RectTransform settingsPage, shortcutsPage;
         Button tabSettings, tabShortcuts;
 
@@ -163,18 +280,74 @@ namespace MTGUnited
         }
 
         /// <summary>The shortcuts tab: every key binding, two columns (key | what it does).</summary>
+        readonly List<(Image tab, RectTransform list)> shortcutTabs = new List<(Image, RectTransform)>();
+
+        /// <summary>The shortcuts tab: one sub-tab per mode (Forge game, kitchen table, deck builder, everywhere).</summary>
         void BuildShortcuts(RectTransform page)
         {
-            float y = 700;
-            foreach (var (key, what) in Shortcuts.List)
+            float x = 40, w = (680 - 80 - 3 * 8) / (float)Shortcuts.Tabs.Length;
+            for (int t = 0; t < Shortcuts.Tabs.Length; t++)
             {
-                var k = UIKit.Panel("Key", page, new Color(1f, 1f, 1f, 0.08f));
-                k.rectTransform.Place(40, y, 190, 38);
-                var kt = UIKit.Label("K", k.transform, key, 17, Theme.Accent, TextAnchor.MiddleCenter, FontStyle.Bold);
+                int index = t;
+                var b = UIKit.Button("Mode" + t, page, Shortcuts.Tabs[t].tab, Theme.Secondary, () => ShowShortcuts(index), 14);
+                ((RectTransform)b.transform).Place(x, PanelH - 186, w, 38);
+                x += w + 8;
+                var list = UIKit.Rect("List" + t, page).Stretch();
+                BuildShortcutList(list, Shortcuts.Tabs[t].list);
+                shortcutTabs.Add((b.GetComponent<Image>(), list));
+            }
+        }
+
+        void ShowShortcuts(int index)
+        {
+            for (int i = 0; i < shortcutTabs.Count; i++)
+            {
+                shortcutTabs[i].tab.color = i == index ? new Color(0.55f, 0.32f, 0.1f) : Theme.Secondary;
+                shortcutTabs[i].list.gameObject.SetActive(i == index);
+            }
+        }
+
+        /// <summary>The shortcut list that fits what you're doing right now.</summary>
+        int ContextShortcutTab()
+        {
+            if (gc.Table != null && gc.Table.IsOpen) return 1;
+            if (gc.InGame) return 0;
+            if (gc.Menu != null && gc.Menu.Builder != null && gc.Menu.Builder.IsOpen) return 2;
+            return 0;
+        }
+
+        void BuildShortcutList(RectTransform page, (string key, string what)[] items)
+        {
+            // A scrolling list (the kitchen table has more shortcuts than fit).
+            float top = PanelH - 200, bottom = 100;
+            var view = UIKit.Rect("View", page);
+            view.Place(30, bottom, 620, top - bottom);
+            view.gameObject.AddComponent<RectMask2D>();
+            view.gameObject.AddComponent<Image>().color = Color.clear;
+            var sr = view.gameObject.AddComponent<ScrollRect>();
+            var content = UIKit.Rect("Content", view);
+            content.anchorMin = new Vector2(0, 1); content.anchorMax = new Vector2(1, 1); content.pivot = new Vector2(0.5f, 1);
+            float rowH = 40, h = items.Length * rowH + 8;
+            content.sizeDelta = new Vector2(0, h);
+            sr.content = content; sr.horizontal = false; sr.scrollSensitivity = 30; sr.movementType = ScrollRect.MovementType.Clamped;
+            if (h > top - bottom) UIKit.AddScrollbar(sr);
+            float y = -4;
+            foreach (var (key, what) in items)
+            {
+                bool heading = key.EndsWith(":");
+                var k = UIKit.Panel("Key", content, new Color(1f, 1f, 1f, heading ? 0f : 0.08f));
+                var kr = k.rectTransform;
+                kr.anchorMin = kr.anchorMax = new Vector2(0, 1); kr.pivot = new Vector2(0, 1);
+                kr.sizeDelta = new Vector2(190, 34); kr.anchoredPosition = new Vector2(10, y);
+                var kt = UIKit.Label("K", k.transform, key, heading ? 15 : 17, heading ? new Color(1f, 0.72f, 0.4f) : Theme.Accent,
+                    heading ? TextAnchor.MiddleLeft : TextAnchor.MiddleCenter, FontStyle.Bold);
                 kt.rectTransform.Stretch(4, 0, 4, 0);
-                var w = UIKit.Label("What", page, what, 17, Theme.Text, TextAnchor.MiddleLeft);
-                w.rectTransform.Place(248, y, 400, 38);
-                y -= 44;
+                var w = UIKit.Label("What", content, what, 17, heading ? Theme.TextDim : Theme.Text, TextAnchor.MiddleLeft);
+                var wr = w.rectTransform;
+                wr.anchorMin = wr.anchorMax = new Vector2(0, 1); wr.pivot = new Vector2(0, 1);
+                wr.sizeDelta = new Vector2(380, 34); wr.anchoredPosition = new Vector2(218, y);
+                w.resizeTextForBestFit = true; w.resizeTextMinSize = 12; w.resizeTextMaxSize = 17;
+                y -= rowH;
             }
         }
         Text cardText, speedText, reduceText, textSizeText;
@@ -189,7 +362,7 @@ namespace MTGUnited
             v.rectTransform.Place(406, y, 128, 52);
             var pl = UIKit.Button("Plus", parent, "+", Theme.Secondary, () => plus(), 26);
             ((RectTransform)pl.transform).Place(538, y + 2, 52, 48);
-            y -= 66;
+            y -= 60;
             return v;
         }
 
@@ -199,7 +372,7 @@ namespace MTGUnited
             l.rectTransform.Place(40, y, 300, 52);
             var b = UIKit.Button("Toggle", parent, "", Theme.Secondary, () => toggle(), 20);
             ((RectTransform)b.transform).Place(350, y + 2, 240, 48);
-            y -= 66;
+            y -= 60;
             return UIKit.LabelOf(b);
         }
 
@@ -238,6 +411,7 @@ namespace MTGUnited
         public void Open(bool shortcutsTab)
         {
             ShowTab(shortcutsTab);
+            ShowShortcuts(ContextShortcutTab());
             Refresh();
             gameObject.SetActive(true);
             transform.SetAsLastSibling();

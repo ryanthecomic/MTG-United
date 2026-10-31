@@ -231,6 +231,53 @@ namespace MTGUnited
             pr.offsetMin = new Vector2(2, 4); pr.offsetMax = new Vector2(-4, 30);
         }
 
+        /// <summary>
+        /// Kitchen table: click the life total to type a new one (Enter keeps it, Esc cancels).
+        /// Ctrl + click still goes to the panel (switching seats).
+        /// </summary>
+        public void EnableLifeEdit(System.Action<int> setLife)
+        {
+            var hit = UIKit.Rect("LifeHit", badge.transform);
+            hit.Stretch(0, 30, 0, 0);
+            var img = hit.gameObject.AddComponent<Image>();
+            img.color = Color.clear;
+            var pe = hit.gameObject.AddComponent<PointerEvents>();
+            pe.OnClick = () =>
+            {
+                bool ctrl = Input.GetKey(KeyCode.LeftControl) || Input.GetKey(KeyCode.RightControl);
+                if (ctrl) { Clicked?.Invoke(); return; }
+                StartLifeEdit(setLife);
+            };
+            pe.OnRightClick = () => RightClicked?.Invoke();
+        }
+
+        void StartLifeEdit(System.Action<int> setLife)
+        {
+            if (badge.transform.Find("LifeEdit") != null) return;
+            var field = UIKit.Input("LifeEdit", badge.transform, "", false, 40);
+            var fr = (RectTransform)field.transform;
+            fr.Stretch(4, 32, 4, 4);
+            field.GetComponent<Image>().color = new Color(0f, 0f, 0f, 0.85f);
+            field.textComponent.alignment = TextAnchor.MiddleCenter;
+            field.contentType = InputField.ContentType.IntegerNumber;
+            field.characterLimit = 4;
+            field.text = lastLife == int.MinValue ? lifeText.text : lastLife.ToString();
+            lifeText.enabled = false;
+            bool done = false;
+            field.onEndEdit.AddListener(text =>
+            {
+                if (done) return;
+                done = true;
+                bool cancelled = Input.GetKeyDown(KeyCode.Escape);
+                if (!cancelled && int.TryParse(text, out int v) && v != lastLife) setLife(Mathf.Clamp(v, -999, 9999));
+                lifeText.enabled = true;
+                if (field != null) Destroy(field.gameObject);
+            });
+            field.Select();
+            field.ActivateInputField();
+            Sound.Play(Sfx.UiClick, 0.5f);
+        }
+
         /// <summary>The player's seat colour: tints the panel, the life badge rim and the name.</summary>
         public void SetColor(Color c)
         {
@@ -310,12 +357,12 @@ namespace MTGUnited
                 for (int i = 0; i < ManaKeys.Length; i++)
                 {
                     int idx = i;
-                    var b = UIKit.Button("Mana" + ManaKeys[i], manaRow, "", Theme.ForManaColor(ManaKeys[i]),
+                    var b = UIKit.Button("Mana" + ManaKeys[i], manaRow, "", new Color(0.04f, 0.04f, 0.06f, 0.8f),
                         () => gc.Send("mana", "color", (int)ManaBytes[idx]), 14);
                     var r = (RectTransform)b.transform;
                     r.anchorMin = new Vector2(i / 6f, 0); r.anchorMax = new Vector2((i + 1) / 6f, 1);
                     r.offsetMin = new Vector2(2, 0); r.offsetMax = new Vector2(-2, 0);
-                    UIKit.LabelOf(b).color = Color.black;
+                    UIKit.LabelOf(b).color = Color.white;
                     manaButtons.Add(b);
                 }
             }
@@ -323,7 +370,7 @@ namespace MTGUnited
             {
                 pd.Mana.TryGetValue(ManaKeys[i], out int n);
                 manaButtons[i].SetVisible(n > 0);
-                UIKit.LabelOf(manaButtons[i]).text = ManaKeys[i] + n;
+                UIKit.LabelOf(manaButtons[i]).text = "{" + ManaKeys[i] + "}" + n;   // drawn with Forge's mana symbol
             }
         }
 

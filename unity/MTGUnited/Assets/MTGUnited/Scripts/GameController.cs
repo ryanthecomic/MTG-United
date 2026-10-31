@@ -165,6 +165,8 @@ namespace MTGUnited
             Reveals = RevealPopup.Create(OverlayLayer, this);
             Toasts = Toasts.Create(OverlayLayer);
             PopupMenu.Create(OverlayLayer);
+            ConfirmDialog.Create(OverlayLayer);
+            ImportDialog.Create(OverlayLayer, this);
 
             // Hover preview sits above everything, in the same 1920x1080 space as the board.
             var top = UIKit.Rect("TopBoard", canvasGo.transform).SubCanvas();
@@ -225,12 +227,15 @@ namespace MTGUnited
             // Esc closes the top-most pop-up first.
             if (Input.GetKeyDown(KeyCode.Escape))
             {
+                if (ConfirmDialog.Instance != null && ConfirmDialog.Instance.IsOpen) { ConfirmDialog.Instance.Cancel(); return; }
+                if (ImportDialog.Instance != null && ImportDialog.Instance.IsOpen) { ImportDialog.Instance.Close(); return; }
                 if (Inspector != null && Inspector.IsOpen) { Inspector.Hide(); return; }
                 if (Options.IsOpen) { Options.Close(); return; }
                 if (GameMenu.IsOpen) { GameMenu.Close(); return; }
                 if (ZoneViewer.IsOpen) { ZoneViewer.Close(); return; }
                 if (PopupMenu.Instance != null && PopupMenu.Instance.IsOpen) { PopupMenu.Instance.Close(); return; }
                 if (Lan.IsOpen) { Lan.Close(); return; }
+                if (Menu.IsOpen && Menu.Builder != null && Menu.Builder.IsOpen) { Menu.Builder.Escape(); return; }
                 if (Table.IsOpen && !Menu.IsOpen) { if (!Table.CloseTopDialog()) GameMenu.Open(); return; }   // kitchen table: Esc opens the menu
             }
             if (!InGame || Menu.IsOpen || Dialog.IsOpen || Options.IsOpen || GameMenu.IsOpen) return;
@@ -256,6 +261,7 @@ namespace MTGUnited
             for (int i = 0; i < 5; i++)
                 if (Input.GetKeyDown(KeyCode.Alpha1 + i) || Input.GetKeyDown(KeyCode.Keypad1 + i)) BoardView.FocusOpponent(i);
             if (Input.GetKeyDown(KeyCode.Tab)) BoardView.FocusNext();
+            if (Input.GetKeyDown(KeyCode.F)) BoardView.ToggleFocusMe();
             if (Input.GetKeyDown(KeyCode.BackQuote) || Input.GetKeyDown(KeyCode.Alpha0) || Input.GetKeyDown(KeyCode.Keypad0)) BoardView.FocusOpponent(-1);
 #endif
         }

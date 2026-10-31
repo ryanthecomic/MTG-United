@@ -222,6 +222,7 @@ namespace MTGUnited
                 Arguments = args,
                 UseShellExecute = false, RedirectStandardOutput = true, RedirectStandardError = true, CreateNoWindow = true,
                 WorkingDirectory = Root ?? Directory.GetCurrentDirectory(),
+                StandardOutputEncoding = System.Text.Encoding.UTF8, StandardErrorEncoding = System.Text.Encoding.UTF8,
             };
             try
             {
@@ -254,35 +255,58 @@ namespace MTGUnited
         /// <summary>Opens Windows' folder picker (through PowerShell, since the game has no native one).</summary>
         public static void BrowseFolder(Action<string> chosen)
         {
-            const string ps = "Add-Type -AssemblyName System.Windows.Forms; $d = New-Object System.Windows.Forms.FolderBrowserDialog; " +
-                              "$d.Description = 'Select your Forge folder (the one with forge.exe and res)'; $d.ShowNewFolderButton = $false; " +
-                              "if ($d.ShowDialog() -eq [System.Windows.Forms.DialogResult]::OK) { $d.SelectedPath }";
-            try
-            {
-                var psi = new ProcessStartInfo { FileName = "powershell", Arguments = "-NoProfile -STA -Command \"" + ps + "\"", UseShellExecute = false, RedirectStandardOutput = true, CreateNoWindow = true };
-                var p = new Process { StartInfo = psi, EnableRaisingEvents = true };
-                string result = null;
-                p.OutputDataReceived += (s, e) => { if (!string.IsNullOrWhiteSpace(e.Data)) result = e.Data.Trim(); };
-                p.Exited += (s, e) => { browseResult = result; browseCallback = chosen; browsePending = true; };
-                p.Start();
-                p.BeginOutputReadLine();
-            }
-            catch (Exception ex) { Log("Couldn't open the folder picker: " + ex.Message); }
+            Dialog("$d = New-Object System.Windows.Forms.FolderBrowserDialog; $d.Description = " + Ps("Select your Forge folder (the one with forge.exe and res)") +
+                   "; $d.ShowNewFolderButton = $false; if ($d.ShowDialog() -eq [System.Windows.Forms.DialogResult]::OK) { $r = $d.SelectedPath }", chosen);
         }
 
         /// <summary>Opens Windows' file picker for one file (e.g. a Cockatrice set .xml).</summary>
         public static void BrowseFile(string title, string filter, Action<string> chosen)
         {
-            string ps = "Add-Type -AssemblyName System.Windows.Forms; $d = New-Object System.Windows.Forms.OpenFileDialog; " +
-                        "$d.Title = '" + title.Replace("'", "") + "'; $d.Filter = '" + filter.Replace("'", "") + "'; " +
-                        "if ($d.ShowDialog() -eq [System.Windows.Forms.DialogResult]::OK) { $d.FileName }";
+            Dialog("$d = New-Object System.Windows.Forms.OpenFileDialog; $d.Title = " + Ps(title) + "; $d.Filter = " + Ps(filter) +
+                   "; if ($d.ShowDialog() -eq [System.Windows.Forms.DialogResult]::OK) { $r = $d.FileName }", chosen);
+        }
+
+        /// <summary>Windows' "Save as" picker. The answer is the chosen path, or null when cancelled.</summary>
+        public static void BrowseSaveFile(string title, string filter, string defaultName, Action<string> chosen)
+        {
+            foreach (char c in Path.GetInvalidFileNameChars()) defaultName = defaultName.Replace(c, '_');
+            Dialog("$d = New-Object System.Windows.Forms.SaveFileDialog; $d.Title = " + Ps(title) + "; $d.Filter = " + Ps(filter) +
+                   "; $d.FileName = " + Ps(defaultName) + "; $d.OverwritePrompt = $true; if ($d.ShowDialog() -eq [System.Windows.Forms.DialogResult]::OK) { $r = $d.FileName }", chosen);
+        }
+
+        /// <summary>
+        /// A PowerShell string literal that survives any characters (ã, é, ç, emoji...): sent as UTF-8 base64 and
+        /// decoded inside PowerShell, so neither the command line nor the console code page can mangle it.
+        /// </summary>
+        static string Ps(string text) =>
+            "([Text.Encoding]::UTF8.GetString([Convert]::FromBase64String('" + Convert.ToBase64String(System.Text.Encoding.UTF8.GetBytes(text ?? "")) + "')))";
+
+        /// <summary>
+        /// Runs a Windows Forms dialog script that leaves its answer in $r. The answer comes back as UTF-8 base64,
+        /// because PowerShell writes to a redirected stdout in the console's code page, which turned folders like
+        /// "C:\Users\Gaião" into "Gai?o" in the built game.
+        /// </summary>
+        static void Dialog(string script, Action<string> chosen)
+        {
+            string ps = "Add-Type -AssemblyName System.Windows.Forms; $r = ''; " + script +
+                        "; if ($r) { [Console]::Out.WriteLine([Convert]::ToBase64String([Text.Encoding]::UTF8.GetBytes($r))) }";
             try
             {
                 var psi = new ProcessStartInfo { FileName = "powershell", Arguments = "-NoProfile -STA -Command \"" + ps + "\"", UseShellExecute = false, RedirectStandardOutput = true, CreateNoWindow = true };
                 var p = new Process { StartInfo = psi, EnableRaisingEvents = true };
                 string result = null;
                 p.OutputDataReceived += (s, e) => { if (!string.IsNullOrWhiteSpace(e.Data)) result = e.Data.Trim(); };
-                p.Exited += (s, e) => { browseResult = result; browseCallback = chosen; browsePending = true; };
+                p.Exited += (s, e) =>
+                {
+                    try { p.WaitForExit(); } catch { }   // let the last output line arrive
+                    string path = null;
+                    if (!string.IsNullOrEmpty(result))
+                    {
+                        try { path = System.Text.Encoding.UTF8.GetString(Convert.FromBase64String(result)); }
+                        catch { path = null; }
+                    }
+                    browseResult = path; browseCallback = chosen; browsePending = true;
+                };
                 p.Start();
                 p.BeginOutputReadLine();
             }

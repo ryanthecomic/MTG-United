@@ -43,7 +43,7 @@ namespace MTGUnited
         {
             foreach (var r in rows) Destroy(r);
             rows.Clear();
-            const float rowH = 36, width = 280;
+            const float rowH = 36, width = 320;
             float y = 0;
             foreach (var (label, action) in items)
             {
@@ -56,10 +56,32 @@ namespace MTGUnited
                     continue;
                 }
                 var a = action;
-                var b = UIKit.Button(label, list, label, new Color(1, 1, 1, 0.04f), () => { Close(); a(); }, 16);
+                // "Label\tKey": the key (its shortcut) is shown faintly on the right.
+                string key = null, text = label;
+                int tab = text.IndexOf('\t');
+                if (tab >= 0) { key = text.Substring(tab + 1).Trim(); text = text.Substring(0, tab).TrimEnd(); }
+                var b = UIKit.Button(text, list, text, new Color(1, 1, 1, 0.04f), () =>
+                {
+                    if (stays.Contains(a) && reopen != null)
+                    {
+                        // A "keep open" choice (add a counter, tap, roll again...): do it, then redraw the menu in place.
+                        var again = reopen;
+                        a();
+                        if (!gameObject.activeSelf) return;   // the action closed it after all
+                        quiet = true;
+                        again();
+                        quiet = false;
+                    }
+                    else { Close(); a(); }
+                }, 16);
                 var t = UIKit.LabelOf(b);
                 t.alignment = TextAnchor.MiddleLeft;
-                t.rectTransform.Stretch(12, 0, 8, 0);
+                t.rectTransform.Stretch(12, 0, string.IsNullOrEmpty(key) ? 8 : 90, 0);
+                if (!string.IsNullOrEmpty(key))
+                {
+                    var k = UIKit.Label("Key", b.transform, key, 14, new Color(1f, 1f, 1f, 0.42f), TextAnchor.MiddleRight, FontStyle.Bold);
+                    k.rectTransform.Stretch(0, 0, 12, 0);
+                }
                 Place((RectTransform)b.transform, y, rowH - 2);
                 rows.Add(b.gameObject);
                 y += rowH;
@@ -72,10 +94,37 @@ namespace MTGUnited
             local += parentRt.rect.size * 0.5f;   // to bottom-left origin
             float sx = Mathf.Min(local.x, parentRt.rect.width - width - 8);
             float sy = Mathf.Max(local.y, y + 20);
+            panel.pivot = new Vector2(0, 1);
+            panel.localScale = Vector3.one;
             panel.anchoredPosition = new Vector2(sx, sy);
             gameObject.SetActive(true);
             transform.SetAsLastSibling();
-            FadeIn.Play(panel.gameObject, Motion.Micro, 0.96f);
+            if (!quiet) FadeIn.Play(panel.gameObject, Motion.Micro, 0.96f);
+        }
+
+        /// <summary>Opens next to a card (its right edge, or its left when there's no room), growing out of it.</summary>
+        public void ShowBeside(RectTransform target, List<(string label, Action action)> items)
+        {
+            Show(Vector2.zero, items);
+            var parentRt = (RectTransform)transform;
+            var corners = new Vector3[4];
+            target.GetWorldCorners(corners);   // bl, tl, tr, br (rotation-aware)
+            float minX = float.MaxValue, maxX = float.MinValue, maxY = float.MinValue;
+            foreach (var c in corners)
+            {
+                var screen = RectTransformUtility.WorldToScreenPoint(null, c);
+                RectTransformUtility.ScreenPointToLocalPointInRectangle(parentRt, screen, null, out var l);
+                l += parentRt.rect.size * 0.5f;
+                minX = Mathf.Min(minX, l.x); maxX = Mathf.Max(maxX, l.x); maxY = Mathf.Max(maxY, l.y);
+            }
+            float w = panel.sizeDelta.x, h = panel.sizeDelta.y;
+            bool right = maxX + 10 + w <= parentRt.rect.width - 8;
+            float x = right ? maxX + 10 : Mathf.Max(8, minX - 10 - w);
+            float y = Mathf.Clamp(maxY, h + 8, parentRt.rect.height - 8);
+            // Grow out of the card's side.
+            panel.pivot = new Vector2(right ? 0 : 1, 1);
+            panel.anchoredPosition = new Vector2(right ? x : x + w, y);
+            if (!quiet) FadeIn.Play(panel.gameObject, Motion.Short, 0.82f);
         }
 
         static void Place(RectTransform r, float y, float h)
@@ -84,6 +133,23 @@ namespace MTGUnited
             r.sizeDelta = new Vector2(0, h); r.anchoredPosition = new Vector2(0, -y);
         }
 
-        public void Close() => gameObject.SetActive(false);
+        public void Close()
+        {
+            gameObject.SetActive(false);
+            stays.Clear();
+            reopen = null;
+        }
+
+        // ---------------------------------------------------------------- choices that keep the menu open
+
+        static readonly HashSet<Action> stays = new HashSet<Action>();
+        Action reopen;
+        bool quiet;
+
+        /// <summary>Marks a menu action as "keep the menu open" (it runs, then the menu is rebuilt in place).</summary>
+        public static Action Stay(Action a) { if (a != null) stays.Add(a); return a; }
+
+        /// <summary>How to rebuild this menu after a keep-open choice (usually: call the same menu function again).</summary>
+        public PopupMenu Reopen(Action rebuild) { reopen = rebuild; return this; }
     }
 }

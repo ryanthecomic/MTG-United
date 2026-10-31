@@ -71,14 +71,16 @@ namespace MTGUnited
             oppLayer = UIKit.Rect("Opponents", root).Stretch().SubCanvas();
             uiLayer = UIKit.Rect("UI", root).Stretch().SubCanvas();
             cardLayer = UIKit.Rect("Cards", root).Stretch().SubCanvas();
+            noteLayer = UIKit.Rect("Notes", root).Stretch().SubCanvas();   // notes ride above the cards
 
             // ---- my nameplate (bottom-left): the same Arena-style panel as Forge games (seat colour, commander
             //      art, life badge with − / +, zone symbols). Right-click it for poison and seat options.
             myPanel = PlayerPanel.Create(uiLayer, gc, false);
             myPanel.MoveTo(16, 16, 400, 130, true);
             myPanel.AddLifeButtons(d => Life(Me, d));
+            myPanel.EnableLifeEdit(v => { if (Me != null) Run(A("setlife", "p", Me.Id, "v", v)); });
             myPanel.ZoneClicked = z => ZoneClick(Me, z);
-            myPanel.Clicked = () => { };
+            myPanel.Clicked = () => { };   // (Ctrl+click another seat's nameplate to sit there)
             myPanel.RightClicked = () => PlayerMenu(Me, Input.mousePosition);
             turnText = UIKit.Label("Turn", uiLayer, "", 16, Theme.TextDim, TextAnchor.MiddleLeft, FontStyle.Bold);
             turnText.rectTransform.Place(24, 150, 380, 40);
@@ -92,6 +94,7 @@ namespace MTGUnited
             logText = UIKit.Label("Lines", logBg.transform, "", 13, new Color(0.82f, 0.85f, 0.9f), TextAnchor.LowerLeft);
             logText.rectTransform.Stretch(12, 10, 10, 30);
             logText.verticalOverflow = VerticalWrapMode.Truncate;
+            if (logText is SymbolText lst) lst.KeepTruncate = true;
 
             // ---- piles (right column)
             Pile("Library", LibRect);
@@ -101,22 +104,30 @@ namespace MTGUnited
 
             // ---- actions (bottom-right)
             float bx = 1592, by = 136;
-            void Act(string label, Color c, Action a)
+            void Act(string label, Color c, Action a, string key)
             {
                 var b = UIKit.Button(label, uiLayer, label, c, () => a(), 16);
                 ((RectTransform)b.transform).Place(bx, by, 142, 40);
+                // Its shortcut, faint in the corner.
+                var k = UIKit.Label("Key", b.transform, key, 11, new Color(1f, 1f, 1f, 0.45f), TextAnchor.LowerRight, FontStyle.Bold);
+                k.rectTransform.Stretch(0, 2, 6, 0);
                 bx += 150;
                 if (bx > 1800) { bx = 1592; by -= 46; }
             }
-            Act("Next turn", Theme.Accent, NextTurn);
-            Act("Untap all", Theme.Secondary, UntapAll);
-            Act("Draw", Theme.Secondary, () => Draw(1));
-            Act("Shuffle", Theme.Secondary, Shuffle);
-            Act("Token", Theme.Secondary, OpenTokenDialog);
-            Act("Dice & coin", Theme.Secondary, () => DiceMenu(Input.mousePosition));
+            Act("Next turn", Theme.Accent, NextTurn, "N");
+            Act("Untap all", Theme.Secondary, UntapAll, "U");
+            Act("Draw", Theme.Secondary, () => Draw(1), "D");
+            Act("Shuffle", Theme.Secondary, Shuffle, "S");
+            Act("Token", Theme.Secondary, OpenTokenDialog, "T");
+            Act("Dice & coin", Theme.Secondary, () => DiceMenu(Input.mousePosition), "R");
+
+            // Settings gear in the top-right corner, like everywhere else: opens the game menu.
+            var gear = UIKit.IconButton("Menu", uiLayer, Icons.Gear, 1920 - 12 - 56, 1080 - 12 - 56, 56, () => gc.GameMenu.Open(), "Menu");
+            gear.GetComponent<Image>().color = new Color(0f, 0f, 0f, 0.45f);
 
             viewer = TableZoneViewer.Create(root, gc);
             tokenDialog = TokenDialog.Create(root);
+            noteDialog = NoteDialog.Create(root);
         }
 
         void Pile(string zone, Rect r)
@@ -149,6 +160,9 @@ namespace MTGUnited
             var pop = frame.GetComponent<HoverPop>();
             pe.OnEnter = () => pop.Hovered = true;
             pe.OnExit = () => pop.Hovered = false;
+            // Drag the pile: the top card comes with you (click still draws / opens it, as before).
+            var drag = frame.gameObject.AddComponent<PileDragHandler>();
+            drag.Table = this; drag.Zone = zone;
             piles[zone] = (frame, top, count);
         }
 
@@ -200,6 +214,7 @@ namespace MTGUnited
         /// <summary>Esc: closes the table's own pop-ups first. Returns true if one was open.</summary>
         public bool CloseTopDialog()
         {
+            if (noteDialog.IsOpen) { noteDialog.Close(); return true; }
             if (tokenDialog.IsOpen) { tokenDialog.Close(); return true; }
             if (viewer.IsOpen) { viewer.Close(); return true; }
             return false;
@@ -221,6 +236,8 @@ namespace MTGUnited
             foreach (var v in views.Values) if (v != null) Destroy(v.gameObject);
             views.Clear();
             lastZone.Clear();
+            foreach (var n in noteLabels.Values) if (n != null) Destroy(n.transform.parent.gameObject);
+            noteLabels.Clear();
             foreach (var o in oppPanels) Destroy(o.Root.gameObject);
             oppPanels.Clear();
         }
@@ -395,11 +412,11 @@ namespace MTGUnited
 
         void DiceMenu(Vector2 at)
         {
-            PopupMenu.Instance.Show(at, new List<(string, Action)>
+            PopupMenu.Instance.Reopen(() => DiceMenu(at)).Show(at, new List<(string, Action)>
             {
-                ("Roll d6", () => Run(A("roll", "sides", 6))),
-                ("Roll d20", () => Run(A("roll", "sides", 20))),
-                ("Flip a coin", () => Run(A("coin"))),
+                ("Roll d6", PopupMenu.Stay(() => Run(A("roll", "sides", 6)))),
+                ("Roll d20", PopupMenu.Stay(() => Run(A("roll", "sides", 20)))),
+                ("Flip a coin", PopupMenu.Stay(() => Run(A("coin")))),
                 ("Choose a random player", () => Run(A("randomplayer"))),
             });
         }
@@ -421,14 +438,14 @@ namespace MTGUnited
             if (zone == "Library")
             {
                 items.Add(("LIBRARY", null));
-                items.Add(("Draw a card", () => Draw(1)));
+                items.Add(("Draw a card\tD", PopupMenu.Stay(() => Draw(1))));
                 items.Add(("Draw seven", () => Draw(7)));
-                items.Add(("Shuffle", Shuffle));
+                items.Add(("Shuffle\tS", PopupMenu.Stay(Shuffle)));
                 items.Add(("Look at the top 3", () => ShowTop(3)));
                 items.Add(("Look at the top 7", () => ShowTop(7)));
                 items.Add(("Search the library", () => ShowZone(Me, "Library")));
                 items.Add(("Reveal the top card", RevealTop));
-                items.Add(("Mill a card", () => { Sound.Play(Sfx.Die, 0.6f); Run(A("mill", "n", 1)); }));
+                items.Add(("Mill a card\tShift+D", PopupMenu.Stay(() => { Sound.Play(Sfx.Die, 0.6f); Run(A("mill", "n", 1)); })));
                 items.Add(("Mulligan (new seven)", () => { Sound.Play(Sfx.DrawMany, 0.6f); Run(A("mulligan")); }));
             }
             else
@@ -439,7 +456,7 @@ namespace MTGUnited
                 if (zone == "Graveyard" || zone == "Exile")
                     items.Add(("Shuffle all into library", () => { Sound.Play(Sfx.DrawMany, 0.7f); Run(A("zonetolib", "zone", zone)); }));
             }
-            PopupMenu.Instance.Show(at, items);
+            PopupMenu.Instance.Reopen(() => PileMenu(zone, at)).Show(at, items);
         }
 
         void RevealTop()
@@ -466,55 +483,71 @@ namespace MTGUnited
 
         // ---------------------------------------------------------------- card actions
 
-        void CardMenu(int id, Vector2 at, bool fromViewer = false)
+        void CardMenu(int id, Vector2 at, bool fromViewer = false, RectTransform beside = null)
         {
             if (!State.Cards.TryGetValue(id, out var c)) return;
             var me = Me;
             bool unknown = string.IsNullOrEmpty(c.Name);
-            var items = new List<(string, Action)> { ((c.FaceDown && c.Zone == "Battlefield") || unknown ? "FACE-DOWN CARD" : c.Name.ToUpperInvariant(), null) };
+            string face = FaceName(c);
+            var items = new List<(string, Action)> { ((c.FaceDown && c.Zone == "Battlefield") || unknown ? "FACE-DOWN CARD" : face.ToUpperInvariant(), null) };
             void After() { if (fromViewer) viewer.Close(); }
+            // Choices that keep the menu open (counters, tapping, tokens...) redraw it in place afterwards.
+            Action Stay(Action a) => PopupMenu.Stay(a);
 
             if (c.Zone == "Battlefield")
             {
-                items.Add((c.Tapped ? "Untap" : "Tap", () => ToggleTap(id)));
-                items.Add((c.FaceDown ? "Turn face up" : "Turn face down", () => { Sound.Play(Sfx.CardSlide, 0.5f); Run(A("face", "id", id, "v", !c.FaceDown)); }));
-                items.Add(("+1/+1 counter", () => { Sound.Play(Sfx.Counter); Run(A("counter", "id", id, "kind", "+1/+1", "d", 1)); }));
-                items.Add(("−1/−1 counter", () => { Sound.Play(Sfx.Counter); Run(A("counter", "id", id, "kind", "-1/-1", "d", 1)); }));
-                items.Add(("Add a counter", () => { Sound.Play(Sfx.Counter); Run(A("counter", "id", id, "kind", "counter", "d", 1)); }));
+                items.Add(((c.Tapped ? "Untap" : "Tap") + "\tClick / Space", Stay(() => ToggleTap(id))));
+                if (CustomSets.OtherFace(c.Name) != null && !c.FaceDown)
+                    items.Add((c.Flipped ? "Transform to the front\tF" : "Transform to the back\tF", Stay(() => Flip(id))));
+                items.Add((c.Note.Length > 0 ? "Edit the note\tShift+N" : "Add a note\tShift+N", () => EditNote(id)));
+                items.Add(("Turn left\tQ", Stay(() => { Sound.Play(Sfx.Tap, 0.6f, 0.92f); Run(A("rotate", "id", id, "d", -1)); })));
+                items.Add(("Turn right\tE", Stay(() => { Sound.Play(Sfx.Tap, 0.6f); Run(A("rotate", "id", id, "d", 1)); })));
+                items.Add((c.FaceDown ? "Turn face up\tV" : "Turn face down\tV", Stay(() => { Sound.Play(Sfx.CardSlide, 0.5f); Run(A("face", "id", id, "v", !c.FaceDown)); })));
+                items.Add(("+1/+1 counter\t+", Stay(() => { Sound.Play(Sfx.Counter); Run(A("counter", "id", id, "kind", "+1/+1", "d", 1)); })));
+                items.Add(("−1/−1 counter\t−", Stay(() => { Sound.Play(Sfx.Counter); Run(A("counter", "id", id, "kind", "-1/-1", "d", 1)); })));
+                items.Add(("Add a counter\tI", Stay(() => { Sound.Play(Sfx.Counter); Run(A("counter", "id", id, "kind", "counter", "d", 1)); })));
                 if (c.Counters.Count > 0)
-                    items.Add(("Remove a counter", () => { Sound.Play(Sfx.Counter, 0.6f); Run(A("counter", "id", id, "kind", "*first", "d", -1)); }));
-                items.Add(("Copy (token)", () => { Sound.Play(Sfx.Token); Run(A("clone", "id", id)); }));
-                var custom = CustomSets.Get(c.Name);
+                    items.Add(("Remove a counter\tShift+I", Stay(() => { Sound.Play(Sfx.Counter, 0.6f); Run(A("counter", "id", id, "kind", "*first", "d", -1)); })));
+                items.Add(("Copy (token)\tK", Stay(() => { Sound.Play(Sfx.Token); Run(A("clone", "id", id)); })));
+                var custom = CustomSets.Get(face);
                 if (custom != null)
                     foreach (var rel in custom.Related)
                     {
                         string r = rel;
-                        items.Add(("Create " + r, () =>
+                        items.Add(("Create " + r, Stay(() =>
                         {
                             var tk = CustomSets.Get(r);
                             Sound.Play(Sfx.Token);
                             Run(A("token", "to", c.Controller, "name", r, "pt", tk?.PT ?? "", "colors", tk?.Colors ?? ""));
-                        }));
+                        })));
                     }
             }
             if (c.Zone == "Hand" || c.Zone != "Battlefield")
             {
-                items.Add(("Play", () => { After(); MoveCard(id, "Battlefield", me.Id); }));
+                items.Add((c.Zone == "Hand" ? "Play\tP / Double-click" : "Play\tP", () => { After(); MoveCard(id, "Battlefield", me.Id); }));
                 if (c.Zone == "Hand") items.Add(("Play face down", () =>
                 {
                     Sound.Play(Sfx.Resolve, 0.6f);
                     Run(A("move", "id", id, "zone", "Battlefield", "to", me.Id, "facedown", true));
                 }));
             }
-            if (c.Zone != "Hand") items.Add(("To hand", () => { After(); MoveCard(id, "Hand", c.Owner); }));
-            if (c.Zone != "Graveyard") items.Add(("To graveyard", () => { After(); MoveCard(id, "Graveyard", c.Owner); }));
-            if (c.Zone != "Exile") items.Add(("Exile", () => { After(); MoveCard(id, "Exile", c.Owner); }));
-            items.Add(("To top of library", () => { After(); MoveCard(id, "Library", c.Owner, 0); }));
-            items.Add(("To bottom of library", () => { After(); MoveCard(id, "Library", c.Owner, -1); }));
-            if (c.Zone != "Command") items.Add(("To command zone", () => { After(); MoveCard(id, "Command", c.Owner); }));
-            if (c.Zone == "Hand") items.Add(("Reveal", () => Run(A("reveal", "id", id))));
-            if (!unknown) items.Add(("Zoom", () => gc.Inspector.Show(ToData(c, false))));
-            PopupMenu.Instance.Show(at, items);
+            if (c.Zone != "Hand") items.Add(("To hand\tH", () => { After(); MoveCard(id, "Hand", c.Owner); }));
+            if (c.Zone != "Graveyard") items.Add(("To graveyard\tG", () => { After(); MoveCard(id, "Graveyard", c.Owner); }));
+            if (c.Zone != "Exile") items.Add(("Exile\tX", () => { After(); MoveCard(id, "Exile", c.Owner); }));
+            items.Add(("To top of library\tL", () => { After(); MoveCard(id, "Library", c.Owner, 0); }));
+            items.Add(("To bottom of library\tB", () => { After(); MoveCard(id, "Library", c.Owner, -1); }));
+            if (c.Zone != "Command") items.Add(("To command zone\tC", () => { After(); MoveCard(id, "Command", c.Owner); }));
+            if (c.Zone == "Hand") items.Add(("Reveal\tW", () => Run(A("reveal", "id", id))));
+            if (!unknown) items.Add(("Zoom\tHold Alt", () => gc.Inspector.Show(ToData(c, false))));
+            var menu = PopupMenu.Instance.Reopen(() =>
+            {
+                // Rebuild against the current table (the card may have changed or left).
+                if (!State.Cards.TryGetValue(id, out _)) { PopupMenu.Instance.Close(); return; }
+                var still = beside != null && beside.gameObject.activeInHierarchy ? beside : null;
+                CardMenu(id, at, fromViewer, still);
+            });
+            if (beside != null) menu.ShowBeside(beside, items);
+            else menu.Show(at, items);
         }
 
         // ---------------------------------------------------------------- pointer events from cards
@@ -530,14 +563,180 @@ namespace MTGUnited
             else if (c.Zone == "Hand" && dbl && c.Owner == Me.Id) MoveCard(c.Id, "Battlefield", Me.Id);
         }
 
-        void OnRightClick(CardView cv) => CardMenu(cv.CardId, Input.mousePosition);
+        /// <summary>A card view wired to the table's click / hover / drag handlers.</summary>
+        CardView NewView(int id)
+        {
+            var cv = CardView.Create(cardLayer, id);
+            cv.Clicked = OnClick;
+            cv.RightClicked = OnRightClick;
+            cv.HoverStart = v => { hovered = v; if (!altZoom && v.Data != null && !v.Data.Hidden) gc.Preview.Request(v.Data, v.CurrentPos.x < 960); };
+            cv.HoverEnd = v => { if (hovered == v) hovered = null; gc.Preview.Hide(); };
+            cv.DragBegan = OnDragBegan;
+            cv.DragMoved = OnDragMoved;
+            cv.DragEnded = OnDragEnded;
+            views[id] = cv;
+            return cv;
+        }
+
+        // ---------------------------------------------------------------- dragging the top card straight off a pile
+
+        /// <summary>Picks up the top card of one of my piles (library: face down) without opening the pile.</summary>
+        internal void BeginPileDrag(string zone, Vector2 screen)
+        {
+            if (State == null || Me == null || dragging != null) return;
+            var ids = Me.ZoneList(zone);
+            if (ids == null || ids.Count == 0) return;
+            int id = zone == "Library" ? ids[0] : ids[ids.Count - 1];
+            if (!State.Cards.TryGetValue(id, out var c)) return;
+            if (views.TryGetValue(id, out var old) && old != null) Destroy(old.gameObject);
+            var cv = NewView(id);
+            bool hidden = zone == "Library" && !c.Revealed;
+            cv.SetData(ToData(c, hidden));
+            var r = zone == "Library" ? LibRect : zone == "Graveyard" ? GyRect : zone == "Exile" ? ExRect : CmdRect;
+            float h = 140f * UiScale.CardScale;
+            cv.SpawnFrom(r.center, new Vector2(h * 0.714f, h));
+            OnDragBegan(cv, screen);
+            if (dragging != cv) { views.Remove(id); Destroy(cv.gameObject); }
+        }
+
+        internal void MovePileDrag(Vector2 screen) { if (dragging != null) OnDragMoved(dragging, screen); }
+
+        internal void EndPileDrag(Vector2 screen) { if (dragging != null) OnDragEnded(dragging, screen); }
+
+        void OnRightClick(CardView cv) => CardMenu(cv.CardId, Input.mousePosition, false, (RectTransform)cv.transform);
+
+        CardView hovered;
+
+        /// <summary>The face a card shows: its back when transformed (double-faced custom cards).</summary>
+        static string FaceName(TableCard c) => c.Flipped ? CustomSets.OtherFace(c.Name) ?? c.Name : c.Name;
+
+        /// <summary>Transform a double-faced card (F over it, or its menu).</summary>
+        void Flip(int id)
+        {
+            if (!State.Cards.TryGetValue(id, out var c)) return;
+            if (CustomSets.OtherFace(c.Name) == null) { gc.Toasts.Show("That card has no other face."); return; }
+            Sound.Play(Sfx.CardSlide, 0.7f, 1.15f);
+            Run(A("flip", "id", id));
+        }
+
+        void FlipHovered()
+        {
+            if (hovered == null || hovered.IsExiting || !State.Cards.TryGetValue(hovered.CardId, out var c)) return;
+            if (c.FaceDown || string.IsNullOrEmpty(c.Name)) return;
+            Flip(c.Id);
+        }
+
+        // ---------------------------------------------------------------- notes on cards
+
+        NoteDialog noteDialog;
+        RectTransform noteLayer;
+        readonly Dictionary<int, Text> noteLabels = new Dictionary<int, Text>();
+
+        /// <summary>Opens the note editor for a permanent; a new note starts as the card's own rules text.</summary>
+        void EditNote(int id)
+        {
+            if (!State.Cards.TryGetValue(id, out var c) || c.Zone != "Battlefield") return;
+            string text = c.Note;
+            if (string.IsNullOrEmpty(text) && !c.FaceDown)
+            {
+                var info = CardCatalog.Get(FaceName(c));
+                text = info?.Text ?? "";
+            }
+            noteDialog.Show(c.FaceDown ? "face-down card" : FaceName(c), text, t =>
+            {
+                Sound.Play(Sfx.CardPlace, 0.5f);
+                Run(A("note", "id", id, "text", t ?? ""));
+            });
+        }
+
+        /// <summary>Keeps a little yellow sticky under every permanent that has a note.</summary>
+        void LateUpdate()
+        {
+            if (State == null || noteLayer == null) return;
+            foreach (var id in noteLabels.Keys.ToList())
+            {
+                bool keep = State.Cards.TryGetValue(id, out var nc) && nc.Zone == "Battlefield" && !string.IsNullOrEmpty(nc.Note)
+                            && views.TryGetValue(id, out var nv) && nv != null && !nv.IsExiting;
+                if (!keep) { if (noteLabels[id] != null) Destroy(noteLabels[id].transform.parent.gameObject); noteLabels.Remove(id); }
+            }
+            foreach (var c in State.Cards.Values)
+            {
+                if (c.Zone != "Battlefield" || string.IsNullOrEmpty(c.Note)) continue;
+                if (!views.TryGetValue(c.Id, out var cv) || cv == null || cv.IsExiting) continue;
+                if (!noteLabels.TryGetValue(c.Id, out var label) || label == null)
+                {
+                    var bg = UIKit.Panel("Note", noteLayer, new Color(1f, 0.9f, 0.45f, 0.95f));
+                    var r = bg.rectTransform;
+                    r.anchorMin = r.anchorMax = Vector2.zero; r.pivot = new Vector2(0.5f, 1f);
+                    bg.raycastTarget = false;
+                    bg.pixelsPerUnitMultiplier = 3f;
+                    UIKit.AddShadow(bg.transform, 6, new Vector2(0, -3), 0.5f);
+                    label = UIKit.Label("Text", bg.transform, "", 12, new Color(0.15f, 0.1f, 0.02f), TextAnchor.UpperLeft);
+                    label.rectTransform.Stretch(6, 4, 6, 4);
+                    label.resizeTextForBestFit = true; label.resizeTextMinSize = 8; label.resizeTextMaxSize = 12;
+                    noteLabels[c.Id] = label;
+                }
+                if (label.text != c.Note) label.text = c.Note;
+                var cardRt = (RectTransform)cv.transform;
+                float rot = Mathf.Abs(Mathf.DeltaAngle(cardRt.localEulerAngles.z, 0f));
+                bool sideways = rot > 45f && rot < 135f;
+                float halfH = (sideways ? cardRt.sizeDelta.x : cardRt.sizeDelta.y) / 2f;
+                float w = Mathf.Max(110f, (sideways ? cardRt.sizeDelta.y : cardRt.sizeDelta.x) * 1.15f);
+                var noteRt = (RectTransform)label.transform.parent;
+                noteRt.sizeDelta = new Vector2(w, 46);
+                noteRt.anchoredPosition = cv.CurrentPos - new Vector2(0, halfH - 10f);   // tucked over the card's bottom edge
+            }
+        }
+
+        /// <summary>
+        /// Keys that act on the card under the mouse (the same choices as its right-click menu):
+        /// Space tap · P play · H hand · G graveyard · X exile · L / B top / bottom of library · C command zone ·
+        /// V face down / up · K copy · + / − counters · I / Shift+I other counters · Shift+N note · W reveal.
+        /// </summary>
+        void HoveredCardKeys(bool shift)
+        {
+            if (hovered == null || hovered.IsExiting || !State.Cards.TryGetValue(hovered.CardId, out var c)) return;
+            int id = c.Id;
+            bool field = c.Zone == "Battlefield";
+            if (Input.GetKeyDown(KeyCode.Space) && field) ToggleTap(id);
+            if (Input.GetKeyDown(KeyCode.P) && !field) MoveCard(id, "Battlefield", Me.Id);
+            if (Input.GetKeyDown(KeyCode.H) && c.Zone != "Hand") MoveCard(id, "Hand", c.Owner);
+            if (Input.GetKeyDown(KeyCode.G) && c.Zone != "Graveyard") MoveCard(id, "Graveyard", c.Owner);
+            if (Input.GetKeyDown(KeyCode.X) && c.Zone != "Exile") MoveCard(id, "Exile", c.Owner);
+            if (Input.GetKeyDown(KeyCode.L)) MoveCard(id, "Library", c.Owner, 0);
+            if (Input.GetKeyDown(KeyCode.B)) MoveCard(id, "Library", c.Owner, -1);
+            if (Input.GetKeyDown(KeyCode.C) && c.Zone != "Command") MoveCard(id, "Command", c.Owner);
+            if (Input.GetKeyDown(KeyCode.W) && c.Zone == "Hand") Run(A("reveal", "id", id));
+            if (!field) return;
+            if (Input.GetKeyDown(KeyCode.V)) { Sound.Play(Sfx.CardSlide, 0.5f); Run(A("face", "id", id, "v", !c.FaceDown)); }
+            if (Input.GetKeyDown(KeyCode.K)) { Sound.Play(Sfx.Token); Run(A("clone", "id", id)); }
+            if (Input.GetKeyDown(KeyCode.Equals) || Input.GetKeyDown(KeyCode.Plus) || Input.GetKeyDown(KeyCode.KeypadPlus))
+            { Sound.Play(Sfx.Counter); Run(A("counter", "id", id, "kind", "+1/+1", "d", 1)); }
+            if (Input.GetKeyDown(KeyCode.Minus) || Input.GetKeyDown(KeyCode.KeypadMinus))
+            { Sound.Play(Sfx.Counter); Run(A("counter", "id", id, "kind", "-1/-1", "d", 1)); }
+            if (Input.GetKeyDown(KeyCode.I))
+            {
+                if (!shift) { Sound.Play(Sfx.Counter); Run(A("counter", "id", id, "kind", "counter", "d", 1)); }
+                else if (c.Counters.Count > 0) { Sound.Play(Sfx.Counter, 0.6f); Run(A("counter", "id", id, "kind", "*first", "d", -1)); }
+            }
+            if (Input.GetKeyDown(KeyCode.N) && shift) EditNote(id);
+        }
+
+        /// <summary>Q / E: turn the hovered permanent a quarter turn left / right.</summary>
+        void RotateHovered(int d)
+        {
+            if (hovered == null || hovered.IsExiting || !State.Cards.TryGetValue(hovered.CardId, out var c) || c.Zone != "Battlefield") return;
+            Sound.Play(Sfx.Tap, 0.6f, d > 0 ? 1f : 0.92f);
+            Run(A("rotate", "id", c.Id, "d", d));
+        }
 
         CardView dragging;
 
         void OnDragBegan(CardView cv, Vector2 screen)
         {
             if (!State.Cards.TryGetValue(cv.CardId, out var c)) return;
-            bool mine = c.Zone == "Hand" ? c.Owner == Me.Id : c.Zone == "Battlefield";
+            bool mine = c.Zone == "Hand" || c.Zone == "Library" || c.Zone == "Graveyard" || c.Zone == "Exile" || c.Zone == "Command"
+                ? c.Owner == Me.Id : c.Zone == "Battlefield";
             if (!mine) return;
             dragging = cv;
             cv.Dragging = true;
@@ -576,7 +775,14 @@ namespace MTGUnited
                     }
                     Run(A("handorder", "id", c.Id, "index", to));
                 }
-                else MoveCard(c.Id, "Hand", c.Owner);
+                else
+                {
+                    // From the board: it lands where you let go, not at the end.
+                    PlayMoveSound(c.Id, "Hand");
+                    var mv = A("move", "id", c.Id, "zone", "Hand", "to", c.Owner);
+                    if (c.Owner == Me.Id) mv["hindex"] = (double)HandIndexAt(p.x, Me.Hand.Count + 1);
+                    Run(mv);
+                }
                 return;
             }
 
@@ -623,22 +829,51 @@ namespace MTGUnited
 
         // =================================================================================================== keys
 
+        bool altZoom;
+        int altCard = -1;
+
         void Update()
         {
             if (State == null) return;
+            if (altZoom && !(Input.GetKey(KeyCode.LeftAlt) || Input.GetKey(KeyCode.RightAlt)))
+            {
+                altZoom = false;
+                altCard = -1;
+                if (gc.Inspector.IsOpen) gc.Inspector.ForceHide();
+            }
 #if ENABLE_LEGACY_INPUT_MANAGER
-            if (viewer.IsOpen || tokenDialog.IsOpen || PopupMenu.Instance.IsOpen || gc.GameMenu.IsOpen || gc.Options.IsOpen) return;
+            if (viewer.IsOpen || tokenDialog.IsOpen || noteDialog.IsOpen || PopupMenu.Instance.IsOpen || gc.GameMenu.IsOpen || gc.Options.IsOpen) return;
             var es = UnityEngine.EventSystems.EventSystem.current;
             if (es != null && es.currentSelectedGameObject != null && es.currentSelectedGameObject.GetComponent<InputField>() != null) return;
             bool ctrl = Input.GetKey(KeyCode.LeftControl) || Input.GetKey(KeyCode.RightControl);
             if (ctrl && Input.GetKeyDown(KeyCode.Z)) { Sound.Play(Sfx.CardSlide, 0.5f); Run(A("undo")); return; }
             if (ctrl) return;
-            if (Input.GetKeyDown(KeyCode.D)) Draw(1);
+            bool shift = Input.GetKey(KeyCode.LeftShift) || Input.GetKey(KeyCode.RightShift);
+            if (Input.GetKeyDown(KeyCode.D))
+            {
+                if (shift) { Sound.Play(Sfx.Die, 0.6f); Run(A("mill", "n", 1)); }
+                else Draw(1);
+            }
+            HoveredCardKeys(shift);
             if (Input.GetKeyDown(KeyCode.U)) UntapAll();
-            if (Input.GetKeyDown(KeyCode.N)) NextTurn();
+            if (Input.GetKeyDown(KeyCode.N) && !shift) NextTurn();
             if (Input.GetKeyDown(KeyCode.S)) Shuffle();
             if (Input.GetKeyDown(KeyCode.T)) OpenTokenDialog();
             if (Input.GetKeyDown(KeyCode.R)) DiceMenu(Input.mousePosition);
+            // Hold Alt over a card: the big zoomed view, until Alt is released.
+            bool alt = Input.GetKey(KeyCode.LeftAlt) || Input.GetKey(KeyCode.RightAlt);
+            if (alt && hovered != null && hovered.Data != null && !hovered.Data.Hidden && !string.IsNullOrEmpty(hovered.Data.Name)
+                && (!altZoom || altCard != hovered.CardId))
+            {
+                // Follows the mouse while Alt stays down: hover another card and the big view switches to it.
+                altZoom = true;
+                altCard = hovered.CardId;
+                gc.Preview.Hide();
+                gc.Inspector.ShowPassive(hovered.Data);
+            }
+            if (Input.GetKeyDown(KeyCode.F)) FlipHovered();
+            if (Input.GetKeyDown(KeyCode.Q)) RotateHovered(-1);
+            if (Input.GetKeyDown(KeyCode.E)) RotateHovered(1);
 #endif
         }
 
@@ -657,7 +892,7 @@ namespace MTGUnited
             foreach (var c in State.Battlefield(me.Id).OrderBy(c => c.Pos.y).ThenBy(c => c.Pos.x))
             {
                 var pos = new Vector2(FieldX + c.Pos.x * FieldW, FieldY + c.Pos.y * FieldH);
-                placements[c.Id] = (pos, new Vector2(cardW, cardH), c.Tapped ? -90f : 0f, 2000 + order++, ToData(c, false));
+                placements[c.Id] = (pos, new Vector2(cardW, cardH), (c.Tapped ? -90f : 0f) - c.Rot * 90f, 2000 + order++, ToData(c, false));
             }
 
             // My hand.
@@ -685,7 +920,7 @@ namespace MTGUnited
                 {
                     // Seen from across the table: their near edge is at the top.
                     var pos = new Vector2(rect.x + c.Pos.x * rect.width, OppFieldTop - c.Pos.y * rect.height);
-                    placements[c.Id] = (pos, new Vector2(ow, oh), c.Tapped ? 90f : 0f, 100 + o++, ToData(c, false));
+                    placements[c.Id] = (pos, new Vector2(ow, oh), (c.Tapped ? 90f : 0f) + c.Rot * 90f, 100 + o++, ToData(c, false));
                 }
                 oppPanels[k].Render(p, State);
             }
@@ -711,15 +946,7 @@ namespace MTGUnited
                 var (pos, size, rot, ord, data) = kv.Value;
                 if (!views.TryGetValue(kv.Key, out var cv))
                 {
-                    cv = CardView.Create(cardLayer, kv.Key);
-                    cv.Clicked = OnClick;
-                    cv.RightClicked = OnRightClick;
-                    cv.HoverStart = v => { if (v.Data != null && !v.Data.Hidden) gc.Preview.Request(v.Data, v.CurrentPos.x < 960); };
-                    cv.HoverEnd = v => gc.Preview.Hide();
-                    cv.DragBegan = OnDragBegan;
-                    cv.DragMoved = OnDragMoved;
-                    cv.DragEnded = OnDragEnded;
-                    views[kv.Key] = cv;
+                    cv = NewView(kv.Key);
                     cv.SetData(data);
                     State.Cards.TryGetValue(kv.Key, out var tc);
                     lastZone.TryGetValue(kv.Key, out var fromZone);
@@ -825,11 +1052,12 @@ namespace MTGUnited
         /// <summary>A table card as CardView data: name, art, type, P/T (with +1/+1 and −1/−1 counters applied).</summary>
         CardData ToData(TableCard c, bool hidden)
         {
-            var info = CardCatalog.Get(c.Name);
-            var custom = CustomSets.Get(c.Name);
+            string face = FaceName(c);
+            var info = CardCatalog.Get(face);
+            var custom = CustomSets.Get(face);
             var d = new CardData
             {
-                Id = c.Id, Name = c.Name, Set = custom?.Set ?? info?.Set ?? "", Zone = c.Zone, Tapped = c.Tapped,
+                Id = c.Id, Name = face, Set = custom?.Set ?? info?.Set ?? "", Zone = c.Zone, Tapped = c.Tapped,
                 FaceDown = c.FaceDown, Token = c.Token && custom == null, Owner = c.Owner, Controller = c.Controller,
                 Hidden = hidden || (c.FaceDown && c.Zone == "Battlefield"),
                 ManaCost = info?.Cost ?? "", TypeLine = info?.Type ?? (c.Token ? "Token" : ""), Text = info?.Text ?? "",
@@ -934,15 +1162,15 @@ namespace MTGUnited
         void PlayerMenu(TablePlayer p, Vector2 at)
         {
             var items = new List<(string, Action)> { (p.Name.ToUpperInvariant(), null) };
-            items.Add(("+1 poison", () => Run(A("poison", "p", p.Id, "d", 1))));
-            if (p.Poison > 0) items.Add(("−1 poison", () => Run(A("poison", "p", p.Id, "d", -1))));
+            items.Add(("+1 poison", PopupMenu.Stay(() => Run(A("poison", "p", p.Id, "d", 1)))));
+            if (p.Poison > 0) items.Add(("−1 poison", PopupMenu.Stay(() => Run(A("poison", "p", p.Id, "d", -1)))));
             items.Add(("Set life to 20", () => Run(A("setlife", "p", p.Id, "v", 20))));
             items.Add(("Set life to 40", () => Run(A("setlife", "p", p.Id, "v", 40))));
             if (p != Me && !Networked) items.Add(("Sit here (play as " + p.Name + ")", () => SitAt(p.Id)));
             items.Add(("Graveyard (" + p.Graveyard.Count + ")", () => ShowZone(p, "Graveyard")));
             items.Add(("Exile (" + p.Exile.Count + ")", () => ShowZone(p, "Exile")));
             items.Add(("Command zone (" + p.Command.Count + ")", () => ShowZone(p, "Command")));
-            PopupMenu.Instance.Show(at, items);
+            PopupMenu.Instance.Reopen(() => { var again = State?.Player(p.Id); if (again != null) PlayerMenu(again, at); }).Show(at, items);
         }
 
         /// <summary>Nameplate for a seat across the table (the Arena-style PlayerPanel), wired to table actions.</summary>
@@ -962,8 +1190,14 @@ namespace MTGUnited
                 Root = panel.Rect;
                 Center = r.center;
                 panel.AddLifeButtons(d => table.Life(table.State.Player(PlayerId), d));
+                panel.EnableLifeEdit(v => { if (PlayerId >= 0) table.Run(A("setlife", "p", PlayerId, "v", v)); });
                 panel.ZoneClicked = z => table.ZoneClick(table.State.Player(PlayerId), z);
-                panel.Clicked = () => { };
+                // Ctrl+click a seat's nameplate (life total included): look at the table from their side.
+                panel.Clicked = () =>
+                {
+                    bool ctrl = Input.GetKey(KeyCode.LeftControl) || Input.GetKey(KeyCode.RightControl);
+                    if (ctrl && !table.Networked && PlayerId >= 0) { table.SitAt(PlayerId); Sound.Play(Sfx.CardSlide, 0.6f); }
+                };
                 panel.RightClicked = () => table.PlayerMenu(table.State.Player(PlayerId), Input.mousePosition);
             }
 
@@ -975,6 +1209,29 @@ namespace MTGUnited
             }
 
             public void Reset() { PlayerId = -1; }
+        }
+    }
+
+    /// <summary>Lets a kitchen-table pile hand its top card to a drag.</summary>
+    public class PileDragHandler : MonoBehaviour, UnityEngine.EventSystems.IBeginDragHandler, UnityEngine.EventSystems.IDragHandler, UnityEngine.EventSystems.IEndDragHandler
+    {
+        public TableView Table;
+        public string Zone;
+        bool active;
+
+        public void OnBeginDrag(UnityEngine.EventSystems.PointerEventData e)
+        {
+            active = e.button == UnityEngine.EventSystems.PointerEventData.InputButton.Left && Table != null;
+            if (active) Table.BeginPileDrag(Zone, e.position);
+        }
+
+        public void OnDrag(UnityEngine.EventSystems.PointerEventData e) { if (active) Table.MovePileDrag(e.position); }
+
+        public void OnEndDrag(UnityEngine.EventSystems.PointerEventData e)
+        {
+            if (!active) return;
+            active = false;
+            Table.EndPileDrag(e.position);
         }
     }
 }
