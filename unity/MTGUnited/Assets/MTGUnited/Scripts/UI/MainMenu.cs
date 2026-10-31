@@ -680,7 +680,13 @@ namespace MTGUnited
                 kv.Value.bg.color = on ? new Color(1f, 1f, 1f, 0.07f) : Color.clear;
                 kv.Value.bar.SetVisible(on);
             }
-            foreach (var kv in pages) kv.Value.gameObject.SetActive(kv.Key == id);
+            foreach (var kv in pages)
+            {
+                bool show = kv.Key == id;
+                bool was = kv.Value.gameObject.activeSelf;
+                kv.Value.gameObject.SetActive(show);
+                if (show && !was) FadeIn.Play(kv.Value.gameObject, 0.2f);   // screen cross-fade (200 ms)
+            }
             if (playCluster != null) playCluster.gameObject.SetActive(id == "home");
             if (id == "profile") RefreshProfile();
         }

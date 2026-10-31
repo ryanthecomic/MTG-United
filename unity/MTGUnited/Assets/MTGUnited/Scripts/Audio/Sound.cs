@@ -7,7 +7,7 @@ namespace MTGUnited
     public enum Sfx
     {
         UiClick, Draw, LandPlay, Cast, Resolve, Ability, Tap, Untap, Die, Exile, Discard, ToLibrary, Token,
-        Counter, Attack, Impact, LifeLoss, LifeGain, Priority, TurnStart, Victory, Defeat, Popup, DrawMany,
+        Counter, Attack, Impact, LifeLoss, LifeGain, Priority, TurnStart, Victory, Defeat, Popup, DrawMany, CardSlide, CardPlace,
     }
 
     /// <summary>
@@ -25,7 +25,10 @@ namespace MTGUnited
         readonly Dictionary<Sfx, List<float>> recent = new Dictionary<Sfx, List<float>>();
         readonly AudioClip[] castByColour = new AudioClip[6];
         AudioSource[] sources;
-        AudioSource music;
+        AudioSource music, intense;
+        float duckUntil;
+        /// <summary>Set by the sound director when any player is at 5 life or less.</summary>
+        public static bool Intense;
         int next;
 
         public static bool Enabled
@@ -78,6 +81,14 @@ namespace MTGUnited
                 music.volume = 0.3f * Volume;
                 music.mute = !Enabled;
                 music.Play();
+                // Optional intensity layer (doc 10.1): "MusicIntense" fades in when someone is at 5 life or less.
+                var intenseClip = Resources.Load<AudioClip>("Audio/MusicIntense");
+                if (intenseClip != null)
+                {
+                    intense = gameObject.AddComponent<AudioSource>();
+                    intense.clip = intenseClip; intense.loop = true; intense.volume = 0f; intense.mute = !Enabled;
+                    intense.Play();
+                }
             }
         }
 
@@ -119,6 +130,17 @@ namespace MTGUnited
 
         void Update()
         {
+            if (music != null)
+            {
+                float target = 0.3f * Volume * (Time.unscaledTime < duckUntil ? 0.63f : 1f);
+                music.volume = Mathf.MoveTowards(music.volume, target, Time.unscaledDeltaTime * 1.5f);
+                music.mute = !Enabled;
+                if (intense != null)
+                {
+                    intense.mute = !Enabled;
+                    intense.volume = Mathf.MoveTowards(intense.volume, Intense ? target : 0f, Time.unscaledDeltaTime * 0.3f);
+                }
+            }
             float now = Time.unscaledTime;
             if (pendingDraws > 0 && now - lastDrawAt >= GatherWindow)
             {
@@ -135,6 +157,7 @@ namespace MTGUnited
 
         void PlayClip(Sfx s, AudioClip clip, float volume, float pitch)
         {
+            if (s == Sfx.Impact || s == Sfx.Attack) duckUntil = Time.unscaledTime + 0.35f;   // duck music ~4 dB on impacts
             if (clip == null) return;
             // Voice limit: at most 3 of the same effect in any 100 ms window.
             float now = Time.unscaledTime;
@@ -164,6 +187,10 @@ namespace MTGUnited
                 case Sfx.Popup: return Clip(s, 0.12f, (t, i) => Tone(t, Lerp(600, 900, t / 0.12f), 0.08f) * 0.3f);
                 case Sfx.Draw: return Whoosh(s, 0.22f, 900, 3000, 0.4f);
                 case Sfx.DrawMany: return Riffle(s, 0.38f);
+                // Hand reordering: a light paper slide as the gap moves, a soft tap when the card is set down.
+                case Sfx.CardSlide: return Whoosh(s, 0.09f, 2200, 4200, 0.28f);
+                case Sfx.CardPlace: return Clip(s, 0.09f, (t, i) =>
+                    LowPass(Noise(), 0.25f) * Env(t, 0.002f, 0.012f) * 0.45f + Tone(t, Lerp(320, 210, t / 0.09f), 0.03f) * 0.35f);
                 case Sfx.ToLibrary: return Whoosh(s, 0.22f, 2600, 700, 0.35f);
                 case Sfx.Discard: return Whoosh(s, 0.12f, 2500, 5000, 0.4f);
                 case Sfx.LandPlay: return Thud(s, 0.24f, 85, 48, 0.9f, 0.25f);
@@ -317,13 +344,17 @@ namespace MTGUnited
             int n = Mathf.CeilToInt(len * Rate);
             var data = new float[n];
             lp = 0; bp1 = 0; bp2 = 0;
+            float peak = 0f;
             for (int i = 0; i < n; i++)
             {
                 float t = i / (float)Rate;
                 // 5 ms fade-out at the end so nothing clicks.
                 float tail = Mathf.Clamp01((n - i) / (Rate * 0.005f));
                 data[i] = Mathf.Clamp(f(t, i) * tail, -1f, 1f);
+                peak = Mathf.Max(peak, Mathf.Abs(data[i]));
             }
+            // Asset spec (doc 11.1): peaks at -3 dBFS.
+            if (peak > 0.708f) { float k = 0.708f / peak; for (int i = 0; i < n; i++) data[i] *= k; }
             var clip = AudioClip.Create(name, n, 1, Rate, false);
             clip.SetData(data, 0);
             return clip;

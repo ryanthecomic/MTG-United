@@ -33,6 +33,29 @@ namespace MTGUnited
 
         public static string CacheFolder => Instance != null ? Instance.diskDir : null;
 
+        /// <summary>
+        /// Image for a card on screen: tokens are looked up on Scryfall by name, colour and power/toughness
+        /// (Forge tokens have no printing of their own); everything else by name and set.
+        /// </summary>
+        public void GetFor(CardData c, Action<Texture2D> callback)
+        {
+            if (c == null || c.Hidden) return;
+            if (c.Token) GetToken(c.Name, c.Colors, c.HasPT ? c.Power.ToString() : null, c.HasPT ? c.Toughness.ToString() : null, c.TypeLine, callback);
+            else Get(c.Name, c.Set, callback);
+        }
+
+        const string TokenMark = "\u0001token:";
+
+        public void GetToken(string name, string colors, string power, string toughness, string typeLine, Action<Texture2D> callback)
+        {
+            if (string.IsNullOrEmpty(name)) return;
+            string n = name.EndsWith(" Token") ? name.Substring(0, name.Length - 6) : name;
+            string c = string.IsNullOrEmpty(colors) ? "c" : colors.ToLowerInvariant();
+            // Search: exact token name, colour, and P/T when it has them. Encoded into the "set" slot of the queue.
+            string q = "t:token !\"" + n + "\" c=" + c + (power != null ? " pow=" + power + " tou=" + toughness : "");
+            Get(TokenMark + n, q, callback);
+        }
+
         /// <summary>Calls back with the texture (now or later), or never if the card has no image.</summary>
         public void Get(string name, string set, Action<Texture2D> callback)
         {
@@ -72,13 +95,31 @@ namespace MTGUnited
                 var (key, name, set) = queue.Dequeue();
                 Texture2D tex = null;
                 byte[] bytes = null;
+                if (name.StartsWith(TokenMark))
+                {
+                    // Token: search for a matching token card, then download its image (relax P/T if nothing matches).
+                    string url = null;
+                    yield return FindTokenImage(set, u => url = u);
+                    yield return new WaitForSecondsRealtime(MinSecondsBetweenRequests);
+                    if (url == null && set.Contains(" pow="))
+                    {
+                        yield return FindTokenImage(set.Substring(0, set.IndexOf(" pow=")), u => url = u);
+                        yield return new WaitForSecondsRealtime(MinSecondsBetweenRequests);
+                    }
+                    if (url != null)
+                    {
+                        yield return Download(url, (t, b) => { tex = t; bytes = b; });
+                        yield return new WaitForSecondsRealtime(MinSecondsBetweenRequests);
+                    }
+                    set = null; name = null;   // skip the normal lookups below
+                }
                 // Try the exact printing first, then any printing of the card.
                 if (!string.IsNullOrEmpty(set))
                 {
                     yield return Download(Url(name, set), (t, b) => { tex = t; bytes = b; });
                     yield return new WaitForSecondsRealtime(MinSecondsBetweenRequests);
                 }
-                if (tex == null)
+                if (tex == null && name != null)
                 {
                     yield return Download(Url(name, null), (t, b) => { tex = t; bytes = b; });
                     yield return new WaitForSecondsRealtime(MinSecondsBetweenRequests);
@@ -99,6 +140,33 @@ namespace MTGUnited
                 waiting.Remove(key);
             }
             running = false;
+        }
+
+        static IEnumerator FindTokenImage(string query, Action<string> done)
+        {
+            string url = "https://api.scryfall.com/cards/search?unique=art&include_extras=true&q=" + UnityWebRequest.EscapeURL(query);
+            using (var req = UnityWebRequest.Get(url))
+            {
+                req.SetRequestHeader("Accept", "application/json");
+                req.SetRequestHeader("User-Agent", "MTGUnited/0.1 (local Forge client)");
+                yield return req.SendWebRequest();
+                if (req.result != UnityWebRequest.Result.Success) yield break;
+                try
+                {
+                    var root = Json.ParseObject(req.downloadHandler.text);
+                    foreach (var o in root.Arr("data"))
+                    {
+                        var card = o as Dictionary<string, object>;
+                        if (card == null) continue;
+                        var uris = card.Obj("image_uris");
+                        if (uris == null)
+                            foreach (var f in card.Arr("card_faces")) { uris = (f as Dictionary<string, object>)?.Obj("image_uris"); if (uris != null) break; }
+                        string img = uris?.Str("normal");
+                        if (!string.IsNullOrEmpty(img)) { done(img); yield break; }
+                    }
+                }
+                catch (Exception ex) { Debug.LogWarning("[MTGUnited] Token search failed: " + ex.Message); }
+            }
         }
 
         static string Url(string name, string set)

@@ -16,6 +16,28 @@ namespace MTGUnited
         /// <summary>Off for input fields, where the raw text must stay editable.</summary>
         public bool Symbols = true;
 
+        // ---------------------------------------------------------------- text size (Options > text size)
+        static readonly HashSet<SymbolText> all = new HashSet<SymbolText>();
+        int baseSize = -1, baseMin, baseMax;
+
+        /// <summary>Re-applies the text size option to every label (bases are the sizes the code asked for).</summary>
+        public static void RescaleAll() { foreach (var t in all) if (t != null) t.ApplyScale(); }
+
+        protected override void Awake() { base.Awake(); all.Add(this); }
+        protected override void OnDestroy() { all.Remove(this); base.OnDestroy(); }
+
+        // Captured on the first frame, after the creating code has set its sizes and best-fit limits.
+        protected override void Start() { base.Start(); ApplyScale(); }
+
+        void ApplyScale()
+        {
+            if (baseSize < 0) { baseSize = fontSize; baseMin = resizeTextMinSize; baseMax = resizeTextMaxSize; }
+            float k = UiScale.TextScale;
+            fontSize = Mathf.Max(6, Mathf.RoundToInt(baseSize * k));
+            resizeTextMaxSize = Mathf.Max(6, Mathf.RoundToInt(baseMax * k));
+            resizeTextMinSize = Mathf.Max(4, Mathf.RoundToInt(baseMin * k));
+        }
+
         string raw = "";
         readonly List<string> codes = new List<string>();
         readonly List<(Vector2 center, float size, int code)> slots = new List<(Vector2, float, int)>();

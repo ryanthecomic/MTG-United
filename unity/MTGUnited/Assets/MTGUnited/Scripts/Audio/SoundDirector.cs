@@ -19,6 +19,7 @@ namespace MTGUnited
         {
             var p = prev;
             prev = s;
+            if (s != null) Sound.Intense = s.Players.Exists(x => !x.HasLost && x.Life <= 5);
             if (p == null || s == null || p.Me != s.Me) return;
             if (s.Mulligan || p.Mulligan) { Sound.QueueDraw(Drawn(p, s)); return; }
 

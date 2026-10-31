@@ -62,10 +62,10 @@ namespace MTGUnited
             art.enabled = false;
             text.text = "<b>" + c.Name + "</b>   " + CardView.ManaText(c.ManaCost) + "\n<i>" + c.TypeLine + "</i>\n\n" + c.Text
                         + (c.HasPT ? "\n\n<b>" + c.Power + "/" + c.Toughness + "</b>" : "");
-            if (!c.Token && CardImageCache.Instance != null)
+            if (CardImageCache.Instance != null)
             {
                 var target = c;
-                CardImageCache.Instance.Get(c.Name, c.Set, tex =>
+                CardImageCache.Instance.GetFor(c, tex =>
                 {
                     if (showing != target) return;
                     art.texture = tex;
@@ -153,8 +153,8 @@ namespace MTGUnited
             var art = artRt.gameObject.AddComponent<RawImage>();
             art.raycastTarget = false;
             art.enabled = false;
-            if (c != null && !c.Hidden && !c.Token && CardImageCache.Instance != null)
-                CardImageCache.Instance.Get(c.Name, c.Set, tex => { if (art != null) { art.texture = tex; art.enabled = true; } });
+            if (c != null && !c.Hidden && CardImageCache.Instance != null)
+                CardImageCache.Instance.GetFor(c, tex => { if (art != null) { art.texture = tex; art.enabled = true; } });
             var pe = frame.gameObject.AddComponent<PointerEvents>();
             pe.OnClick = () => onClick?.Invoke();
             pe.OnRightClick = () => { if (c != null) CardInspector.Instance?.Show(c); };
@@ -227,10 +227,12 @@ namespace MTGUnited
         }
 
         public bool IsOpen => gameObject.activeSelf;
+        string lastSig;
 
         public void Close()
         {
             playerId = -1;
+            lastSig = null;
             gc.Preview.Hide();
             gameObject.SetActive(false);
         }
@@ -254,6 +256,11 @@ namespace MTGUnited
                 title.text = p.ShortName + " — " + label + " (" + list.Count + ")";
                 if (zone == "Command" && list.Count == 0) title.text = p.ShortName + " — commander is not in the command zone";
             }
+            // Rebuild only when the cards or what's playable among them changed.
+            var sig = new System.Text.StringBuilder(zone).Append(playerId).Append(':');
+            foreach (var c0 in list) sig.Append(c0.Id).Append(s.Prompt.ActionableCards.Contains(c0.Id) || s.Prompt.SelectableCards.Contains(c0.Id) ? '*' : ',');
+            if (sig.ToString() == lastSig) return;
+            lastSig = sig.ToString();
             foreach (Transform child in content) Destroy(child.gameObject);
             for (int i = list.Count - 1; i >= 0; i--)
             {
@@ -275,6 +282,9 @@ namespace MTGUnited
     {
         GameController gc;
         Text title, sub;
+        RectTransform plate;
+        CanvasGroup group;
+        float shownAt;
 
         public static GameOverPanel Create(RectTransform parent, GameController gc)
         {
@@ -286,6 +296,8 @@ namespace MTGUnited
             var pr = panel.rectTransform;
             pr.anchorMin = pr.anchorMax = new Vector2(0.5f, 0.5f);
             pr.sizeDelta = new Vector2(700, 340);
+            g.plate = pr;
+            g.group = shade.gameObject.AddComponent<CanvasGroup>();
             g.title = UIKit.Label("Title", panel.transform, "", 64, Theme.Accent, TextAnchor.UpperCenter, FontStyle.Bold).Outline(2).Titled();
             g.title.rectTransform.Stretch(0, 0, 0, 30);
             g.sub = UIKit.Label("Sub", panel.transform, "", 22, Theme.Text, TextAnchor.MiddleCenter);
@@ -311,6 +323,17 @@ namespace MTGUnited
             title.text = won ? "VICTORY" : "DEFEAT";
             title.color = won ? Theme.Accent : Theme.Danger;
             sub.text = winner == null ? "The game is over." : (won ? "You won the pod!" : "Winner: " + winner);
+            shownAt = Motion.Now;
+        }
+
+        // The plate rises into place while the board dims (travel); victory rises a little higher and brighter.
+        void Update()
+        {
+            float t = Mathf.Clamp01((Motion.Now - shownAt) / Motion.Travel);
+            float e = Easing.Eval(Ease.Out, t);
+            group.alpha = e;
+            plate.anchoredPosition = new Vector2(0, Motion.ReduceMotion ? 0f : -70f * (1f - e));
+            plate.localScale = Vector3.one * Mathf.Lerp(0.92f, 1f, e);
         }
 
         public void Hide() => gameObject.SetActive(false);

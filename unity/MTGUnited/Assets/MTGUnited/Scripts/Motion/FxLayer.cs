@@ -114,7 +114,7 @@ namespace MTGUnited
         void Update()
         {
             float now = Motion.Now;
-            float life = Motion.Budget;
+            const float life = 0.7f;   // readable: pop (micro) + hold, fading over the last 40% (doc 10.3: hold >= 600 ms)
             for (int i = numbers.Count - 1; i >= 0; i--)
             {
                 var n = numbers[i];

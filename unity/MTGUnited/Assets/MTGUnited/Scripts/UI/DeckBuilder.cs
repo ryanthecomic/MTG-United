@@ -167,7 +167,9 @@ namespace MTGUnited
 
             // Deck list.
             var listBg = UIKit.Panel("DeckList", collectionRoot, new Color(0.04f, 0.04f, 0.06f, 0.9f));
-            listBg.rectTransform.Place(ListLeft, 130, ListRight - ListLeft, Top - 150 - 110);
+            listBg.rectTransform.Place(ListLeft, 130, ListRight - ListLeft, Top - 150 - 110 - 118);
+            listRect = listBg.rectTransform;
+            BuildCurve();
             var lview = UIKit.Rect("View", listBg.transform).Stretch(8, 8, 8, 8);
             lview.gameObject.AddComponent<RectMask2D>();
             lview.gameObject.AddComponent<Image>().color = Color.clear;
@@ -248,6 +250,7 @@ namespace MTGUnited
             scope = Scope.Deck;
             gameObject.SetActive(true);
             transform.SetAsLastSibling();
+            FadeIn.Play(gameObject, Motion.Travel, 0.94f);   // the deck box opens into the editor
             textDialog.gameObject.SetActive(false);
             Refresh();
             CardCatalog.Ensure(model.AllNames(), Refresh);
@@ -326,7 +329,7 @@ namespace MTGUnited
             Refresh();
         }
 
-        void AddCard(CardInfo c)
+        void AddCard(CardInfo c, RectTransform from = null)
         {
             if (c == null) return;
             bool unlimited = c.Basic || (c.Text ?? "").IndexOf("any number of cards named", StringComparison.OrdinalIgnoreCase) >= 0;
@@ -339,7 +342,108 @@ namespace MTGUnited
             if (model.Commanders.Count == 0 && c.CanBeCommander) model.Commanders.Add(c.Name);
             else model.Add(c.Name);
             Sound.Play(Sfx.Draw, 0.5f);
+            if (from != null) FlyToList(c, from);
             Refresh();
+        }
+
+        // ---------------------------------------------------------------- deck-builder motion (doc 8.1)
+
+        RectTransform listRect, curveRoot;
+        readonly Image[] curveBars = new Image[8];
+        readonly Text[] curveCounts = new Text[8];
+        readonly TweenF[] curveH = new TweenF[8];
+        const float CurveMaxH = 62f;
+
+        /// <summary>Mana curve above the deck list: one bar per mana value (7+ grouped), lands excluded.</summary>
+        void BuildCurve()
+        {
+            var bg = UIKit.Panel("Curve", collectionRoot, new Color(0.04f, 0.04f, 0.06f, 0.9f));
+            bg.rectTransform.Place(ListLeft, 130 + (Top - 150 - 110 - 118) + 10, ListRight - ListLeft, 104);
+            curveRoot = bg.rectTransform;
+            float w = (ListRight - ListLeft - 40) / 8f;
+            for (int i = 0; i < 8; i++)
+            {
+                var bar = UIKit.Panel("Bar", bg.transform, new Color(0.95f, 0.62f, 0.22f, 0.9f));
+                var r = bar.rectTransform;
+                r.anchorMin = r.anchorMax = new Vector2(0, 0); r.pivot = new Vector2(0.5f, 0);
+                r.sizeDelta = new Vector2(w - 12, 0); r.anchoredPosition = new Vector2(20 + w * i + w / 2, 24);
+                bar.pixelsPerUnitMultiplier = 4f;
+                bar.raycastTarget = false;
+                curveBars[i] = bar;
+                var lbl = UIKit.Label("Cmc", bg.transform, i == 7 ? "7+" : i.ToString(), 13, Theme.TextDim, TextAnchor.MiddleCenter, FontStyle.Bold);
+                lbl.rectTransform.anchorMin = lbl.rectTransform.anchorMax = new Vector2(0, 0);
+                lbl.rectTransform.sizeDelta = new Vector2(w, 20); lbl.rectTransform.anchoredPosition = new Vector2(20 + w * i + w / 2, 12);
+                curveCounts[i] = UIKit.Label("N", bar.transform, "", 12, Color.white, TextAnchor.LowerCenter, FontStyle.Bold).Outline(1f);
+                var cr = curveCounts[i].rectTransform;
+                cr.anchorMin = new Vector2(0, 1); cr.anchorMax = new Vector2(1, 1); cr.pivot = new Vector2(0.5f, 0);
+                cr.sizeDelta = new Vector2(0, 16); cr.anchoredPosition = new Vector2(0, 1);
+                curveH[i] = new TweenF { From = 0, To = 0 };
+            }
+        }
+
+        /// <summary>Bars grow to their new heights with a springy settle (spring.card stand-in: ease.land).</summary>
+        void RefreshCurve()
+        {
+            var counts = new int[8];
+            foreach (var (count, name) in model.Cards)
+            {
+                var info = CardCatalog.Get(name);
+                if (info == null || info.Land) continue;
+                counts[Mathf.Clamp(info.Cmc, 0, 7)] += count;
+            }
+            int max = Mathf.Max(8, counts.Max());
+            for (int i = 0; i < 8; i++)
+            {
+                float h = CurveMaxH * counts[i] / max;
+                if (Mathf.Abs(curveH[i].To - h) > 0.1f) curveH[i].Retarget(h, Motion.Now, Motion.Base, Ease.Land);
+                curveCounts[i].text = counts[i] > 0 ? counts[i].ToString() : "";
+            }
+        }
+
+        void LateUpdate()
+        {
+            if (curveRoot == null || !curveRoot.gameObject.activeInHierarchy) return;
+            float now = Motion.Now;
+            for (int i = 0; i < 8; i++)
+            {
+                var r = curveBars[i].rectTransform;
+                r.sizeDelta = new Vector2(r.sizeDelta.x, Mathf.Max(0f, curveH[i].Eval(now)));
+            }
+        }
+
+        /// <summary>Adding a card flies a mini-card from the grid into the deck list.</summary>
+        void FlyToList(CardInfo c, RectTransform from)
+        {
+            if (CardImageCache.Instance == null || listRect == null) return;
+            var fly = UIKit.Rect("Flyer", root);
+            fly.anchorMin = fly.anchorMax = new Vector2(0.5f, 0.5f);
+            var raw = fly.gameObject.AddComponent<RawImage>();
+            raw.raycastTarget = false;
+            raw.color = new Color(1, 1, 1, 0);
+            CardImageCache.Instance.Get(c.Name, c.Set, tex => { if (raw != null) { raw.texture = tex; raw.color = Color.white; } });
+            Vector2 a = root.InverseTransformPoint(from.TransformPoint(from.rect.center));
+            Vector2 b = root.InverseTransformPoint(listRect.TransformPoint(new Vector2(listRect.rect.center.x, listRect.rect.yMax - 40f)));
+            fly.gameObject.AddComponent<Flyer>().Init(a, b, new Vector2(TileW, TileH), new Vector2(TileW * 0.3f, TileH * 0.3f));
+        }
+
+        /// <summary>One-shot flight on an arc (travel), shrinking and fading at the end.</summary>
+        class Flyer : MonoBehaviour
+        {
+            Vector2 a, b, s0, s1; float start;
+            public void Init(Vector2 from, Vector2 to, Vector2 size0, Vector2 size1) { a = from; b = to; s0 = size0; s1 = size1; start = Motion.Now; Update(); }
+            void Update()
+            {
+                float t = Mathf.Clamp01((Motion.Now - start) / Motion.Travel);
+                float e = Easing.Eval(Ease.InOut, t);
+                var mid = (a + b) * 0.5f + Vector2.up * (Motion.ReduceMotion ? 0f : 120f);
+                var p = (1 - e) * (1 - e) * a + 2 * (1 - e) * e * mid + e * e * b;
+                var rt = (RectTransform)transform;
+                rt.anchoredPosition = p;
+                rt.sizeDelta = Vector2.Lerp(s0, s1, e);
+                var raw = GetComponent<RawImage>();
+                if (raw.texture != null) raw.color = new Color(1, 1, 1, t < 0.8f ? 1f : 1f - (t - 0.8f) / 0.2f);
+                if (t >= 1f) Destroy(gameObject);
+            }
         }
 
         void RemoveCard(string name)
@@ -412,7 +516,7 @@ namespace MTGUnited
             collectionRoot.gameObject.SetActive(!columnsLayout);
             columnsRoot.gameObject.SetActive(columnsLayout);
             if (columnsLayout) RefreshColumns();
-            else { RefreshGrid(); RefreshList(); }
+            else { RefreshGrid(); RefreshList(); RefreshCurve(); }
             UpdateHint();
         }
 
@@ -452,7 +556,7 @@ namespace MTGUnited
                 bool commander = model.Commanders.Contains(info.Name);
                 var ci = info;
                 tile.Bind(info, count, scope == Scope.All && count > 0, commander,
-                    () => { if (scope == Scope.All) AddCard(ci); else RemoveCard(ci.Name); },
+                    () => { if (scope == Scope.All) AddCard(ci, tile.Root); else RemoveCard(ci.Name); },
                     () => Inspect(ci), h => Hover(h ? ci : null, false));
                 tile.Root.gameObject.SetActive(true);
             }

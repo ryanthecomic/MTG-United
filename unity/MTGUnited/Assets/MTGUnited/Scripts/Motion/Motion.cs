@@ -11,7 +11,32 @@ namespace MTGUnited
     {
         public const float Budget = 0.40f;
 
-        public static float Speed = 1f;   // global speed multiplier (1 = normal, 0.65 = fast)
+        /// <summary>Animation speed setting (design doc 10.2): Normal 1.0, Fast 0.65, Instant (short fades only).</summary>
+        public enum SpeedSetting { Normal, Fast, Instant }
+
+        static int speedSetting = -1;
+        public static SpeedSetting SpeedMode
+        {
+            get { if (speedSetting < 0) speedSetting = Mathf.Clamp(PlayerPrefs.GetInt("animSpeed", 0), 0, 2); return (SpeedSetting)speedSetting; }
+            set { speedSetting = (int)value; PlayerPrefs.SetInt("animSpeed", speedSetting); }
+        }
+
+        /// <summary>Global duration multiplier. Instant keeps a ~120 ms fade/highlight so changes are still visible.</summary>
+        public static float Speed
+        {
+            get
+            {
+                switch (SpeedMode) { case SpeedSetting.Fast: return 0.65f; case SpeedSetting.Instant: return 0.3f; default: return 1f; }
+            }
+        }
+
+        static int reduce = -1;
+        /// <summary>Accessibility (10.3): no shakes or lunges, flatter travel, fewer particles.</summary>
+        public static bool ReduceMotion
+        {
+            get { if (reduce < 0) reduce = PlayerPrefs.GetInt("reduceMotion", 0); return reduce == 1; }
+            set { reduce = value ? 1 : 0; PlayerPrefs.SetInt("reduceMotion", reduce); }
+        }
 
         public static float Micro => 0.090f * Speed;
         public static float Short => 0.160f * Speed;

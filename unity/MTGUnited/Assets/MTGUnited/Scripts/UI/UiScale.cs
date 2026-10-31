@@ -23,6 +23,14 @@ namespace MTGUnited
             set { cardCached = Mathf.Clamp(value, 0.8f, 1.3f); PlayerPrefs.SetFloat("cardScale", cardCached); }
         }
 
+        /// <summary>Size of all interface text (Options > text size). Applied live to every label.</summary>
+        static float textCached = -1f;
+        public static float TextScale
+        {
+            get { if (textCached < 0f) textCached = Mathf.Clamp(PlayerPrefs.GetFloat("textScale", 1.1f), 0.85f, 1.5f); return textCached; }
+            set { textCached = Mathf.Clamp(value, 0.85f, 1.5f); PlayerPrefs.SetFloat("textScale", textCached); SymbolText.RescaleAll(); }
+        }
+
         /// <summary>Seconds of hovering before the large card preview appears.</summary>
         public static float PreviewDelay
         {

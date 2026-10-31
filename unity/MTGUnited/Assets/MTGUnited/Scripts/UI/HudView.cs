@@ -16,8 +16,13 @@ namespace MTGUnited
         Image promptBg, stackBg;
         RectTransform stackList;
         readonly List<GameObject> stackRows = new List<GameObject>();
+        Image phaseMarker;
+        TweenF markerX = new TweenF { From = 282, To = 282 };
+        float primaryPulseStart = -10f;
+        bool hadPriority;
+        readonly HashSet<int> shownStackIds = new HashSet<int>();
+        string lastStackSig;
         readonly List<(string phase, Image pill, Text label, Image myDot, Image oppDot)> phasePills = new List<(string, Image, Text, Image, Image)>();
-        RectTransform ingameMenu;
         float flash;
         GameState state;
 
@@ -33,7 +38,7 @@ namespace MTGUnited
 
         public static HudView Create(RectTransform board, GameController gc)
         {
-            var rt = UIKit.Rect("Hud", board).Stretch();
+            var rt = UIKit.Rect("Hud", board).Stretch().SubCanvas();
             var h = rt.gameObject.AddComponent<HudView>();
             h.gc = gc;
             h.LoadStops();
@@ -104,6 +109,10 @@ namespace MTGUnited
                 phasePills.Add((id, pill, t, myDot, oppDot));
                 x += w;
             }
+            // Phase marker: a bar under the current step that slides to the next one (base).
+            phaseMarker = UIKit.Panel("PhaseMarker", rt, new Color(1f, 0.85f, 0.5f, 0.95f));
+            phaseMarker.rectTransform.Place(280, 552, w - 4, 4);
+            phaseMarker.raycastTarget = false;
             var hint = UIKit.Label("StopsHint", rt, "Phase stops: click = your turn (orange), right-click = opponents' turns (blue)", 11, new Color(1, 1, 1, 0.3f), TextAnchor.MiddleCenter);
             hint.rectTransform.Place(280, 592, 1140, 14);
 
@@ -120,35 +129,14 @@ namespace MTGUnited
             menuButton = UIKit.IconButton("Menu", rt, Icons.Gear, 1856, 1016, 56, ToggleMenu);
             menuButton.GetComponent<Image>().color = new Color(0.05f, 0.06f, 0.09f, 0.85f);
             menuButton.transform.SetAsLastSibling();
-            ingameMenu = UIKit.Panel("IngameMenu", rt, Theme.PanelLight).rectTransform;
-            ingameMenu.Place(1640, 790, 270, 226);
-            MenuButton("Concede", 0, () => { gc.Send("concede"); ToggleMenu(); });
-            MenuButton("Alpha strike (attack with all)", 1, () => { gc.Send("alphaStrike"); ToggleMenu(); });
-            MenuButton("Options", 2, () => { ToggleMenu(); gc.Options.Open(); });
-            MenuButton("Back to main menu", 3, () => { ToggleMenu(); gc.Menu.Show(); });
-            ingameMenu.gameObject.SetActive(false);
-
             // UI scale: the right-hand column grows from the bottom-right corner, the menu from the top-right.
             var bottomRight = new Vector2(1910, 10);
             foreach (var c in new Component[] { promptBg, secondary, primary, endTurn, undo, stackBg }) UiScaled.Add(c, bottomRight);
             UiScaled.Add(menuButton, new Vector2(1912, 1072));
-            UiScaled.Add(ingameMenu, new Vector2(1912, 1072));
         }
 
 
-        Button MenuButton(string label, int row, UnityEngine.Events.UnityAction onClick)
-        {
-            var b = UIKit.Button(label, ingameMenu, label, Theme.Secondary, onClick, 16);
-            ((RectTransform)b.transform).Place(10, 226 - 10 - (row + 1) * 52, 250, 46);
-            return b;
-        }
-
-        void ToggleMenu()
-        {
-            ingameMenu.gameObject.SetActive(!ingameMenu.gameObject.activeSelf);
-            ingameMenu.SetAsLastSibling();
-            menuButton.transform.SetAsLastSibling();
-        }
+        void ToggleMenu() => gc.GameMenu.Toggle();
 
         void Toggle(HashSet<string> set, string phase)
         {
@@ -173,7 +161,12 @@ namespace MTGUnited
         {
             state = s;
             var p = s.Prompt;
-            promptText.text = string.IsNullOrEmpty(p.Message) ? "" : p.Message.Trim();
+            // Forge writes full player names ("AI 3 (Cavalry Charge [MOC] [2023])"); show the short form so long
+            // deck names can't stretch the prompt box.
+            string msg = string.IsNullOrEmpty(p.Message) ? "" : p.Message.Trim();
+            foreach (var pl in s.Players)
+                if (!string.IsNullOrEmpty(pl.Name) && pl.Name != pl.ShortName) msg = msg.Replace(pl.Name, pl.ShortName);
+            promptText.text = msg;
 
             primary.SetVisible(p.OkEnabled || !string.IsNullOrEmpty(p.OkLabel));
             primary.interactable = p.OkEnabled;
@@ -186,6 +179,9 @@ namespace MTGUnited
 
             bool myPriority = s.PriorityPlayer == s.Me;
             endTurn.interactable = myPriority && !s.Mulligan;
+            // Priority passes to me: the primary button pulses once (and its label changes above).
+            if (myPriority && !hadPriority && p.OkEnabled) primaryPulseStart = Motion.Now;
+            hadPriority = myPriority;
 
             var active = s.Player(s.ActivePlayer);
             turnText.text = "Turn " + s.Turn + " · " + (s.ActivePlayer == s.Me ? "Your turn" : (active?.ShortName ?? "") + "'s turn");
@@ -211,6 +207,13 @@ namespace MTGUnited
                 bool on = id == current;
                 pill.color = on ? (myTurn ? new Color(0.98f, 0.62f, 0.18f, 0.85f) : new Color(0.25f, 0.6f, 0.95f, 0.75f)) : new Color(1, 1, 1, 0.06f);
                 label.color = on ? Color.black : Theme.TextDim;
+                if (on)
+                {
+                    float tx = pill.rectTransform.anchoredPosition.x - pill.rectTransform.sizeDelta.x / 2f;
+                    if (Mathf.Abs(markerX.To - tx) > 0.5f) markerX.Retarget(tx, Motion.Now, Motion.Base, Ease.InOut);
+                    // My stops glow amber on the current step.
+                    if (myTurn && MyStops.Contains(id)) myDot.color = new Color(1f, 0.8f, 0.3f);
+                }
                 myDot.SetVisible(MyStops.Contains(id));
                 oppDot.SetVisible(OppStops.Contains(id));
             }
@@ -219,14 +222,24 @@ namespace MTGUnited
         void RenderStack(GameState s)
         {
             stackBg.SetVisible(s.Stack.Count > 0);
+            // Rebuild only when the stack (or what can be targeted on it) actually changed.
+            var sig = new System.Text.StringBuilder();
+            foreach (var it in s.Stack) sig.Append(it.Id).Append(s.Prompt.TargetStack.Contains(it.Id) ? '*' : ',');
+            string signature = sig.ToString();
+            if (signature == lastStackSig) return;
+            lastStackSig = signature;
             foreach (var go in stackRows) Destroy(go);
             stackRows.Clear();
+            var nowIds = new HashSet<int>();
             float rowH = Mathf.Min(62, 184f / Mathf.Max(1, s.Stack.Count));
             for (int i = 0; i < s.Stack.Count; i++)
             {
                 var item = s.Stack[i];
                 bool targetable = s.Prompt.TargetStack.Contains(item.Id);
-                var row = UIKit.Panel("Item", stackList, targetable ? new Color(0.45f, 0.38f, 0.1f, 0.95f) : Theme.PanelLight);
+                // Newest on top; earlier items shift down and dim 15%.
+                var baseCol = targetable ? new Color(0.45f, 0.38f, 0.1f, 0.95f) : Theme.PanelLight;
+                if (i > 0) baseCol = new Color(baseCol.r * 0.85f, baseCol.g * 0.85f, baseCol.b * 0.85f, baseCol.a);
+                var row = UIKit.Panel("Item", stackList, baseCol);
                 var r = row.rectTransform;
                 r.anchorMin = new Vector2(0, 1); r.anchorMax = new Vector2(1, 1); r.pivot = new Vector2(0.5f, 1);
                 r.sizeDelta = new Vector2(0, rowH - 4); r.anchoredPosition = new Vector2(0, -i * rowH);
@@ -246,20 +259,88 @@ namespace MTGUnited
                 int id = item.Id;
                 var src = item.Source;
                 pe.OnClick = () => gc.ClickStack(id);
-                pe.OnEnter = () => { if (src != null) gc.Preview.Request(src, false); };
-                pe.OnExit = () => gc.Preview.Hide();
+                var hovered = item;
+                pe.OnEnter = () => { if (src != null) gc.Preview.Request(src, false); gc.BoardView.SetStackHover(hovered); };
+                pe.OnExit = () => { gc.Preview.Hide(); gc.BoardView.SetStackHover(null); };
+                if (i > 0) { var g = row.gameObject.AddComponent<CanvasGroup>(); g.alpha = 0.85f; }
+                nowIds.Add(item.Id);
+                if (!shownStackIds.Contains(item.Id)) row.gameObject.AddComponent<SlideIn>().From = new Vector2(0, rowH);   // slides in at the top
                 pe.OnRightClick = () => { if (src != null) gc.Inspector.Show(src); };
                 stackRows.Add(row.gameObject);
             }
+            shownStackIds.Clear();
+            foreach (var id in nowIds) shownStackIds.Add(id);
         }
 
         void Update()
         {
+            float now = Motion.Now;
+            if (phaseMarker != null)
+            {
+                var mr = phaseMarker.rectTransform;
+                mr.anchoredPosition = new Vector2(markerX.Eval(now) + mr.sizeDelta.x / 2f, mr.anchoredPosition.y);
+            }
+            float pt = (now - primaryPulseStart) / Motion.Base;
+            primary.transform.localScale = Vector3.one * (pt >= 0f && pt < 1f && !Motion.ReduceMotion ? 1f + 0.07f * Mathf.Sin(pt * Mathf.PI) : 1f);
             if (flash > 0)
             {
                 flash = Mathf.Max(0, flash - Time.unscaledDeltaTime * 2.5f);
                 promptBg.color = Color.Lerp(Theme.Panel, Theme.Danger, flash);
             }
         }
+    }
+
+    /// <summary>Slides an element in from an offset (base duration) the first frame it exists.</summary>
+    public class SlideIn : MonoBehaviour
+    {
+        public Vector2 From;
+        Vector2 target; float start = -1f;
+
+        void Update()
+        {
+            var rt = (RectTransform)transform;
+            if (start < 0f) { target = rt.anchoredPosition; start = Motion.Now; }
+            float t = Mathf.Clamp01((Motion.Now - start) / Mathf.Max(0.01f, Motion.Base));
+            rt.anchoredPosition = target + From * (1f - Easing.Eval(Ease.Out, t));
+            if (t >= 1f) Destroy(this);
+        }
+    }
+
+    /// <summary>
+    /// Fades (and optionally scales) an element in: screen cross-fades (200 ms) and the deck box -> editor expand
+    /// (travel). Re-triggered with Play each time the element is shown.
+    /// </summary>
+    public class FadeIn : MonoBehaviour
+    {
+        CanvasGroup group;
+        float start = -10f, duration = 0.2f, fromScale = 1f;
+        Vector2 fromOffset;
+
+        public static void Play(GameObject go, float duration, float fromScale = 1f, Vector2 fromOffset = default)
+        {
+            var f = go.GetComponent<FadeIn>();
+            if (f == null) f = go.AddComponent<FadeIn>();
+            if (f.group == null) { f.group = go.GetComponent<CanvasGroup>(); if (f.group == null) f.group = go.AddComponent<CanvasGroup>(); }
+            f.start = Motion.Now; f.duration = Mathf.Min(duration, Motion.Budget);
+            f.fromScale = Motion.ReduceMotion ? 1f : fromScale;
+            f.fromOffset = Motion.ReduceMotion ? Vector2.zero : fromOffset;
+            f.Apply();
+        }
+
+        void Update() => Apply();
+
+        void Apply()
+        {
+            float t = Mathf.Clamp01((Motion.Now - start) / Mathf.Max(0.01f, duration));
+            float e = Easing.Eval(Ease.Out, t);
+            group.alpha = e;
+            transform.localScale = Vector3.one * Mathf.Lerp(fromScale, 1f, e);
+            var rt = (RectTransform)transform;
+            rt.anchoredPosition = basePos + fromOffset * (1f - e);
+            if (t >= 1f) enabled = false; else enabled = true;
+        }
+
+        Vector2 basePos;
+        void Awake() { basePos = ((RectTransform)transform).anchoredPosition; }
     }
 }

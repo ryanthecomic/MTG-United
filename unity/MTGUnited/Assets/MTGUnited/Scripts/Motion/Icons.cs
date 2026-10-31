@@ -119,9 +119,10 @@ namespace MTGUnited
 
         static float HomeSdf(Vector2 p)
         {
-            float body = Box(p - new Vector2(0, -0.32f), new Vector2(0.5f, 0.4f));
-            float roof = Mathf.Max(Mathf.Abs(p.x) * 0.8f + (p.y - 0.75f) * 0.6f, -(p.y - 0.02f));
-            float door = Box(p - new Vector2(0, -0.5f), new Vector2(0.13f, 0.23f));
+            // A wide house: broad body, roof with eaves overhanging the walls, a door cut out.
+            float body = Box(p - new Vector2(0, -0.38f), new Vector2(0.62f, 0.42f));
+            float roof = Mathf.Max(Mathf.Abs(p.x) * 0.62f + (p.y - 0.82f) * 0.78f, -(p.y + 0.02f));
+            float door = Box(p - new Vector2(0, -0.56f), new Vector2(0.17f, 0.25f));
             return Mathf.Max(Mathf.Min(body, roof), -door);
         }
 

@@ -17,6 +17,8 @@ namespace MTGUnited
         Image bg, ring;
         Text nameText, lifeText, infoText, cmdText;
         RawImage art;
+        Text dots;
+        float thinkingSince = -1f;
         Image badge;
         UnityEngine.UI.Outline badgeRim;
         Color playerColor = new Color(0.35f, 0.55f, 0.95f);
@@ -47,6 +49,9 @@ namespace MTGUnited
             var pe = p.bg.gameObject.AddComponent<PointerEvents>();
             pe.OnClick = () => gc.ClickPlayer(p.playerId);
             pe.OnRightClick = () => gc.ZoneViewer.Open(p.playerId, "Command");   // commander(s) live behind a right-click
+            pe.OnEnter = () => p.hovered = true;
+            pe.OnExit = () => p.hovered = false;
+            p.fadeGroup = ring.gameObject.AddComponent<CanvasGroup>();
 
             // Commander art, faint, behind everything else in the panel.
             var artRt = UIKit.Rect("Art", p.bg.transform).Stretch();
@@ -83,6 +88,13 @@ namespace MTGUnited
             zr.anchorMin = zr.anchorMax = new Vector2(0, 1); zr.pivot = new Vector2(0, 1);
             zr.sizeDelta = new Vector2(170, 70); zr.anchoredPosition = new Vector2(left - 4, -38);
             p.BuildZones(zr);
+
+            // "Thinking" dots for opponents holding priority (after 1.5 s of decision time).
+            p.dots = UIKit.Label("Thinking", p.bg.transform, "", 30, Theme.Text, TextAnchor.MiddleRight, FontStyle.Bold);
+            var dr = p.dots.rectTransform;
+            dr.anchorMin = dr.anchorMax = new Vector2(1, 1); dr.pivot = new Vector2(1, 1);
+            dr.sizeDelta = new Vector2(70, 30); dr.anchoredPosition = new Vector2(-8, -6);
+            p.dots.supportRichText = true;
 
             // Poison, commander damage: a small line beside the grid.
             p.infoText = UIKit.Label("Info", p.bg.transform, "", 13, Theme.TextDim, TextAnchor.UpperLeft);
@@ -146,6 +158,10 @@ namespace MTGUnited
                 RenderMana(pd);
             }
             ShowArt(pd);
+
+            bool thinking = !me && pd.HasPriority && !s.GameOver;
+            if (thinking && thinkingSince < 0f) thinkingSince = Motion.Now;
+            if (!thinking) thinkingSince = -1f;
 
             bool targetable = s.Prompt.TargetPlayers.Contains(pd.Id);
             bool chosen = s.Prompt.ChosenPlayers.Contains(pd.Id);
@@ -239,11 +255,16 @@ namespace MTGUnited
         }
 
         /// <summary>Where a zone symbol sits, for cards flying to or from it.</summary>
-        public RectTransform ZoneRect(string id) => zones.TryGetValue(id, out var z) ? z.rt : null;
+        public RectTransform ZoneRect(string id) => id == "Mana" ? (manaRow != null ? manaRow : null) : zones.TryGetValue(id, out var z) ? z.rt : null;
 
         // Smooth panel moves (board focus slides the nameplates along with the cards).
         Vector4 target, current;
         bool placed;
+
+        /// <summary>Faded nameplate (focused board): mostly transparent until the pointer is over it.</summary>
+        public bool Faded;
+        bool hovered;
+        CanvasGroup fadeGroup;
 
         public void MoveTo(float x, float y, float w, float h, bool instant = false)
         {
@@ -299,6 +320,22 @@ namespace MTGUnited
         void Update()
         {
             LateUpdateMove();
+            float a = Faded && !hovered ? 0.3f : 1f;
+            if (fadeGroup != null && Mathf.Abs(fadeGroup.alpha - a) > 0.001f)
+                fadeGroup.alpha = Mathf.MoveTowards(fadeGroup.alpha, a, Time.unscaledDeltaTime / Motion.Short);
+            if (dots != null)
+            {
+                float since = thinkingSince < 0f ? 0f : Motion.Now - thinkingSince;
+                if (since < 1.5f) { if (dots.text.Length > 0) dots.text = ""; }
+                else
+                {
+                    // Three dots that light up in turn.
+                    int lit = (int)((Motion.Now * 3f) % 3);
+                    var sb = new StringBuilder();
+                    for (int i = 0; i < 3; i++) sb.Append(i == lit ? "<color=#ffffff>•</color>" : "<color=#ffffff55>•</color>");
+                    dots.text = sb.ToString();
+                }
+            }
             float now = Motion.Now;
 
             // Number rolls to its new value.

@@ -61,10 +61,10 @@ namespace MTGUnited
             text.text = "<b>" + c.Name + "</b>   " + CardView.ManaText(c.ManaCost) + "\n<i>" + c.TypeLine + "</i>\n\n" + c.Text
                         + (c.HasPT ? "\n\n<b>" + c.Power + "/" + c.Toughness + "</b>" : "");
             Sound.Play(Sfx.Popup, 0.5f);
-            if (!c.Token && CardImageCache.Instance != null)
+            if (CardImageCache.Instance != null)
             {
                 var target = c;
-                CardImageCache.Instance.Get(c.Name, c.Set, tex =>
+                CardImageCache.Instance.GetFor(c, tex =>
                 {
                     if (showing != target || tex == null) return;
                     art.texture = tex;
@@ -102,20 +102,36 @@ namespace MTGUnited
             var p = UIKit.Panel("Panel", shade.transform, Theme.Panel);
             o.panel = p.rectTransform;
             o.panel.anchorMin = o.panel.anchorMax = new Vector2(0.5f, 0.5f);
-            o.panel.sizeDelta = new Vector2(640, 630);
+            o.panel.sizeDelta = new Vector2(680, 880);
             p.gameObject.AddComponent<PointerEvents>();   // clicks inside the panel don't close it
             UiScaled.Add(p, Vector2.zero);
 
             var title = UIKit.Label("Title", p.transform, "OPTIONS", 30, Theme.Accent, TextAnchor.UpperCenter, FontStyle.Bold).Titled();
             title.rectTransform.Stretch(20, 0, 20, 24);
 
-            float y = 480;
-            o.scaleText = o.Row(p.transform, "Interface size", ref y, () => o.Step(-1, Setting.Scale), () => o.Step(1, Setting.Scale));
-            o.cardText = o.Row(p.transform, "Card size", ref y, () => o.Step(-1, Setting.Cards), () => o.Step(1, Setting.Cards));
-            o.delayText = o.Row(p.transform, "Card preview delay", ref y, () => o.Step(-1, Setting.Delay), () => o.Step(1, Setting.Delay));
-            o.volumeText = o.Row(p.transform, "Volume", ref y, () => o.Step(-1, Setting.Volume), () => o.Step(1, Setting.Volume));
-            o.soundText = o.ToggleRow(p.transform, "Sound", ref y, () => { Sound.Enabled = !Sound.Enabled; o.Refresh(); });
-            o.autoPayText = o.ToggleRow(p.transform, "Auto-pay mana", ref y, () =>
+            // Tabs: Settings | Shortcuts.
+            o.settingsPage = UIKit.Rect("Settings", p.transform).Stretch();
+            o.shortcutsPage = UIKit.Rect("Shortcuts", p.transform).Stretch();
+            o.tabSettings = UIKit.Button("TabSettings", p.transform, "SETTINGS", Theme.Accent, () => o.ShowTab(false), 18);
+            ((RectTransform)o.tabSettings.transform).Place(150, 880 - 124, 180, 44);
+            o.tabShortcuts = UIKit.Button("TabShortcuts", p.transform, "SHORTCUTS", Theme.Secondary, () => o.ShowTab(true), 18);
+            ((RectTransform)o.tabShortcuts.transform).Place(350, 880 - 124, 180, 44);
+            o.BuildShortcuts(o.shortcutsPage);
+
+            float y = 680;
+            o.scaleText = o.Row(o.settingsPage, "Interface size", ref y, () => o.Step(-1, Setting.Scale), () => o.Step(1, Setting.Scale));
+            o.cardText = o.Row(o.settingsPage, "Card size", ref y, () => o.Step(-1, Setting.Cards), () => o.Step(1, Setting.Cards));
+            o.textSizeText = o.Row(o.settingsPage, "Text size", ref y, () => o.Step(-1, Setting.Text), () => o.Step(1, Setting.Text));
+            o.delayText = o.Row(o.settingsPage, "Card preview delay", ref y, () => o.Step(-1, Setting.Delay), () => o.Step(1, Setting.Delay));
+            o.volumeText = o.Row(o.settingsPage, "Volume", ref y, () => o.Step(-1, Setting.Volume), () => o.Step(1, Setting.Volume));
+            o.speedText = o.ToggleRow(o.settingsPage, "Animation speed", ref y, () =>
+            {
+                Motion.SpeedMode = (Motion.SpeedSetting)(((int)Motion.SpeedMode + 1) % 3);
+                o.Refresh();
+            });
+            o.reduceText = o.ToggleRow(o.settingsPage, "Reduce motion", ref y, () => { Motion.ReduceMotion = !Motion.ReduceMotion; o.Refresh(); });
+            o.soundText = o.ToggleRow(o.settingsPage, "Sound", ref y, () => { Sound.Enabled = !Sound.Enabled; o.Refresh(); });
+            o.autoPayText = o.ToggleRow(o.settingsPage, "Auto-pay mana", ref y, () =>
             {
                 gc.AutoPayMana = !gc.AutoPayMana;
                 PlayerPrefs.SetInt("autoPay", gc.AutoPayMana ? 1 : 0);
@@ -132,8 +148,35 @@ namespace MTGUnited
             return o;
         }
 
-        enum Setting { Scale, Cards, Delay, Volume }
-        Text cardText;
+        enum Setting { Scale, Cards, Text, Delay, Volume }
+        RectTransform settingsPage, shortcutsPage;
+        Button tabSettings, tabShortcuts;
+
+        void ShowTab(bool shortcuts)
+        {
+            settingsPage.gameObject.SetActive(!shortcuts);
+            shortcutsPage.gameObject.SetActive(shortcuts);
+            tabSettings.GetComponent<Image>().color = shortcuts ? Theme.Secondary : Theme.Accent;
+            tabShortcuts.GetComponent<Image>().color = shortcuts ? Theme.Accent : Theme.Secondary;
+            FadeIn.Play((shortcuts ? shortcutsPage : settingsPage).gameObject, 0.2f);
+        }
+
+        /// <summary>The shortcuts tab: every key binding, two columns (key | what it does).</summary>
+        void BuildShortcuts(RectTransform page)
+        {
+            float y = 700;
+            foreach (var (key, what) in Shortcuts.List)
+            {
+                var k = UIKit.Panel("Key", page, new Color(1f, 1f, 1f, 0.08f));
+                k.rectTransform.Place(40, y, 190, 38);
+                var kt = UIKit.Label("K", k.transform, key, 17, Theme.Accent, TextAnchor.MiddleCenter, FontStyle.Bold);
+                kt.rectTransform.Stretch(4, 0, 4, 0);
+                var w = UIKit.Label("What", page, what, 17, Theme.Text, TextAnchor.MiddleLeft);
+                w.rectTransform.Place(248, y, 400, 38);
+                y -= 44;
+            }
+        }
+        Text cardText, speedText, reduceText, textSizeText;
 
         Text Row(Transform parent, string label, ref float y, Action minus, Action plus)
         {
@@ -164,6 +207,7 @@ namespace MTGUnited
             switch (s)
             {
                 case Setting.Scale: UiScale.Value = Mathf.Round((UiScale.Value + dir * 0.05f) * 20f) / 20f; break;
+                case Setting.Text: UiScale.TextScale = Mathf.Round((UiScale.TextScale + dir * 0.05f) * 20f) / 20f; break;
                 case Setting.Cards: UiScale.CardScale = Mathf.Round((UiScale.CardScale + dir * 0.05f) * 20f) / 20f; break;
                 case Setting.Delay: UiScale.PreviewDelay = Mathf.Round((UiScale.PreviewDelay + dir * 0.25f) * 4f) / 4f; break;
                 case Setting.Volume:
@@ -179,14 +223,20 @@ namespace MTGUnited
         {
             scaleText.text = Mathf.RoundToInt(UiScale.Value * 100) + "%";
             cardText.text = Mathf.RoundToInt(UiScale.CardScale * 100) + "%";
+            textSizeText.text = Mathf.RoundToInt(UiScale.TextScale * 100) + "%";
             delayText.text = UiScale.PreviewDelay <= 0f ? "instant" : UiScale.PreviewDelay.ToString("0.##") + " s";
             volumeText.text = Mathf.RoundToInt(Sound.Volume * 100) + "%";
             soundText.text = Sound.Enabled ? "ON" : "OFF";
+            speedText.text = Motion.SpeedMode == Motion.SpeedSetting.Normal ? "NORMAL" : Motion.SpeedMode == Motion.SpeedSetting.Fast ? "FAST" : "INSTANT";
+            reduceText.text = Motion.ReduceMotion ? "ON" : "OFF";
             autoPayText.text = gc.AutoPayMana ? "ON" : "OFF";
         }
 
-        public void Open()
+        public void Open() => Open(false);
+
+        public void Open(bool shortcutsTab)
         {
+            ShowTab(shortcutsTab);
             Refresh();
             gameObject.SetActive(true);
             transform.SetAsLastSibling();

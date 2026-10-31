@@ -366,6 +366,20 @@ namespace MTGUnited
             return b;
         }
 
+        /// <summary>
+        /// Gives a layer its own canvas, so animating it (cards, effects) rebuilds only that layer's mesh instead of
+        /// the whole screen. Draw order still follows the hierarchy.
+        /// </summary>
+        public static RectTransform SubCanvas(this RectTransform rt)
+        {
+            if (rt.GetComponent<Canvas>() == null)
+            {
+                rt.gameObject.AddComponent<Canvas>();
+                rt.gameObject.AddComponent<GraphicRaycaster>();
+            }
+            return rt;
+        }
+
         /// <summary>A round "X" close button in the top-right corner of a panel.</summary>
         public static Button CloseX(Transform panel, UnityAction onClick, float size = 46, float inset = 12)
         {

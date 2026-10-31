@@ -34,6 +34,12 @@ namespace MTGUnited
         public bool IsExiting { get; private set; }
         public Action<CardView> Clicked, RightClicked, HoverStart, HoverEnd;
 
+        // ----- dragging (hand cards): BoardView decides what a drag means
+        public Action<CardView, Vector2> DragBegan, DragMoved, DragEnded;   // screen positions
+        /// <summary>While set, the card follows the pointer at this board position.</summary>
+        public bool Dragging;
+        public Vector2 DragBoardPos;
+
         // ----- layout targets (what BoardView last asked for)
         public Vector2 TargetPos { get; private set; }
         public Vector2 TargetSize { get; private set; } = new Vector2(100, 140);
@@ -111,6 +117,7 @@ namespace MTGUnited
             pe.OnRightClick = () => { if (!IsExiting) RightClicked?.Invoke(this); };
             pe.OnEnter = () => { if (IsExiting) return; Hovered = true; HoverStart?.Invoke(this); };
             pe.OnExit = () => { Hovered = false; HoverEnd?.Invoke(this); };
+            frame.gameObject.AddComponent<CardDragHandler>().Owner = this;
 
             nameText = UIKit.Label("Name", frame.transform, "", 12, Color.black, TextAnchor.UpperLeft, FontStyle.Bold);
             nameText.rectTransform.anchorMin = new Vector2(0, 1); nameText.rectTransform.anchorMax = new Vector2(1, 1);
@@ -234,9 +241,9 @@ namespace MTGUnited
                 {
                     imageKeyShown = key;
                     art.enabled = false;
-                    if (!d.Token && CardImageCache.Instance != null)
+                    if (CardImageCache.Instance != null)
                     {
-                        CardImageCache.Instance.Get(d.Name, d.Set, tex =>
+                        CardImageCache.Instance.GetFor(d, tex =>
                         {
                             if (this == null || imageKeyShown != key) return;
                             art.texture = tex;
@@ -305,6 +312,7 @@ namespace MTGUnited
 
             flying = d != null && d.HasKeyword("FLYING");
             UpdateDim(d);
+            UpdateArtTint();
         }
 
         TweenF counterPop = new TweenF { From = 1, To = 1 };
@@ -377,7 +385,8 @@ namespace MTGUnited
                         float dist = (p - from).magnitude;
                         float apex = Mathf.Min(dist * Motion.TravelApexFraction, Motion.TravelApexMax);
                         arcControl = (from + p) * 0.5f + Vector2.up * apex * 2f;   // quadratic control point (apex at t=0.5)
-                        arcActive = dist > 20f;
+                        arcActive = dist > 20f && !Motion.ReduceMotion;   // reduce motion: short straight slide
+                        if (arcActive) transform.SetAsLastSibling();      // cards in flight render above resting ones
                         arcTilt = Mathf.Clamp((p.x - from.x) / Mathf.Max(1f, dist) * Motion.MaxTravelTilt, -Motion.MaxTravelTilt, Motion.MaxTravelTilt);
                         if (kind == MoveKind.Land) landPending = true;
                         break;
@@ -449,7 +458,7 @@ namespace MTGUnited
         {
             flashColor = tint ?? Color.white;
             flash.From = 0.85f; flash.To = 0; flash.Start = Motion.Now; flash.Duration = Motion.Impact; flash.Curve = Ease.Out;
-            shakeAmp = Mathf.Clamp(2f + damage * 1.5f, 3f, 10f);
+            shakeAmp = Motion.ReduceMotion ? 0f : Mathf.Clamp(2f + damage * 1.5f, 3f, 10f);
             shakeUntil = Motion.Now + Motion.Impact;
         }
 
@@ -468,6 +477,14 @@ namespace MTGUnited
         /// </summary>
         public void Lunge(Vector2 towardBoardPos, float delay, Action onImpact)
         {
+            if (Motion.ReduceMotion)
+            {
+                // No lunge: a pulse in place, impact right after.
+                Pulse();
+                lungeTarget = towardBoardPos; lungeStart = -1; lungeFired = true;
+                StartCoroutine(After(delay + Motion.Short, onImpact));
+                return;
+            }
             lungeTarget = towardBoardPos;
             lungeStart = Motion.Now + delay;
             lungeImpact = onImpact;
@@ -475,6 +492,64 @@ namespace MTGUnited
         }
 
         Action lungeImpact; bool lungeFired;
+
+        System.Collections.IEnumerator After(float seconds, Action a)
+        {
+            yield return new WaitForSecondsRealtime(seconds);
+            a?.Invoke();
+        }
+
+        // ----- drag weight: the card leans into its motion like a held 3D object, then springs level.
+        Vector3 dragTilt, dragTiltVel;
+        Vector2 lastDragPos, dragVel;
+        bool hadDrag;
+        float dragLift;
+
+        void UpdateDragTilt()
+        {
+            float dt = Mathf.Min(Time.unscaledDeltaTime, 0.05f);
+            if (dt <= 0f) return;
+            Vector3 target = Vector3.zero;
+            if (Dragging && !Motion.ReduceMotion)
+            {
+                if (!hadDrag) { lastDragPos = DragBoardPos; dragVel = Vector2.zero; hadDrag = true; }
+                Vector2 v = (DragBoardPos - lastDragPos) / dt;
+                lastDragPos = DragBoardPos;
+                dragVel = Vector2.Lerp(dragVel, v, 1f - Mathf.Exp(-dt / 0.06f));   // smoothed pointer velocity
+                // Pitch with vertical motion, yaw and a little roll with horizontal motion (trailing edge lags).
+                target = new Vector3(Mathf.Clamp(dragVel.y * 0.018f, -28f, 28f),
+                                     Mathf.Clamp(-dragVel.x * 0.018f, -28f, 28f),
+                                     Mathf.Clamp(-dragVel.x * 0.007f, -10f, 10f));
+            }
+            else hadDrag = false;
+            // Underdamped spring: overshoots slightly and settles, so it "balances" when you stop.
+            const float stiffness = 220f, damping = 16f;
+            dragTiltVel += ((target - dragTilt) * stiffness - dragTiltVel * damping) * dt;
+            dragTilt += dragTiltVel * dt;
+            if (!Dragging && dragTilt.sqrMagnitude < 0.0004f && dragTiltVel.sqrMagnitude < 0.01f) { dragTilt = Vector3.zero; dragTiltVel = Vector3.zero; }
+            dragLift = Mathf.MoveTowards(dragLift, Dragging ? 1f : 0f, dt / Motion.Short);
+        }
+
+        /// <summary>True while the card is arcing between zones (BoardView keeps it on top).</summary>
+        public bool IsTraveling => arcActive;
+
+        /// <summary>Hand cards wobble when you must discard down to hand size (design doc 8).</summary>
+        public bool Wobble;
+
+        bool unplayable;
+        /// <summary>Greyed slightly: a hand card you can't play right now while you hold priority.</summary>
+        public void SetUnplayable(bool on) { if (unplayable == on) return; unplayable = on; UpdateArtTint(); }
+
+        /// <summary>Art tint: red wash while damage is marked, grey for unplayable hand cards (shader-state stand-ins).</summary>
+        void UpdateArtTint()
+        {
+            if (art == null) return;
+            bool damaged = Data != null && Data.Zone == "Battlefield" && Data.Damage > 0;
+            Color c = Color.white;
+            if (damaged) c = new Color(1f, 0.78f, 0.76f);
+            if (unplayable) c = Color.Lerp(c, new Color(0.55f, 0.55f, 0.58f), 0.6f);
+            art.color = c;
+        }
 
         Vector2 LungeOffset(float now, Vector2 basePos)
         {
@@ -601,10 +676,17 @@ namespace MTGUnited
                 p += new Vector2(Mathf.Sin(now * 90f), Mathf.Cos(now * 77f)) * shakeAmp * k;
             }
 
+            if (Dragging)
+            {
+                // Follows the pointer, lifted and upright; eases toward it so fast flicks still read smoothly.
+                p = Vector2.Lerp(rt.anchoredPosition, DragBoardPos, 1f - Mathf.Exp(-Time.unscaledDeltaTime / 0.03f));
+            }
             rt.anchoredPosition = p;
             rt.sizeDelta = s;
-            rt.localEulerAngles = new Vector3(0, 0, rot.Eval(now) + tilt);
-            float scale = 1f + (Motion.HoverScale - 1f) * hover + scalePulse.Eval(now);
+            float wobble = Wobble && !Motion.ReduceMotion ? Mathf.Sin(now * 14f + CardId) * 2.5f : 0f;
+            UpdateDragTilt();
+            rt.localEulerAngles = new Vector3(dragTilt.x, dragTilt.y, rot.Eval(now) + tilt + wobble + dragTilt.z);
+            float scale = 1f + (Motion.HoverScale - 1f) * hover + scalePulse.Eval(now) + dragLift * 0.1f;
             float fx = flipX.Eval(now);
             if (flipPending && fx <= 0f)
             {
@@ -615,7 +697,7 @@ namespace MTGUnited
             group.alpha = alpha.Eval(now);
 
             // Shadow grows with height: arcs, hover and lunges all lift the card.
-            float height = Mathf.Clamp01(arcLift / 120f + hover * 0.5f + scalePulse.Eval(now) * 2f);
+            float height = Mathf.Clamp01(arcLift / 120f + hover * 0.5f + scalePulse.Eval(now) * 2f + dragLift);
             var sh = shadow.rectTransform;
             float spread = 14f + 18f * height;
             Vector2 off = new Vector2(3f, -7f) + new Vector2(6f, -14f) * height;
@@ -682,6 +764,29 @@ namespace MTGUnited
             if (string.IsNullOrEmpty(cost) || cost == "no cost") return "";
             // Kept as {codes}: labels draw them as mana symbols.
             return cost.Replace(" ", "");
+        }
+    }
+
+    /// <summary>Forwards Unity drag events from a card's frame to its CardView (a drag also cancels the click).</summary>
+    public class CardDragHandler : MonoBehaviour, UnityEngine.EventSystems.IBeginDragHandler, UnityEngine.EventSystems.IDragHandler, UnityEngine.EventSystems.IEndDragHandler
+    {
+        public CardView Owner;
+        bool active;
+
+        public void OnBeginDrag(UnityEngine.EventSystems.PointerEventData e)
+        {
+            if (e.button != UnityEngine.EventSystems.PointerEventData.InputButton.Left || Owner == null || Owner.IsExiting || Owner.DragBegan == null) return;
+            active = true;
+            Owner.DragBegan(Owner, e.position);
+        }
+
+        public void OnDrag(UnityEngine.EventSystems.PointerEventData e) { if (active) Owner.DragMoved?.Invoke(Owner, e.position); }
+
+        public void OnEndDrag(UnityEngine.EventSystems.PointerEventData e)
+        {
+            if (!active) return;
+            active = false;
+            Owner.DragEnded?.Invoke(Owner, e.position);
         }
     }
 }

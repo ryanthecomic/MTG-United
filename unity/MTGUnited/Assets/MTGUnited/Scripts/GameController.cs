@@ -28,6 +28,8 @@ namespace MTGUnited
         public CardInspector Inspector { get; private set; }
         public OptionsPanel Options { get; private set; }
         public RevealPopup Reveals { get; private set; }
+        public ScreenFx ScreenFx { get; private set; }
+        public GameMenu GameMenu { get; private set; }
         public Toasts Toasts { get; private set; }
         public ZoneViewer ZoneViewer { get; private set; }
         public GameOverPanel GameOver { get; private set; }
@@ -61,7 +63,7 @@ namespace MTGUnited
             Instance = this;
             DontDestroyOnLoad(gameObject);
             Application.runInBackground = true;
-            Application.targetFrameRate = 120;
+            Application.targetFrameRate = 120;   // drops to 30 while the window isn't focused (see OnApplicationFocus)
             AutoPayMana = PlayerPrefs.GetInt("autoPay", 1) == 1;
 
             EnsureCamera();
@@ -145,18 +147,20 @@ namespace MTGUnited
             BoardView = BoardView.Create(Board, this);
             Hud = HudView.Create(Board, this);
             Tray = SelectionTray.Create(Board, this);
+            ScreenFx = ScreenFx.Create(Board, this);
 
-            OverlayLayer = UIKit.Rect("Overlays", canvasGo.transform).Stretch();
+            OverlayLayer = UIKit.Rect("Overlays", canvasGo.transform).Stretch().SubCanvas();
             ZoneViewer = ZoneViewer.Create(OverlayLayer, this);
             Dialog = RequestDialog.Create(OverlayLayer, this);
             GameOver = GameOverPanel.Create(OverlayLayer, this);
             Menu = MainMenu.Create(OverlayLayer, this);
+            GameMenu = GameMenu.Create(OverlayLayer, this);
             Options = OptionsPanel.Create(OverlayLayer, this);
             Reveals = RevealPopup.Create(OverlayLayer, this);
             Toasts = Toasts.Create(OverlayLayer);
 
             // Hover preview sits above everything, in the same 1920x1080 space as the board.
-            var top = UIKit.Rect("TopBoard", canvasGo.transform);
+            var top = UIKit.Rect("TopBoard", canvasGo.transform).SubCanvas();
             top.anchorMin = top.anchorMax = new Vector2(0.5f, 0.5f);
             top.sizeDelta = new Vector2(1920, 1080);
             Preview = CardPreview.Create(top);
@@ -191,20 +195,56 @@ namespace MTGUnited
             HandleKeys();
         }
 
+        /// <summary>Save power in the background: the bridge keeps running, the client draws less often.</summary>
+        void OnApplicationFocus(bool focused) => Application.targetFrameRate = focused ? 120 : 30;
+
         void HandleKeys()
         {
 #if ENABLE_LEGACY_INPUT_MANAGER
+            // Typing in a field: no shortcuts.
+            if (EventSystem.current != null && EventSystem.current.currentSelectedGameObject != null
+                && EventSystem.current.currentSelectedGameObject.GetComponent<InputField>() != null) return;
+            bool ctrl = Input.GetKey(KeyCode.LeftControl) || Input.GetKey(KeyCode.RightControl);
+
+            if (Input.GetKeyDown(KeyCode.F1)) { Options.Open(true); return; }
+            if (Input.GetKeyDown(KeyCode.M) && !ctrl)
+            {
+                Sound.Enabled = !Sound.Enabled;
+                Toasts.Show(Sound.Enabled ? "Sound on" : "Sound muted");
+            }
+
+            // Esc closes the top-most pop-up first.
             if (Input.GetKeyDown(KeyCode.Escape))
             {
                 if (Inspector != null && Inspector.IsOpen) { Inspector.Hide(); return; }
-                if (Options != null && Options.IsOpen) { Options.Close(); return; }
+                if (Options.IsOpen) { Options.Close(); return; }
+                if (GameMenu.IsOpen) { GameMenu.Close(); return; }
+                if (ZoneViewer.IsOpen) { ZoneViewer.Close(); return; }
             }
-            if (!InGame || Menu.IsOpen || Dialog.IsOpen || (Options != null && Options.IsOpen)) return;
-            if (EventSystem.current != null && EventSystem.current.currentSelectedGameObject != null
-                && EventSystem.current.currentSelectedGameObject.GetComponent<InputField>() != null) return;
-            if (Input.GetKeyDown(KeyCode.Space) || Input.GetKeyDown(KeyCode.Return)) Hud.PressPrimary();
-            if (Input.GetKeyDown(KeyCode.Escape)) Hud.PressSecondary();
-            if (Input.GetKeyDown(KeyCode.Z) && (Input.GetKey(KeyCode.LeftControl) || Input.GetKey(KeyCode.RightControl))) Send("undo");
+            if (!InGame || Menu.IsOpen || Dialog.IsOpen || Options.IsOpen || GameMenu.IsOpen) return;
+
+            if (Input.GetKeyDown(KeyCode.Space) || Input.GetKeyDown(KeyCode.Return) || Input.GetKeyDown(KeyCode.KeypadEnter)) Hud.PressPrimary();
+            if (Input.GetKeyDown(KeyCode.Escape))
+            {
+                // Cancel what Forge is asking if it can be cancelled; otherwise open the menu.
+                if (State != null && State.Prompt.CancelEnabled) Hud.PressSecondary();
+                else GameMenu.Open();
+            }
+            if (Input.GetKeyDown(KeyCode.Z) && ctrl) Send("undo");
+            if (ctrl) return;
+            if (Input.GetKeyDown(KeyCode.E)) Send("passTurn");
+            if (Input.GetKeyDown(KeyCode.A)) Send("alphaStrike");
+            if (State != null && State.Me >= 0)
+            {
+                if (Input.GetKeyDown(KeyCode.G)) ZoneViewer.Open(State.Me, "Graveyard");
+                if (Input.GetKeyDown(KeyCode.X)) ZoneViewer.Open(State.Me, "Exile");
+                if (Input.GetKeyDown(KeyCode.C)) ZoneViewer.Open(State.Me, "Command");
+            }
+            if (Input.GetKeyDown(KeyCode.R)) ZoneViewer.Open(-1, "Revealed");
+            for (int i = 0; i < 5; i++)
+                if (Input.GetKeyDown(KeyCode.Alpha1 + i) || Input.GetKeyDown(KeyCode.Keypad1 + i)) BoardView.FocusOpponent(i);
+            if (Input.GetKeyDown(KeyCode.Tab)) BoardView.FocusNext();
+            if (Input.GetKeyDown(KeyCode.BackQuote) || Input.GetKeyDown(KeyCode.Alpha0) || Input.GetKeyDown(KeyCode.Keypad0)) BoardView.FocusOpponent(-1);
 #endif
         }
 
@@ -224,6 +264,7 @@ namespace MTGUnited
                 case "state":
                     State = GameState.FromMessage(msg);
                     SoundDirector.OnState(State);
+                    ScreenFx.OnState(State);
                     if (State.Me >= 0 && !State.GameOver && !InGame) { InGame = true; Menu.Hide(); }
                     BoardView.Render(State);
                     Hud.Render(State);
@@ -244,6 +285,7 @@ namespace MTGUnited
                     InGame = true;
                     SoundDirector.Reset();
                     ZoneViewer.Revealed.Clear();
+                    ScreenFx.MatchIntro();
                     GameOver.Hide();
                     Menu.Hide();
                     Dialog.Close();

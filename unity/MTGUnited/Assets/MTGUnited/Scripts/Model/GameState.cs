@@ -77,7 +77,15 @@ namespace MTGUnited
         public List<CardData> Command = new List<CardData>();
         public int LibrarySize, HandSize, GraveyardSize, ExileSize;
 
-        public string ShortName => Name != null && Name.Contains(" (") ? Name.Substring(0, Name.IndexOf(" (")) : Name;
+        /// <summary>Name without the "(deck [SET] [year])" tag, cut to 18 characters with an ellipsis.</summary>
+        public string ShortName
+        {
+            get
+            {
+                string n = Name != null && Name.Contains(" (") ? Name.Substring(0, Name.IndexOf(" (")) : (Name ?? "");
+                return n.Length > 18 ? n.Substring(0, 17).TrimEnd() + "…" : n;
+            }
+        }
 
         public int Poison => Counters.TryGetValue("Poison", out var v) ? v : Counters.TryGetValue("POISON", out var w) ? w : 0;
 
