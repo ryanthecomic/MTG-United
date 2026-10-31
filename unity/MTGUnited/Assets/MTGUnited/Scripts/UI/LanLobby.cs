@@ -33,49 +33,59 @@ namespace MTGUnited
             shade.gameObject.AddComponent<PointerEvents>();
             var p = UIKit.Panel("Panel", shade.transform, new Color(0.07f, 0.08f, 0.12f, 0.98f));
             p.rectTransform.anchorMin = p.rectTransform.anchorMax = new Vector2(0.5f, 0.5f);
-            p.rectTransform.sizeDelta = new Vector2(1000, 720);
+            p.rectTransform.sizeDelta = new Vector2(1000, 840);
+            UiScaled.Add(p, Vector2.zero).MaxScale = 1040f / 840f;
             p.gameObject.AddComponent<PointerEvents>();
             var t = UIKit.Label("Title", p.transform, "LAN TABLE", 28, Theme.Accent, TextAnchor.UpperLeft, FontStyle.Bold).Titled();
             t.rectTransform.Stretch(40, 0, 40, 26);
             l.deckText = UIKit.Label("Deck", p.transform, "", 16, Theme.TextDim, TextAnchor.UpperLeft);
-            l.deckText.rectTransform.Stretch(40, 0, 120, 70);
+            l.deckText.rectTransform.Place(40, 724, 860, 30);
 
             var ht = UIKit.Button("HostTab", p.transform, "HOST A TABLE", Theme.Accent, () => l.SetMode(false), 17);
-            ((RectTransform)ht.transform).Place(40, 588, 300, 46);
+            ((RectTransform)ht.transform).Place(40, 650, 300, 50);
             l.hostTab = ht.GetComponent<Image>();
             var jt = UIKit.Button("JoinTab", p.transform, "JOIN A TABLE", Theme.Secondary, () => l.SetMode(true), 17);
-            ((RectTransform)jt.transform).Place(352, 588, 300, 46);
+            ((RectTransform)jt.transform).Place(356, 650, 300, 50);
             l.joinTab = jt.GetComponent<Image>();
 
             l.status = UIKit.Label("Status", p.transform, "", 15, Theme.TextDim, TextAnchor.MiddleLeft);
-            l.status.rectTransform.Place(40, 24, 640, 44);
+            l.status.rectTransform.Place(40, 34, 630, 50);
+            l.status.resizeTextForBestFit = true; l.status.resizeTextMinSize = 11; l.status.resizeTextMaxSize = 15;
 
             // ---------------------------------------------------------------- host
             l.hostView = UIKit.Rect("Host", p.transform).Stretch();
             l.address = UIKit.Label("Address", l.hostView, "", 22, Theme.Text, TextAnchor.UpperLeft, FontStyle.Bold);
-            l.address.rectTransform.Place(40, 500, 920, 70);
+            l.address.rectTransform.Place(40, 548, 920, 84);
             l.address.supportRichText = true;
             l.maxText = UIKit.Label("Max", l.hostView, "", 17, Theme.Text, TextAnchor.MiddleLeft, FontStyle.Bold);
-            l.maxText.rectTransform.Place(40, 446, 260, 42);
+            l.maxText.rectTransform.Place(40, 486, 260, 46);
             var minus = UIKit.Button("Minus", l.hostView, "−", Theme.Secondary, () => l.SetMax(l.maxPlayers - 1), 24);
-            ((RectTransform)minus.transform).Place(300, 446, 56, 42);
+            ((RectTransform)minus.transform).Place(300, 488, 56, 44);
             var plus = UIKit.Button("Plus", l.hostView, "+", Theme.Secondary, () => l.SetMax(l.maxPlayers + 1), 24);
-            ((RectTransform)plus.transform).Place(364, 446, 56, 42);
-            l.players = l.List(l.hostView, new Rect(40, 110, 920, 320));
+            ((RectTransform)plus.transform).Place(366, 488, 56, 44);
+            l.players = l.List(l.hostView, new Rect(40, 126, 920, 340));
             var openBtn = UIKit.Button("Open", l.hostView, "OPEN TABLE", new Color(0.16f, 0.3f, 0.72f), l.HostNow, 17);
-            ((RectTransform)openBtn.transform).Place(700, 446, 260, 42);
-            l.startButton = UIKit.Pill("Start", l.hostView, "Start game", new Color(0.95f, 0.43f, 0.1f), l.StartGame, 700, 24, 260, 72, 30);
+            ((RectTransform)openBtn.transform).Place(700, 488, 260, 44);
+            l.startButton = UIKit.Pill("Start", l.hostView, "Start game", new Color(0.95f, 0.43f, 0.1f), l.StartGame, 700, 26, 260, 76, 30);
 
             // ---------------------------------------------------------------- join
             l.joinView = UIKit.Rect("Join", p.transform).Stretch();
             var found = UIKit.Label("Found", l.joinView, "TABLES ON YOUR NETWORK", 14, Theme.TextDim, TextAnchor.MiddleLeft, FontStyle.Bold);
-            found.rectTransform.Place(40, 536, 600, 30);
-            l.hosts = l.List(l.joinView, new Rect(40, 170, 920, 360));
+            found.rectTransform.Place(40, 584, 600, 40);
+            // Look again: forget the list and listen for tables afresh (also restarts listening if it failed).
+            var refresh = UIKit.Button("Refresh", l.joinView, "REFRESH", Theme.Secondary, () =>
+            {
+                l.gc.Net.Browse();
+                Sound.Play(Sfx.UiClick, 0.6f);
+                l.Refresh();
+            }, 16);
+            ((RectTransform)refresh.transform).Place(780, 584, 180, 42);
+            l.hosts = l.List(l.joinView, new Rect(40, 214, 920, 356));
             l.ipInput = UIKit.Input("Ip", l.joinView, "…or type the host's address (e.g. 192.168.0.12)", false, 18);
-            ((RectTransform)l.ipInput.transform).Place(40, 100, 640, 52);
+            ((RectTransform)l.ipInput.transform).Place(40, 126, 640, 56);
             l.ipInput.text = PlayerPrefs.GetString("lanLastIp", "");
             var joinBtn = UIKit.Button("JoinIp", l.joinView, "JOIN", Theme.Accent, () => l.JoinAt(l.ipInput.text.Trim()), 18);
-            ((RectTransform)joinBtn.transform).Place(700, 100, 260, 52);
+            ((RectTransform)joinBtn.transform).Place(700, 126, 260, 56);
 
             UIKit.CloseX(p.transform, l.Close);
             gc.Net.LobbyChanged += () => { if (l != null && l.IsOpen) l.Refresh(); };
@@ -94,7 +104,7 @@ namespace MTGUnited
             var list = UIKit.Rect("List", scroll);
             list.anchorMin = new Vector2(0, 1); list.anchorMax = new Vector2(1, 1); list.pivot = new Vector2(0.5f, 1);
             var vl = list.gameObject.AddComponent<VerticalLayoutGroup>();
-            vl.spacing = 6; vl.padding = new RectOffset(8, 8, 8, 8); vl.childControlHeight = false; vl.childControlWidth = true;
+            vl.spacing = 10; vl.padding = new RectOffset(10, 10, 10, 10); vl.childControlHeight = false; vl.childControlWidth = true;
             list.gameObject.AddComponent<ContentSizeFitter>().verticalFit = ContentSizeFitter.FitMode.PreferredSize;
             sr.content = list; sr.horizontal = false; sr.scrollSensitivity = 30; sr.movementType = ScrollRect.MovementType.Clamped;
             UIKit.AddScrollbar(sr);
@@ -219,13 +229,13 @@ namespace MTGUnited
         void Row(RectTransform list, string title, string sub, Color color, System.Action onJoin)
         {
             var row = UIKit.Panel("Row", list, new Color(1, 1, 1, 0.05f));
-            row.rectTransform.sizeDelta = new Vector2(0, 66);
+            row.rectTransform.sizeDelta = new Vector2(0, 78);
             var bar = UIKit.Panel("Bar", row.transform, color);
-            bar.rectTransform.Place(0, 0, 6, 66);
+            bar.rectTransform.Place(0, 0, 6, 78);
             var t = UIKit.Label("Title", row.transform, title, 19, Theme.Text, TextAnchor.UpperLeft, FontStyle.Bold);
-            t.rectTransform.Stretch(22, 0, 200, 8);
+            t.rectTransform.Stretch(22, 40, 200, 10);
             var s = UIKit.Label("Sub", row.transform, sub, 14, Theme.TextDim, TextAnchor.LowerLeft);
-            s.rectTransform.Stretch(22, 8, 200, 0);
+            s.rectTransform.Stretch(22, 10, 200, 40);
             if (onJoin != null)
             {
                 var b = UIKit.Button("Join", row.transform, "JOIN", Theme.Accent, () => onJoin(), 16);

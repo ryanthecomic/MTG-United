@@ -89,6 +89,8 @@ namespace MTGUnited
             running = true;
             acceptThread = new Thread(AcceptLoop) { IsBackground = true, Name = "lan-accept" };
             acceptThread.Start();
+            beaconName = MyName;
+            beaconPlayers = Lobby.Count;
             beaconThread = new Thread(BeaconLoop) { IsBackground = true, Name = "lan-beacon" };
             beaconThread.Start();
             Status = "Hosting on " + LocalAddress() + ":" + GamePort;
@@ -110,19 +112,49 @@ namespace MTGUnited
             }
         }
 
+        // Read by the beacon thread (PlayerPrefs / Unity calls are main-thread only).
+        volatile string beaconName = "Player";
+        volatile int beaconPlayers;
+
         void BeaconLoop()
         {
             using (var udp = new UdpClient { EnableBroadcast = true })
             {
-                var ep = new IPEndPoint(IPAddress.Broadcast, DiscoveryPort);
+                // Every network the PC is on (Wi-Fi, cable...), plus this PC itself for a second copy of the game.
+                var targets = new List<IPEndPoint> { new IPEndPoint(IPAddress.Broadcast, DiscoveryPort), new IPEndPoint(IPAddress.Loopback, DiscoveryPort) };
+                foreach (var b in SubnetBroadcasts()) targets.Add(new IPEndPoint(b, DiscoveryPort));
                 while (running)
                 {
-                    string msg = "MTGU|" + MyName.Replace("|", "/") + "|" + GamePort + "|" + Lobby.Count + "|" + MaxPlayers + "|" + (Started ? 1 : 0);
+                    string msg = "MTGU|" + beaconName.Replace("|", "/") + "|" + GamePort + "|" + beaconPlayers + "|" + MaxPlayers + "|" + (Started ? 1 : 0);
                     var bytes = Encoding.UTF8.GetBytes(msg);
-                    try { udp.Send(bytes, bytes.Length, ep); } catch { }
+                    foreach (var ep in targets) { try { udp.Send(bytes, bytes.Length, ep); } catch { } }
                     Thread.Sleep(1000);
                 }
             }
+        }
+
+        /// <summary>The broadcast address of each local network (e.g. 192.168.0.255), which reaches past some routers' rules for 255.255.255.255.</summary>
+        static IEnumerable<IPAddress> SubnetBroadcasts()
+        {
+            var list = new List<IPAddress>();
+            try
+            {
+                foreach (var nic in System.Net.NetworkInformation.NetworkInterface.GetAllNetworkInterfaces())
+                {
+                    if (nic.OperationalStatus != System.Net.NetworkInformation.OperationalStatus.Up) continue;
+                    foreach (var ua in nic.GetIPProperties().UnicastAddresses)
+                    {
+                        if (ua.Address.AddressFamily != AddressFamily.InterNetwork || IPAddress.IsLoopback(ua.Address) || ua.IPv4Mask == null) continue;
+                        var ip = ua.Address.GetAddressBytes();
+                        var mask = ua.IPv4Mask.GetAddressBytes();
+                        var b = new byte[4];
+                        for (int i = 0; i < 4; i++) b[i] = (byte)(ip[i] | ~mask[i]);
+                        list.Add(new IPAddress(b));
+                    }
+                }
+            }
+            catch { }
+            return list;
         }
 
         void SendTo(int conn, Dictionary<string, object> m)
@@ -134,6 +166,7 @@ namespace MTGUnited
 
         void BroadcastLobby()
         {
+            beaconPlayers = Lobby.Count;
             var players = Lobby.Select(p => (object)new Dictionary<string, object> { { "name", p.Name }, { "deck", p.DeckName ?? "" }, { "format", p.Format ?? "" } }).ToList();
             foreach (var p in Lobby.Where(p => p.Conn >= 0))
                 SendTo(p.Conn, new Dictionary<string, object> { { "t", "lobby" }, { "players", players }, { "max", MaxPlayers } });
@@ -180,7 +213,12 @@ namespace MTGUnited
             Hosts.Clear();
             try
             {
-                discovery = new UdpClient(new IPEndPoint(IPAddress.Any, DiscoveryPort)) { EnableBroadcast = true };
+                // Shared port, so a second copy of the game on this PC can listen too.
+                discovery = new UdpClient();
+                discovery.ExclusiveAddressUse = false;
+                discovery.Client.SetSocketOption(SocketOptionLevel.Socket, SocketOptionName.ReuseAddress, true);
+                discovery.EnableBroadcast = true;
+                discovery.Client.Bind(new IPEndPoint(IPAddress.Any, DiscoveryPort));
                 discovery.BeginReceive(OnBeacon, null);
             }
             catch (Exception ex) { Status = "Can't listen for LAN games: " + ex.Message; }

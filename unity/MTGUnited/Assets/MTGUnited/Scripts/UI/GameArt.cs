@@ -40,7 +40,10 @@ namespace MTGUnited
             cardBack = Resources.Load<Texture2D>(Root + "Images/sleeve_weathered_cardback");
             // MenuLoop: the menu video re-encoded with proper colour tags and a keyframe every second, so Windows'
             // decoder neither warns about unknown colour primaries nor runs dry when the loop jumps back to the start.
-            menuVideo = Resources.Load<VideoClip>(Root + "Videos/MenuLoop");
+            // MenuLoopVP8 (.webm): decoded by Unity itself, not Windows Media Foundation, whose decoder kept
+            // reporting "0xc00d4a3e" when the loop restarted. The .mp4 versions are fallbacks.
+            menuVideo = Resources.Load<VideoClip>(Root + "Videos/MenuLoopVP8");
+            if (menuVideo == null) menuVideo = Resources.Load<VideoClip>(Root + "Videos/MenuLoop");
             if (menuVideo == null) menuVideo = Resources.Load<VideoClip>(Root + "Videos/TableBG");
             // Preferred title font by file name (without extension); otherwise the first font in the folder.
             titleFont = Resources.Load<Font>(Root + "Fonts/" + PreferredTitleFont);
