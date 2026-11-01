@@ -1,8 +1,14 @@
 # MTG United
 
+![MTG United](docs/images/banner.jpg)
+
 A Commander client with a modern, Arena-style interface, built on the open-source
 [Forge](https://github.com/Card-Forge/forge) rules engine. You play a 2–6 player Commander pod
 against Forge's AI. Forge enforces the rules; the Unity client draws the game and takes your clicks.
+
+![Two ways to play: Forge rules engine games, or the free Kitchen Table](docs/images/modes.jpg)
+
+![How it works: the Unity client talks to the Forge bridge](docs/images/how-it-works.png)
 
 ```
 ┌──────────────────────┐   JSON over 127.0.0.1:7777    ┌──────────────────────────┐
@@ -22,6 +28,12 @@ against Forge's AI. Forge enforces the rules; the Unity client draws the game an
 * `PROTOCOL.md` documents the messages, in case you want to build another front end.
 
 ## Setup (Windows)
+
+**Just want to play?** Download the zip from the releases page, unzip it and run `MTG United.exe`:
+
+![Getting started in four steps](docs/images/getting-started.png)
+
+**Building from source:**
 
 You need:
 
@@ -68,6 +80,10 @@ Accepted decklist formats are Arena, Moxfield, Archidekt and MTGO exports (`1 So
 type its name in the Commander field. If you leave the list empty, you play a random Commander
 precon.
 
+![Rules engine shortcuts](docs/images/shortcuts-rules-engine.png)
+
+![Kitchen Table shortcuts](docs/images/shortcuts-kitchen-table.png)
+
 ## Smoke test without Unity
 
 With the bridge running:
@@ -105,6 +121,8 @@ used under Wizards' Fan Content Policy:
 * *Jodah, the Unifier* (Dominaria United): **Ryan Pancoast** (Options and menus, GitHub slide)
 * *Urabrask's Forge* (Phyrexia: All Will Be One): **Lie Setiawan** (Forge slide)
 * *Trivia Contest* (Unfinity): **Caroline Gariba** (Kitchen Table slide)
+
+The README pictures in `docs/images/` use the same art; `tools/readme-images/make.py` regenerates them.
 
 ## Licensing
 
