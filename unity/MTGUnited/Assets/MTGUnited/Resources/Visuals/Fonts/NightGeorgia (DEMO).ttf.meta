@@ -10,6 +10,9 @@ TrueTypeFontImporter:
   includeFontData: 1
   fontNames:
   - Night Georgia DEMO
+  - Georgia
+  - Times New Roman
+  - Arial
   fallbackFontReferences: []
   customCharacters: 
   fontRenderingMode: 0

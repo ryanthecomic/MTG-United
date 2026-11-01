@@ -67,8 +67,20 @@ namespace MTGUnited
                 value = value ?? "";
                 if (value == raw || value == base.text) return;
                 raw = value;
-                base.text = Symbols ? Convert(value) : value;
+                base.text = Symbols ? Convert(Localize ? Loc.T(value) : value) : value;
             }
+        }
+
+        /// <summary>Off for text that must never be translated (card names and rules text, typed input).</summary>
+        public bool Localize = true;
+
+        /// <summary>Re-applies the interface language to every label (Options > language).</summary>
+        public static void RelocalizeAll() { foreach (var t in all) if (t != null) t.Relocalize(); }
+
+        void Relocalize()
+        {
+            if (!Symbols || !Localize || string.IsNullOrEmpty(raw)) return;
+            base.text = Convert(Loc.T(raw));
         }
 
         /// <summary>The text as it was set, with {codes} intact.</summary>

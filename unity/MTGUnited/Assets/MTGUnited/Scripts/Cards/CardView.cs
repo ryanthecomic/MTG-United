@@ -120,22 +120,30 @@ namespace MTGUnited
             frame.gameObject.AddComponent<CardDragHandler>().Owner = this;
 
             nameText = UIKit.Label("Name", frame.transform, "", 12, Color.black, TextAnchor.UpperLeft, FontStyle.Bold);
+
+            if (nameText is SymbolText nameTextS) nameTextS.Localize = false;
             nameText.rectTransform.anchorMin = new Vector2(0, 1); nameText.rectTransform.anchorMax = new Vector2(1, 1);
             nameText.rectTransform.pivot = new Vector2(0.5f, 1);
             nameText.rectTransform.offsetMin = new Vector2(6, -26); nameText.rectTransform.offsetMax = new Vector2(-6, -4);
             nameText.resizeTextForBestFit = true; nameText.resizeTextMinSize = 6; nameText.resizeTextMaxSize = 14;
 
             costText = UIKit.Label("Cost", frame.transform, "", 11, Color.black, TextAnchor.UpperRight, FontStyle.Bold);
+
+            if (costText is SymbolText costTextS) costTextS.Localize = false;
             costText.rectTransform.anchorMin = new Vector2(0, 1); costText.rectTransform.anchorMax = new Vector2(1, 1);
             costText.rectTransform.pivot = new Vector2(0.5f, 1);
             costText.rectTransform.offsetMin = new Vector2(6, -40); costText.rectTransform.offsetMax = new Vector2(-6, -24);
 
             typeText = UIKit.Label("Type", frame.transform, "", 10, new Color(0.1f, 0.1f, 0.1f), TextAnchor.MiddleLeft, FontStyle.Italic);
+
+            if (typeText is SymbolText typeTextS) typeTextS.Localize = false;
             typeText.rectTransform.anchorMin = new Vector2(0, 0.45f); typeText.rectTransform.anchorMax = new Vector2(1, 0.55f);
             typeText.rectTransform.offsetMin = new Vector2(6, 0); typeText.rectTransform.offsetMax = new Vector2(-6, 0);
             typeText.resizeTextForBestFit = true; typeText.resizeTextMinSize = 5; typeText.resizeTextMaxSize = 11;
 
             bodyText = UIKit.Label("Body", frame.transform, "", 9, new Color(0.08f, 0.08f, 0.08f), TextAnchor.UpperLeft);
+
+            if (bodyText is SymbolText bodyTextS) bodyTextS.Localize = false;
             bodyText.rectTransform.anchorMin = new Vector2(0, 0.08f); bodyText.rectTransform.anchorMax = new Vector2(1, 0.44f);
             bodyText.rectTransform.offsetMin = new Vector2(6, 0); bodyText.rectTransform.offsetMax = new Vector2(-6, 0);
             bodyText.resizeTextForBestFit = true; bodyText.resizeTextMinSize = 4; bodyText.resizeTextMaxSize = 11;

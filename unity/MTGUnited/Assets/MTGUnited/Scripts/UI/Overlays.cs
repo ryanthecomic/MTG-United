@@ -23,6 +23,7 @@ namespace MTGUnited
             p.text = UIKit.Label("Text", frame.transform, "", 17, Theme.Text, TextAnchor.UpperLeft);
             p.text.rectTransform.Stretch(16, 16, 16, 16);
             p.text.supportRichText = true;
+            if (p.text is SymbolText pts) pts.Localize = false;   // card text stays as printed
             var artRt = UIKit.Rect("Art", frame.transform).Stretch();
             p.art = artRt.gameObject.AddComponent<RawImage>();
             p.art.raycastTarget = false;

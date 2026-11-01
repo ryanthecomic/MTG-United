@@ -51,6 +51,8 @@ namespace MTGUnited
         readonly Dictionary<int, Vector2> panelCenters = new Dictionary<int, Vector2>();
         readonly List<Image> zoneBackgrounds = new List<Image>();
         Image myFieldBg;
+        Image dimmer;              // darkens the board behind the mulligan hand / selection tray
+        RectTransform focusLayer;  // above the HUD buttons, below the menus: cards you are choosing from
 
         GameState prev, last;
         int hoveredHandId = -1;
@@ -75,6 +77,10 @@ namespace MTGUnited
             bv.myFieldBg.rectTransform.Place(MyFieldLeft - 10, 215, MyFieldRight - MyFieldLeft + 20, 340);
             bv.myFieldBg.raycastTarget = false;
 
+            bv.dimmer = UIKit.Panel("Dim", rt, new Color(0, 0, 0, 0), false);
+            bv.dimmer.rectTransform.anchorMin = bv.dimmer.rectTransform.anchorMax = new Vector2(0.5f, 0.5f);
+            bv.dimmer.rectTransform.sizeDelta = new Vector2(4000, 3000);
+            bv.dimmer.raycastTarget = false;
             return bv;
         }
 
@@ -253,6 +259,7 @@ namespace MTGUnited
             foreach (var kv in placements.OrderBy(p => p.Value.Order))
                 cards[kv.Key].transform.SetAsLastSibling();
             foreach (var cv in cards.Values) if (cv.IsTraveling) cv.transform.SetAsLastSibling();   // flight layer
+            PlaceFocusCards(s, placements);
 
             // Hand states: wobble while discarding to hand size; grey cards you can't play while you hold priority.
             bool discarding = s.Prompt.SelMax > 0 && (s.Prompt.Message ?? "").IndexOf("discard", System.StringComparison.OrdinalIgnoreCase) >= 0;
@@ -636,7 +643,47 @@ namespace MTGUnited
 
         // =================================================================================== per frame
 
+        /// <summary>The mulligan hand is lifted into a layer above the HUD buttons so nothing covers it.</summary>
+        void PlaceFocusCards(GameState s, Dictionary<int, Placement> placements)
+        {
+            bool any = false;
+            foreach (var kv in cards)
+            {
+                bool focus = s.Mulligan && placements.TryGetValue(kv.Key, out var pl) && pl.InHand;
+                if (focus && focusLayer == null)
+                {
+                    focusLayer = UIKit.Rect("FocusCards", (RectTransform)root.parent).Stretch().SubCanvas();
+                }
+                var want = focus ? focusLayer : cardLayer;
+                if (want != null && kv.Value.transform.parent != want) kv.Value.transform.SetParent(want, false);
+                any |= focus;
+            }
+            if (any)
+            {
+                focusLayer.SetAsLastSibling();
+                foreach (var kv in placements.OrderBy(p => p.Value.Order))
+                    if (cards.TryGetValue(kv.Key, out var cv) && cv.transform.parent == focusLayer) cv.transform.SetAsLastSibling();
+            }
+        }
+
         void Update()
+        {
+            if (dimmer != null)
+            {
+                bool dim = last != null && gameObject.activeInHierarchy &&
+                           (last.Mulligan || (gc.Tray != null && gc.Tray.gameObject.activeSelf && !gc.Tray.Collapsed));
+                var c = dimmer.color;
+                float a = Mathf.MoveTowards(c.a, dim ? 0.62f : 0f, Time.unscaledDeltaTime * 2.5f);
+                if (!Mathf.Approximately(a, c.a)) { c.a = a; dimmer.color = c; }
+                dimmer.transform.SetAsLastSibling();
+            }
+            UpdateInner();
+        }
+
+        void OnEnable() { if (focusLayer != null) focusLayer.gameObject.SetActive(true); }
+        void OnDisable() { if (focusLayer != null) focusLayer.gameObject.SetActive(false); }
+
+        void UpdateInner()
         {
             HandleFocusScroll();
             DrawCombatLines();

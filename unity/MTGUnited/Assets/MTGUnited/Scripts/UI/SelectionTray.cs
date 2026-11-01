@@ -22,6 +22,7 @@ namespace MTGUnited
         Text title, toggleLabel;
         Button toggle;
         bool collapsed;
+        public bool Collapsed => collapsed;
         string shownKey = "";
         readonly Dictionary<int, Image> tiles = new Dictionary<int, Image>();
 

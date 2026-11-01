@@ -103,12 +103,12 @@ namespace MTGUnited
             }
         }
 
-        public bool Undo()
+        public bool Undo(bool say = true)
         {
             if (undo.Count == 0) return false;
             var (players, cards, turn, active, next) = undo.Pop();
             Players = players; Cards = cards; Turn = turn; Active = active; nextId = next;
-            Say("Undo.");
+            if (say) Say("Undo.");
             return true;
         }
 

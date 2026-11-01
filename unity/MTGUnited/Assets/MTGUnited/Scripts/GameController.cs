@@ -98,6 +98,7 @@ namespace MTGUnited
         void Awake()
         {
             Instance = this;
+            ErrorReporter.Install(this);   // first, so problems during startup are caught too
             DontDestroyOnLoad(gameObject);
             Application.runInBackground = true;
             Application.targetFrameRate = 120;   // drops to 30 while the window isn't focused (see OnApplicationFocus)
@@ -238,7 +239,7 @@ namespace MTGUnited
             while (budget-- > 0 && Bridge.TryReceive(out var msg))
             {
                 try { Handle(msg); }
-                catch (Exception ex) { Debug.LogException(ex); }
+                catch (Exception ex) { ErrorReporter.Report(ex, "handling the message '" + msg.Str("t") + "' from Forge"); }
             }
             HandleKeys();
         }
@@ -423,6 +424,7 @@ namespace MTGUnited
 
         public void StartGame(Dictionary<string, object> start)
         {
+            ErrorReporter.Crumb("started a Forge game");
             lastStartMessage = start;
             if (!Bridge.Connected)
             {

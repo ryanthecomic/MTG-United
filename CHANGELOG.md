@@ -1,5 +1,15 @@
 # MTG United changelog
 
+## Unreleased
+
+- Language: Português (Brasil), English and Español (Options → Language). Switches live.
+- Rules engine: the mulligan hand and card-choice screens dim the board and sit above the buttons.
+- Kitchen table: interface size and card size now apply there too.
+- Home: a cleaner Commander / 60 cards / 40 cards switch.
+- Errors: real errors go to `logs/errors.log` (once each, with what you were doing) and show one friendly
+  message; a crashed session is noticed on the next start. Options → Error log opens the file.
+  A table action that fails is rolled back instead of leaving the table half-changed.
+
 ## 0.1.1
 
 **Rules engine (Forge)**

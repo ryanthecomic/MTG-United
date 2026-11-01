@@ -927,17 +927,12 @@ namespace MTGUnited
             ((RectTransform)random.transform).Place(416, 28, 156, 42);
             aiRandomBtn = random.GetComponent<Image>();
             forgeOnly.Add(aiText.gameObject); forgeOnly.Add(precon.gameObject); forgeOnly.Add(random.gameObject);
-            // Format (rules engine): Commander, 60 cards or 40 cards. The AI's decks follow it.
-            float fx = 330;
-            foreach (var (f, label) in new[] { (DeckFormat.Commander, "CMDR"), (DeckFormat.Constructed, "60"), (DeckFormat.Limited, "40") })
+            // Format (rules engine): a segmented switch — Commander, 60 cards or 40 cards. The AI's decks follow it.
+            formatSwitch = FormatSwitch.Create(pod, new Rect(292, 164, 282, 36), new[]
             {
-                string ff = f;
-                var fb = UIKit.Button("Format" + label, pod, label, Theme.Secondary, () => SetForgeFormat(ff), 15);
-                ((RectTransform)fb.transform).Place(fx, 162, 76, 36);
-                formatButtons[f] = fb.GetComponent<Image>();
-                forgeOnly.Add(fb.gameObject);
-                fx += 82;
-            }
+                (DeckFormat.Commander, "Commander"), (DeckFormat.Constructed, "60 cards"), (DeckFormat.Limited, "40 cards"),
+            }, SetForgeFormat);
+            forgeOnly.Add(formatSwitch.gameObject);
             // Kitchen table, playing alone: pick each other seat's deck (goldfishing / playtesting a matchup).
             var seatDecks = UIKit.Button("SeatDecks", pod, "CHOOSE THEIR DECKS", new Color(0.16f, 0.3f, 0.72f), () => SeatDeckMenu(Input.mousePosition), 16);
             ((RectTransform)seatDecks.transform).Place(26, 28, 546, 42);
@@ -1013,7 +1008,7 @@ namespace MTGUnited
             PlayerPrefs.SetString("aiDecks", aiDecks);
             bool table = playMode == "table";
             modeText.text = (table ? "Table · " : "") + (opponents + 1) + " players";
-            foreach (var kv in formatButtons) kv.Value.color = kv.Key == forgeFormat ? Theme.Accent : Theme.Secondary;
+            if (formatSwitch != null) formatSwitch.Select(forgeFormat);
             oppText.text = (table ? "OTHER SEATS   " : "OPPONENTS   ") + opponents;
             foreach (var go in forgeOnly) go.SetActive(!table);
             tableHint.gameObject.SetActive(table);
@@ -1257,10 +1252,11 @@ namespace MTGUnited
 
         // Rules-engine format: Commander, 60-card constructed or 40-card limited (AI decks follow it).
         string forgeFormat = DeckFormat.Commander;
-        readonly Dictionary<string, Image> formatButtons = new Dictionary<string, Image>();
+        FormatSwitch formatSwitch;
 
         void SetForgeFormat(string f)
         {
+            if (forgeFormat == f) return;
             forgeFormat = f;
             PlayerPrefs.SetString("forgeFormat", f);
             Sound.Play(Sfx.UiClick, 0.6f);

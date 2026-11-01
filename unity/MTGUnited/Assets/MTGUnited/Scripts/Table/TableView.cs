@@ -21,10 +21,24 @@ namespace MTGUnited
     {
         // Board-space layout (1920x1080, bottom-left origin).
         const float FieldX = 280, FieldY = 215, FieldW = 1280, FieldH = 375;
-        const float HandLeft = 410, HandRight = 1560, HandY = 70;
+        const float HandRight = 1560, HandY = 70;
+        static float HandLeft => 2 + 408 * Mathf.Min(UiScale.Value, 1.2f);   // just right of my nameplate, which grows with the UI
         const float OppBandY = 605, OppFieldTop = 944;   // below the opponents' nameplates
-        static readonly Rect LibRect = new Rect(1592, 392, 130, 182), GyRect = new Rect(1752, 392, 130, 182);
-        static readonly Rect ExRect = new Rect(1592, 202, 130, 182), CmdRect = new Rect(1752, 202, 130, 182);
+        static readonly Rect LibBase = new Rect(1592, 392, 130, 182), GyBase = new Rect(1752, 392, 130, 182);
+        static readonly Rect ExBase = new Rect(1592, 202, 130, 182), CmdBase = new Rect(1752, 202, 130, 182);
+        // The right column (piles + action buttons) grows with Options > interface size, anchored bottom-right.
+        static readonly Vector2 RightCorner = new Vector2(1912, 8);
+        const float RightMax = 1.15f;
+        static Rect Scaled(Rect r)
+        {
+            float k = Mathf.Min(UiScale.Value, RightMax);
+            var min = RightCorner + (r.min - RightCorner) * k;
+            return new Rect(min, r.size * k);
+        }
+        static Rect LibRect => Scaled(LibBase);
+        static Rect GyRect => Scaled(GyBase);
+        static Rect ExRect => Scaled(ExBase);
+        static Rect CmdRect => Scaled(CmdBase);
 
         GameController gc;
         RectTransform root, cardLayer, uiLayer, oppLayer;
@@ -89,13 +103,16 @@ namespace MTGUnited
             myPanel.ZoneClicked = z => ZoneClick(Me, z);
             myPanel.Clicked = () => { };   // (Ctrl+click another seat's nameplate to sit there)
             myPanel.RightClicked = () => PlayerMenu(Me, Input.mousePosition);
+            UiScaled.Add(myPanel, new Vector2(8, 8)).MaxScale = 1.2f;
             turnText = UIKit.Label("Turn", uiLayer, "", 16, Theme.TextDim, TextAnchor.MiddleLeft, FontStyle.Bold);
             turnText.rectTransform.Place(24, 150, 380, 40);
+            UiScaled.Add(turnText, new Vector2(8, 8)).MaxScale = 1.2f;
             turnText.supportRichText = true;
 
             // ---- log (left column)
             var logBg = UIKit.Panel("Log", uiLayer, new Color(0.04f, 0.04f, 0.07f, 0.75f));
             logBg.rectTransform.Place(16, 200, 250, 392);
+            UiScaled.Add(logBg, new Vector2(8, 600)).MaxScale = 1.08f;
             var lt = UIKit.Label("Title", logBg.transform, "TABLE LOG", 13, Theme.Accent, TextAnchor.UpperLeft, FontStyle.Bold).Titled();
             lt.rectTransform.Stretch(12, 0, 8, 8);
             logText = UIKit.Label("Lines", logBg.transform, "", 13, new Color(0.82f, 0.85f, 0.9f), TextAnchor.LowerLeft);
@@ -104,10 +121,10 @@ namespace MTGUnited
             if (logText is SymbolText lst) lst.KeepTruncate = true;
 
             // ---- piles (right column)
-            Pile("Library", LibRect);
-            Pile("Graveyard", GyRect);
-            Pile("Exile", ExRect);
-            Pile("Command", CmdRect);
+            Pile("Library", LibBase);
+            Pile("Graveyard", GyBase);
+            Pile("Exile", ExBase);
+            Pile("Command", CmdBase);
 
             // ---- actions (bottom-right)
             float bx = 1592, by = 136;
@@ -115,6 +132,7 @@ namespace MTGUnited
             {
                 var b = UIKit.Button(label, uiLayer, label, c, () => a(), 16);
                 ((RectTransform)b.transform).Place(bx, by, 142, 40);
+                UiScaled.Add(b, RightCorner).MaxScale = RightMax;
                 // Its shortcut, faint in the corner.
                 var k = UIKit.Label("Key", b.transform, key, 11, new Color(1f, 1f, 1f, 0.45f), TextAnchor.LowerRight, FontStyle.Bold);
                 k.rectTransform.Stretch(0, 2, 6, 0);
@@ -131,6 +149,7 @@ namespace MTGUnited
             // Settings gear in the top-right corner, like everywhere else: opens the game menu.
             var gear = UIKit.IconButton("Menu", uiLayer, Icons.Gear, 1920 - 12 - 56, 1080 - 12 - 56, 56, () => gc.GameMenu.Open(), "Menu");
             gear.GetComponent<Image>().color = new Color(0f, 0f, 0f, 0.45f);
+            UiScaled.Add(gear, new Vector2(1912, 1072));
 
             viewer = TableZoneViewer.Create(root, gc);
             tokenDialog = TokenDialog.Create(root);
@@ -141,6 +160,7 @@ namespace MTGUnited
         {
             var frame = UIKit.Panel(zone, uiLayer, new Color(0.1f, 0.12f, 0.18f, 0.9f));
             frame.rectTransform.Place(r.x, r.y, r.width, r.height);
+            UiScaled.Add(frame, RightCorner).MaxScale = RightMax;
             UIKit.RoundCard(frame, r.width);
             var top = UIKit.Rect("Top", frame.transform).Stretch(4, 4, 4, 4).gameObject.AddComponent<RawImage>();
             top.raycastTarget = false;
@@ -275,6 +295,7 @@ namespace MTGUnited
         void Run(Dictionary<string, object> a)
         {
             if (Me == null) return;
+            ErrorReporter.Crumb("table: " + a.Str("op"));
             a["by"] = (double)Me.Id;
             if (IsClient) { gc.Net.SendAction(a); return; }
             ApplyHere(a);
@@ -283,8 +304,17 @@ namespace MTGUnited
         void ApplyHere(Dictionary<string, object> a)
         {
             string op = a.Str("op");
-            if (op != "undo" && op != "say") State.Checkpoint();
-            State.Apply(a);
+            bool checkpoint = op != "undo" && op != "say";
+            if (checkpoint) State.Checkpoint();
+            try { State.Apply(a); }
+            catch (Exception ex)
+            {
+                // A half-applied action would leave the table (and everyone's copy of it) inconsistent:
+                // put it back the way it was, then carry on.
+                ErrorReporter.Report(ex, "applying the table action '" + op + "'");
+                if (checkpoint) State.Undo(false);
+                State.Events.Clear();
+            }
             AfterChange();
         }
 

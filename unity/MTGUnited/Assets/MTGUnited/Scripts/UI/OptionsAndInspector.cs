@@ -71,6 +71,7 @@ namespace MTGUnited
             label = UIKit.Label("Text", frame.transform, "", 26, Theme.Text, TextAnchor.UpperLeft);
             label.rectTransform.Stretch(28, 28, 28, 28);
             label.supportRichText = true;
+            if (label is SymbolText ls) ls.Localize = false;   // card text stays as printed
             var artRt = UIKit.Rect("Art", frame.transform).Stretch();
             img = artRt.gameObject.AddComponent<RawImage>();
             img.raycastTarget = false;
@@ -192,6 +193,16 @@ namespace MTGUnited
                 PlayerPrefs.SetInt("autoPay", gc.AutoPayMana ? 1 : 0);
                 o.Refresh();
             });
+            o.languageText = o.ToggleRow(o.settingsPage, "Language", ref y, () =>
+            {
+                Loc.Language = (Loc.Language + 1) % Loc.Codes.Length;
+                o.Refresh();
+            });
+            if (o.languageText is SymbolText lt) lt.Localize = false;   // each language's own name
+
+            // The error log (only real errors, one line each): for bug reports.
+            var log = UIKit.Button("ErrorLog", o.settingsPage, "Error log", Theme.Secondary, () => ErrorReporter.OpenLog(gc), 15);
+            ((RectTransform)log.transform).Place(28, 34, 170, 44);
 
             var close = UIKit.Button("Close", p.transform, "DONE", Theme.Accent, o.Close, 22);
             var cr = (RectTransform)close.transform;
@@ -350,7 +361,7 @@ namespace MTGUnited
                 y -= rowH;
             }
         }
-        Text cardText, speedText, reduceText, textSizeText;
+        Text cardText, speedText, reduceText, textSizeText, languageText;
 
         Text Row(Transform parent, string label, ref float y, Action minus, Action plus)
         {
@@ -391,6 +402,7 @@ namespace MTGUnited
             }
             Refresh();
             if ((s == Setting.Scale || s == Setting.Cards) && gc.InGame && gc.State != null) gc.BoardView.Render(gc.State);   // re-flow around the bigger HUD
+            if ((s == Setting.Scale || s == Setting.Cards) && gc.Table != null && gc.Table.gameObject.activeSelf) gc.Table.Render();   // the Kitchen Table too
         }
 
         void Refresh()
@@ -404,6 +416,7 @@ namespace MTGUnited
             speedText.text = Motion.SpeedMode == Motion.SpeedSetting.Normal ? "NORMAL" : Motion.SpeedMode == Motion.SpeedSetting.Fast ? "FAST" : "INSTANT";
             reduceText.text = Motion.ReduceMotion ? "ON" : "OFF";
             autoPayText.text = gc.AutoPayMana ? "ON" : "OFF";
+            languageText.text = Loc.Names[Loc.Language];
         }
 
         public void Open() => Open(false);
