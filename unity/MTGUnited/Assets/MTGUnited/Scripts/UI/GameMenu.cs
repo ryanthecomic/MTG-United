@@ -51,6 +51,8 @@ namespace MTGUnited
                 ("Shift+N", "Add or edit a note"),
                 ("W", "Reveal it (from your hand)"),
                 ("Hold Alt", "Zoom in on it"),
+                ("A", "Point at a card or player (then click it); pointing again removes the arrow"),
+                ("Shift+A", "Clear your arrows (they also clear each turn)"),
                 ("Piles:", "(the mouse over your library, graveyard, exile...)"),
                 ("H P D S T Y B", "Move the pile's top card (like a card)"),
                 ("V / M", "Over the library: shuffle / mulligan"),

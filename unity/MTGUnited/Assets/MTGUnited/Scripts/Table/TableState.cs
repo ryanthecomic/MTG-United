@@ -73,6 +73,8 @@ namespace MTGUnited
         public int Turn = 1;
         public int Active;               // index into Players
         public readonly List<string> Log = new List<string>();
+        /// <summary>"This card is doing something to that one": arrows everyone at the table sees (cleared each turn).</summary>
+        public List<TableArrow> Arrows = new List<TableArrow>();
         int nextId = 1;
         readonly System.Random rng = new System.Random();
         readonly Stack<(List<TablePlayer>, Dictionary<int, TableCard>, int, int, int)> undo = new Stack<(List<TablePlayer>, Dictionary<int, TableCard>, int, int, int)>();
@@ -288,6 +290,7 @@ namespace MTGUnited
             if (Active == 0) Turn++;
             var p = ActivePlayer;
             Say("— Turn " + Turn + ": " + p.Name + " —");
+            Arrows.Clear();
             foreach (var c in Battlefield(p.Id)) { c.Tapped = false; c.Sick = false; }
             Draw(p, 1);
         }
@@ -298,6 +301,7 @@ namespace MTGUnited
             if (!Cards.TryGetValue(cardId, out var c)) return;
             foreach (var pl in Players) foreach (var z in new[] { "Library", "Hand", "Graveyard", "Exile", "Command" }) pl.ZoneList(z)?.Remove(cardId);
             Cards.Remove(cardId);
+            Arrows.RemoveAll(a => a.From == cardId || a.To == cardId);
         }
 
         public int Roll(int sides) => rng.Next(1, sides + 1);
@@ -310,5 +314,11 @@ namespace MTGUnited
             Say(p.Name + " mulliganed.");
             Draw(p, 7);
         }
+    }
+
+    /// <summary>An arrow from a card to another card (To) or to a player (ToPlayer), drawn in its pointer's colour.</summary>
+    public class TableArrow
+    {
+        public int From, To = -1, ToPlayer, By;
     }
 }

@@ -21,7 +21,8 @@ namespace MTGUnited
     {
         // Board-space layout (1920x1080, bottom-left origin).
         const float FieldX = 280, FieldY = 215, FieldW = 1280, FieldH = 375;
-        const float HandRight = 1560, HandY = 70;
+        const float HandRight = 1560;
+        static float HandY => 70 - UiScale.Extra.y;   // follows the window's bottom edge
         static float HandLeft => 2 + 408 * Mathf.Min(UiScale.Value, 1.2f);   // just right of my nameplate, which grows with the UI
         const float OppBandY = 605, OppFieldTop = 944;   // below the opponents' nameplates
         static readonly Rect LibBase = new Rect(1592, 392, 130, 182), GyBase = new Rect(1752, 392, 130, 182);
@@ -32,7 +33,7 @@ namespace MTGUnited
         static Rect Scaled(Rect r)
         {
             float k = Mathf.Min(UiScale.Value, RightMax);
-            var min = RightCorner + (r.min - RightCorner) * k;
+            var min = RightCorner + (r.min - RightCorner) * k + new Vector2(UiScale.Extra.x, -UiScale.Extra.y);   // pinned bottom-right
             return new Rect(min, r.size * k);
         }
         static Rect LibRect => Scaled(LibBase);
@@ -85,13 +86,14 @@ namespace MTGUnited
             // Empty table: drag a box to select cards; a plain click clears the selection.
             var area = UIKit.Rect("SelectArea", root).Stretch();
             area.gameObject.AddComponent<Image>().color = Color.clear;
-            area.gameObject.AddComponent<PointerEvents>().OnClick = ClearSelection;
+            area.gameObject.AddComponent<PointerEvents>().OnClick = () => { if (pointFrom >= 0) { CancelPointing(); return; } ClearSelection(); };
             area.gameObject.AddComponent<MarqueeHandler>().Table = this;
             area.SetAsFirstSibling();
 
             oppLayer = UIKit.Rect("Opponents", root).Stretch().SubCanvas();
             uiLayer = UIKit.Rect("UI", root).Stretch().SubCanvas();
             cardLayer = UIKit.Rect("Cards", root).Stretch().SubCanvas();
+            arrowLayer = UIKit.Rect("Arrows", root).Stretch().SubCanvas();   // "this card targets that one"
             noteLayer = UIKit.Rect("Notes", root).Stretch().SubCanvas();   // notes ride above the cards
 
             // ---- my nameplate (bottom-left): the same Arena-style panel as Forge games (seat colour, commander
@@ -101,7 +103,7 @@ namespace MTGUnited
             myPanel.AddLifeButtons(d => Life(Me, d));
             myPanel.EnableLifeEdit(v => { if (Me != null) Run(A("setlife", "p", Me.Id, "v", v)); });
             myPanel.ZoneClicked = z => ZoneClick(Me, z);
-            myPanel.Clicked = () => { };   // (Ctrl+click another seat's nameplate to sit there)
+            myPanel.Clicked = () => { if (pointFrom >= 0 && Me != null) FinishPointing(-1, Me.Id); };   // (Ctrl+click another seat's nameplate to sit there)
             myPanel.RightClicked = () => PlayerMenu(Me, Input.mousePosition);
             UiScaled.Add(myPanel, new Vector2(8, 8)).MaxScale = 1.2f;
             turnText = UIKit.Label("Turn", uiLayer, "", 16, Theme.TextDim, TextAnchor.MiddleLeft, FontStyle.Bold);
@@ -260,6 +262,7 @@ namespace MTGUnited
 
         void Clear()
         {
+            pointFrom = -1;
             foreach (var v in views.Values) if (v != null) Destroy(v.gameObject);
             views.Clear();
             lastZone.Clear();
@@ -650,6 +653,8 @@ namespace MTGUnited
             if (group.Any(g => g.Zone != "Command")) items.Add(("Command zone\tB", () => { After(); MoveGroup(group, "Command"); }));
             if (c.Zone == "Hand" && !many) items.Add(("Reveal\tW", () => Run(A("reveal", "id", id))));
             if (!unknown && !many) items.Add(("Zoom\tHold Alt", () => gc.Inspector.Show(ToData(c, false))));
+            if (!many) items.Add(("Point at a card or player…\tA", () => StartPointing(c.Id)));
+            if (State.Arrows.Exists(x => Me != null && x.By == Me.Id)) items.Add(("Clear my arrows\tShift+A", ClearMyArrows));
             var menu = PopupMenu.Instance.Reopen(() =>
             {
                 // Rebuild against the current table (the card may have changed or left).
@@ -791,6 +796,7 @@ namespace MTGUnited
         void OnClick(CardView cv)
         {
             if (!State.Cards.TryGetValue(cv.CardId, out var c)) return;
+            if (pointFrom >= 0) { FinishPointing(c.Id, 0); return; }   // pointing: this card is the target
             bool shift = Input.GetKey(KeyCode.LeftShift) || Input.GetKey(KeyCode.RightShift);
             if (shift && (c.Zone == "Battlefield" || c.Zone == "Hand")) { ToggleSelected(c.Id); return; }   // Shift + click: select
             if (selected.Count > 0 && !selected.Contains(c.Id)) ClearSelection();
@@ -840,7 +846,11 @@ namespace MTGUnited
 
         internal void EndPileDrag(Vector2 screen) { if (dragging != null) OnDragEnded(dragging, screen); }
 
-        void OnRightClick(CardView cv) => CardMenu(cv.CardId, Input.mousePosition, false, (RectTransform)cv.transform);
+        void OnRightClick(CardView cv)
+        {
+            if (pointFrom >= 0) { CancelPointing(); return; }   // right-click cancels pointing
+            CardMenu(cv.CardId, Input.mousePosition, false, (RectTransform)cv.transform);
+        }
 
         CardView hovered;
 
@@ -887,9 +897,144 @@ namespace MTGUnited
         }
 
         /// <summary>Keeps a little yellow sticky under every permanent that has a note.</summary>
+        // =================================================================================================== arrows
+
+        RectTransform arrowLayer;
+        internal int pointFrom = -1;   // pointing mode: the card the arrow starts from (-1 = not pointing)
+        readonly List<(RectTransform line, Image lineImg, RectTransform head, Image headImg)> arrowPool = new List<(RectTransform, Image, RectTransform, Image)>();
+        static Sprite arrowHead;
+
+        void StartPointing(int cardId)
+        {
+            pointFrom = cardId;
+            Sound.Play(Sfx.UiClick, 0.5f);
+            gc.Toasts.Show(Loc.T("Click the card or player it points at (Esc to cancel)."));
+        }
+
+        internal void FinishPointing(int toCard, int toPlayer)
+        {
+            int from = pointFrom;
+            pointFrom = -1;
+            if (from < 0 || toCard == from) return;
+            Sound.Play(Sfx.Counter, 0.5f);
+            Run(toPlayer > 0 ? A("arrow", "id", from, "tp", toPlayer) : A("arrow", "id", from, "to", toCard));
+        }
+
+        void CancelPointing() { pointFrom = -1; }
+
+        void ClearMyArrows()
+        {
+            if (Me == null || !State.Arrows.Exists(x => x.By == Me.Id)) return;
+            Run(A("arrowsclear"));
+        }
+
+        Vector2 CenterOf(RectTransform rt) => (Vector2)root.InverseTransformPoint(rt.TransformPoint(rt.rect.center)) + new Vector2(960, 540);
+
+        /// <summary>Where an arrow ends: the card (if drawn), else its owner's nameplate; or a player's nameplate.</summary>
+        bool EndPoint(int card, int player, out Vector2 at)
+        {
+            at = default;
+            if (card >= 0)
+            {
+                if (views.TryGetValue(card, out var v) && v != null && !v.IsExiting) { at = v.CurrentPos; return true; }
+                if (!State.Cards.TryGetValue(card, out var c)) return false;
+                player = c.Owner;
+            }
+            if (player <= 0) return false;
+            if (Me != null && player == Me.Id) { at = CenterOf(myPanel.Rect); return true; }
+            int k = oppPanels.FindIndex(o => o.PlayerId == player);
+            if (k < 0) return false;
+            at = CenterOf(oppPanels[k].Root);
+            return true;
+        }
+
+        static Sprite ArrowHead()
+        {
+            if (arrowHead != null) return arrowHead;
+            const int n = 64;
+            var tex = new Texture2D(n, n, TextureFormat.RGBA32, false) { wrapMode = TextureWrapMode.Clamp };
+            var px = new Color32[n * n];
+            for (int y = 0; y < n; y++)
+                for (int x = 0; x < n; x++)
+                {
+                    // A triangle pointing right, antialiased on its two slanted edges.
+                    float half = (n - x) * 0.5f, d = Mathf.Abs(y - n / 2f + 0.5f);
+                    float a = Mathf.Clamp01(half - d + 0.5f);
+                    px[y * n + x] = new Color32(255, 255, 255, (byte)(a * 255));
+                }
+            tex.SetPixels32(px);
+            tex.Apply();
+            arrowHead = Sprite.Create(tex, new Rect(0, 0, n, n), new Vector2(0.5f, 0.5f));
+            return arrowHead;
+        }
+
+        void DrawArrows()
+        {
+            int used = 0;
+            void Draw(Vector2 a, Vector2 b, Color col)
+            {
+                var d = b - a;
+                float len = d.magnitude;
+                if (len < 20f) return;
+                if (used >= arrowPool.Count)
+                {
+                    var line = UIKit.Panel("Arrow", arrowLayer, Color.white, false);
+                    line.raycastTarget = false;
+                    var lr = line.rectTransform;
+                    lr.anchorMin = lr.anchorMax = Vector2.zero; lr.pivot = new Vector2(0f, 0.5f);
+                    var glow = line.gameObject.AddComponent<UnityEngine.UI.Outline>();
+                    glow.effectColor = new Color(0f, 0f, 0f, 0.55f); glow.effectDistance = new Vector2(1.5f, -1.5f);
+                    var head = UIKit.Rect("Head", arrowLayer);
+                    head.anchorMin = head.anchorMax = Vector2.zero; head.pivot = new Vector2(0.5f, 0.5f);
+                    var hi = head.gameObject.AddComponent<Image>();
+                    hi.sprite = ArrowHead(); hi.raycastTarget = false;
+                    var hg = head.gameObject.AddComponent<UnityEngine.UI.Outline>();
+                    hg.effectColor = new Color(0f, 0f, 0f, 0.55f); hg.effectDistance = new Vector2(1.5f, -1.5f);
+                    arrowPool.Add((lr, line, head, hi));
+                }
+                var (l, li, h, hi2) = arrowPool[used++];
+                l.gameObject.SetActive(true); h.gameObject.SetActive(true);
+                float ang = Mathf.Atan2(d.y, d.x) * Mathf.Rad2Deg;
+                var dir = d / len;
+                const float headLen = 34f;
+                l.anchoredPosition = a;
+                l.sizeDelta = new Vector2(Mathf.Max(0f, len - headLen + 4f), 8f);
+                l.localEulerAngles = new Vector3(0, 0, ang);
+                h.anchoredPosition = b - dir * (headLen / 2f);
+                h.sizeDelta = new Vector2(headLen, 30f);
+                h.localEulerAngles = new Vector3(0, 0, ang);
+                li.color = col; hi2.color = col;
+            }
+
+            foreach (var ar in State.Arrows)
+            {
+                if (!EndPoint(ar.From, 0, out var a) || !EndPoint(ar.To, ar.ToPlayer, out var b)) continue;
+                int seat = State.Players.FindIndex(p => p.Id == ar.By);
+                var col = Color.Lerp(Theme.PlayerColor(Mathf.Max(0, seat)), Color.white, 0.15f);
+                col.a = 0.92f;
+                Draw(a, b, col);
+            }
+            // Pointing right now: an arrow from the card to the mouse, pulsing.
+            if (pointFrom >= 0)
+            {
+                if (!State.Cards.ContainsKey(pointFrom)) pointFrom = -1;
+                else if (EndPoint(pointFrom, 0, out var a))
+                {
+                    var col = new Color(1f, 0.85f, 0.35f, 0.65f + 0.3f * Mathf.Sin(Time.unscaledTime * 8f));
+                    Draw(a, ToBoard(Input.mousePosition), col);
+                }
+            }
+            for (int i = used; i < arrowPool.Count; i++)
+            {
+                if (arrowPool[i].line.gameObject.activeSelf) arrowPool[i].line.gameObject.SetActive(false);
+                if (arrowPool[i].head.gameObject.activeSelf) arrowPool[i].head.gameObject.SetActive(false);
+            }
+        }
+
         void LateUpdate()
         {
             if (State == null || noteLayer == null) return;
+            DrawArrows();
             foreach (var id in noteLabels.Keys.ToList())
             {
                 bool keep = State.Cards.TryGetValue(id, out var nc) && nc.Zone == "Battlefield" && (!string.IsNullOrEmpty(nc.Note) || nc.Sick)
@@ -1128,6 +1273,14 @@ namespace MTGUnited
             if (ctrl && Input.GetKeyDown(KeyCode.Z)) { Sound.Play(Sfx.CardSlide, 0.5f); Run(A("undo")); return; }
             if (ctrl) return;
             bool shift = Input.GetKey(KeyCode.LeftShift) || Input.GetKey(KeyCode.RightShift);
+            if (pointFrom >= 0 && Input.GetKeyDown(KeyCode.Escape)) { CancelPointing(); return; }
+            if (Input.GetKeyDown(KeyCode.A) && shift) { ClearMyArrows(); return; }
+            if (Input.GetKeyDown(KeyCode.A) && hovered != null && !hovered.IsExiting && State.Cards.ContainsKey(hovered.CardId))
+            {
+                if (pointFrom >= 0 && pointFrom != hovered.CardId) FinishPointing(hovered.CardId, 0);   // A again over the target
+                else StartPointing(hovered.CardId);
+                return;
+            }
             if (Input.GetKeyDown(KeyCode.Escape) && selected.Count > 0) { ClearSelection(); return; }
             // Over a card (or with cards selected): card keys. Over a pile: its top card. Otherwise: table keys.
             bool cardKeys = (hovered != null && !hovered.IsExiting && State.Cards.ContainsKey(hovered.CardId)) || selected.Count > 0;
@@ -1468,6 +1621,7 @@ namespace MTGUnited
                 // Ctrl+click a seat's nameplate (life total included): look at the table from their side.
                 panel.Clicked = () =>
                 {
+                    if (table.pointFrom >= 0 && PlayerId >= 0) { table.FinishPointing(-1, PlayerId); return; }   // pointing at this player
                     bool ctrl = Input.GetKey(KeyCode.LeftControl) || Input.GetKey(KeyCode.RightControl);
                     if (ctrl && !table.Networked && PlayerId >= 0) { table.SitAt(PlayerId); Sound.Play(Sfx.CardSlide, 0.6f); }
                 };

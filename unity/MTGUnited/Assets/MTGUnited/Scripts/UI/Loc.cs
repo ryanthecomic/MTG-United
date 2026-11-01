@@ -233,6 +233,11 @@ Pay|Pagar|Pagar
 Don't pay|Não pagar|No pagar
 right-click: all revealed cards|botão direito: todas as cartas reveladas|clic derecho: todas las cartas reveladas
 Error log|Log de erros|Registro de errores
+Click the card or player it points at (Esc to cancel).|Clique na carta ou jogador para onde ela aponta (Esc cancela).|Haz clic en la carta o jugador al que apunta (Esc cancela).
+Point at a card or player…|Apontar para uma carta ou jogador…|Apuntar a una carta o jugador…
+Clear my arrows|Limpar minhas setas|Borrar mis flechas
+Point at a card or player (then click it); pointing again removes the arrow|Apontar para uma carta ou jogador (depois clique nele); apontar de novo remove a seta|Apuntar a una carta o jugador (luego haz clic); apuntar otra vez quita la flecha
+Clear your arrows (they also clear each turn)|Limpar suas setas (elas também somem a cada turno)|Borrar tus flechas (también se borran cada turno)
 Download Java|Baixar Java|Descargar Java
 Copy output|Copiar saída|Copiar salida
 Opening Java's download page. Install it, then restart MTG United.|Abrindo a página de download do Java. Instale e depois reinicie o MTG United.|Abriendo la página de descarga de Java. Instálalo y reinicia MTG United.

@@ -73,6 +73,25 @@ namespace MTGUnited
                     Say((by?.Name ?? "") + " removed " + (c.FaceDown && c.Zone == "Battlefield" ? "a face-down card" : c.Name) + " from the game.");
                     Delete(id);
                     break;
+                case "arrow":
+                {
+                    // Point from one card at another card or a player; pointing the same way again removes it.
+                    if (c == null) break;
+                    int to = a.Int("to", -1), tp = a.Int("tp", 0), who = by?.Id ?? 0;
+                    int found = Arrows.FindIndex(x => x.From == id && x.To == to && x.ToPlayer == tp);
+                    if (found >= 0) { Arrows.RemoveAt(found); break; }
+                    Arrows.Add(new TableArrow { From = id, To = to, ToPlayer = tp, By = who });
+                    string target = tp > 0 ? Player(tp)?.Name ?? "a player" : Cards.TryGetValue(to, out var tc) ? (tc.FaceDown && tc.Zone == "Battlefield" ? "a face-down card" : tc.Name) : "a card";
+                    string source = c.FaceDown || c.Zone == "Hand" || c.Zone == "Library" ? "a card" : c.Name;
+                    Say((by?.Name ?? "") + ": " + source + " → " + target);
+                    break;
+                }
+                case "arrowsclear":
+                {
+                    int who = by?.Id ?? 0;
+                    Arrows.RemoveAll(x => x.By == who);
+                    break;
+                }
                 case "sick":
                     if (c != null) c.Sick = a.Bool("v");
                     break;
@@ -175,6 +194,7 @@ namespace MTGUnited
             return new Dictionary<string, object>
             {
                 { "turn", Turn }, { "active", Active }, { "next", nextId },
+                { "arrows", Arrows.Select(x => (object)new Dictionary<string, object> { { "f", x.From }, { "t", x.To }, { "tp", x.ToPlayer }, { "by", x.By } }).ToList() },
                 { "players", players }, { "cards", cards }, { "log", Log.GetRange(from, Log.Count - from).Cast<object>().ToList() },
             };
         }
@@ -208,6 +228,8 @@ namespace MTGUnited
                 s.Cards[c.Id] = c;
             }
             foreach (var l in d.Arr("log")) s.Log.Add(l as string);
+            foreach (var o in d.Arr("arrows"))
+                if (o is Dictionary<string, object> j) s.Arrows.Add(new TableArrow { From = j.Int("f"), To = j.Int("t", -1), ToPlayer = j.Int("tp"), By = j.Int("by") });
             return s;
         }
 

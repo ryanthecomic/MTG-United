@@ -158,8 +158,8 @@ TABLE_KEYS = sheet("Kitchen Table shortcuts", "Keyboard", [
     [("Cards (under the mouse, or selected):", ""), ("Space", "Tap / untap"), ("Q / E", "Turn left / right"), ("F", "Transform / face down"),
      ("U / I", "+1/+1 / −1/−1 counter"), ("O / Shift+O", "Add / remove a counter"), ("Z", "Summoning sick"), ("K", "Copy (token)"),
      ("H / D / S", "To hand / graveyard / exile"), ("T / Y", "Top / bottom of the deck"), ("Shift+N", "Note on the card"),
-     ("Hold Alt", "Big view of the card")],
-], height=850)
+     ("A", "Point at a card or player"), ("Shift+A", "Clear your arrows"), ("Hold Alt", "Big view of the card")],
+], height=940)
 
 JOBS = [("banner", BANNER), ("how-it-works", HOW), ("getting-started", START), ("modes", MODES),
         ("shortcuts-rules-engine", FORGE_KEYS), ("shortcuts-kitchen-table", TABLE_KEYS)]

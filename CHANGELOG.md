@@ -24,6 +24,10 @@
   lights up your whole panel. Right-click your library to see its revealed cards.
 - Set codes and years are hidden from AI deck names (Options → Gameplay to show them).
 
+**Kitchen Table**
+- Arrows: point a card at another card or a player (A, or the card's menu) so everyone at the table, LAN included,
+  sees what's affecting what. Pointing again removes it; Shift+A clears yours; they clear each turn.
+
 **Everything else**
 - Language: Português (Brasil), English and Español (Options → Gameplay → Language). Switches live.
 - Animation speed: Normal plays the motion doc's exact timings; Fast caps every animation at 400 ms.

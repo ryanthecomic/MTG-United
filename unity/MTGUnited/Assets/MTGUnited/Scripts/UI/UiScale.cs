@@ -43,6 +43,14 @@ namespace MTGUnited
             set => PlayerPrefs.SetFloat("previewDelay", Mathf.Clamp(value, 0f, 3f));
         }
 
+        /// <summary>
+        /// How far the window extends past the 1920x1080 board on each side (board units; 0 when the window has
+        /// exactly that shape). HUD corners are pinned out by this much so they sit on the real window edges
+        /// instead of floating inside a letterboxed frame (16:10 screens, windows shorter than the taskbar...).
+        /// Set every frame by GameController.
+        /// </summary>
+        public static Vector2 Extra;
+
         /// <summary>Scales a board point away from an origin, e.g. a pile position that grows with the HUD.</summary>
         public static Vector2 About(Vector2 point, Vector2 origin) => origin + (point - origin) * Value;
     }
@@ -55,6 +63,8 @@ namespace MTGUnited
     public class UiScaled : MonoBehaviour
     {
         public Vector2 Origin;
+        /// <summary>Which window edges this element hugs (-1 left/bottom, +1 right/top, 0 none). From the origin by default.</summary>
+        public Vector2 Pin;
         /// <summary>Cap so a big panel never grows past the screen (1080 board units tall).</summary>
         public float MaxScale = 99f;
         Vector2 basePos, applied;
@@ -65,6 +75,9 @@ namespace MTGUnited
             var u = c.gameObject.GetComponent<UiScaled>();
             if (u == null) u = c.gameObject.AddComponent<UiScaled>();
             u.Origin = origin;
+            // A corner origin means a corner element: pin it to that corner of the window.
+            u.Pin = origin == Vector2.zero ? Vector2.zero
+                : new Vector2(origin.x < 640 ? -1 : origin.x > 1280 ? 1 : 0, origin.y < 360 ? -1 : origin.y > 720 ? 1 : 0);
             return u;
         }
 
@@ -73,7 +86,7 @@ namespace MTGUnited
             var rt = (RectTransform)transform;
             float s = Mathf.Min(UiScale.Value, MaxScale);
             if (!has || rt.anchoredPosition != applied) { basePos = rt.anchoredPosition; has = true; }
-            applied = Origin + (basePos - Origin) * s;
+            applied = Origin + (basePos - Origin) * s + Vector2.Scale(Pin, UiScale.Extra);
             rt.anchoredPosition = applied;
             if (!Mathf.Approximately(rt.localScale.x, s)) rt.localScale = new Vector3(s, s, 1f);
         }

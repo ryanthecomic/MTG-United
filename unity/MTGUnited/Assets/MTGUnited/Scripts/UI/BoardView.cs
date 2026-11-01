@@ -27,7 +27,7 @@ namespace MTGUnited
         float MyOtherRowY => MyFieldBottom + 8f + MyCardH / 2f;
         float MyCreatureRowY => MyOtherRowY + MyCardH + 18f;
         static float HandCardH => 220f * UiScale.CardScale;
-        static float HandY => 70f + (HandCardH - 220f) * 0.25f;
+        static float HandY => 70f + (HandCardH - 220f) * 0.25f - UiScale.Extra.y;   // follows the window's bottom edge
         const float HandLeft = 410;   // clear of my nameplate
         const float OppBandBottom = 600, OppHeaderH = 118, OppPanelW = 400;
         const float MyCommanderH = 180;
@@ -153,7 +153,7 @@ namespace MTGUnited
                 if (focused) panel.MoveTo(12, 1080 - OppHeaderH - 8, pw, OppHeaderH);
                 else panel.MoveTo(x0 + colW / 2f - pw / 2f, 1080 - OppHeaderH - 8, pw, OppHeaderH);
                 panel.Faded = focused;
-                UiScaled.Add(panel, focused ? new Vector2(12, 1072) : plateOrigin);
+                UiScaled.Add(panel, focused ? new Vector2(12, 1072) : plateOrigin).Pin = new Vector2(focused ? -1 : 0, 1);   // to the top edge, over its column
                 panel.Render(p, s, false);
                 panelCenters[p.Id] = focused ? new Vector2(12 + pw * UiScale.Value / 2f, 1072 - headerH / 2f) : new Vector2(x0 + colW / 2f, 1072 - headerH / 2f);
 

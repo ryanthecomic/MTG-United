@@ -236,6 +236,7 @@ namespace MTGUnited
             }
 
             UpdateAltZoom();
+            UpdateEdges();
 
             int budget = 50;
             while (budget-- > 0 && Bridge.TryReceive(out var msg))
@@ -244,6 +245,22 @@ namespace MTGUnited
                 catch (Exception ex) { ErrorReporter.Report(ex, "handling the message '" + msg.Str("t") + "' from Forge"); }
             }
             HandleKeys();
+        }
+
+        RectTransform canvasRect;
+
+        /// <summary>Keeps HUD corners on the real window edges when the window isn't exactly 16:9.</summary>
+        void UpdateEdges()
+        {
+            if (canvasRect == null && Board != null) canvasRect = Board.parent as RectTransform;
+            if (canvasRect == null) return;
+            var r = canvasRect.rect;
+            var extra = new Vector2(Mathf.Max(0f, (r.width - 1920f) / 2f), Mathf.Max(0f, (r.height - 1080f) / 2f));
+            if ((extra - UiScale.Extra).sqrMagnitude < 0.25f) return;
+            UiScale.Extra = extra;
+            // Re-flow what lays itself out (hands follow the bottom edge).
+            if (InGame && State != null && BoardView != null) BoardView.Render(State);
+            if (Table != null && Table.IsOpen) Table.Render();
         }
 
         /// <summary>
