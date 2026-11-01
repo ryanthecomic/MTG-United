@@ -16,12 +16,6 @@ public abstract class GuiBaseCompat implements forge.gui.interfaces.IGuiBase {
     public java.lang.String getCurrentVersion() {
         return (java.lang.String) onGuiCall("getCurrentVersion", new Object[0]);
     }
-    public java.lang.String getAssetsDir() {
-        return (java.lang.String) onGuiCall("getAssetsDir", new Object[0]);
-    }
-    public forge.util.ImageFetcher getImageFetcher() {
-        return (forge.util.ImageFetcher) onGuiCall("getImageFetcher", new Object[0]);
-    }
     public void invokeInEdtNow(java.lang.Runnable a0) {
         onGuiCall("invokeInEdtNow", new Object[] { a0 });
     }
@@ -31,9 +25,18 @@ public abstract class GuiBaseCompat implements forge.gui.interfaces.IGuiBase {
     public void invokeInEdtAndWait(java.lang.Runnable a0) {
         onGuiCall("invokeInEdtAndWait", new Object[] { a0 });
     }
+    public void runBackgroundTask(java.lang.String a0, java.lang.Runnable a1) {
+        onGuiCall("runBackgroundTask", new Object[] { a0, a1 });
+    }
     public boolean isGuiThread() {
         final Object r = onGuiCall("isGuiThread", new Object[0]);
         return r instanceof Boolean b && b;
+    }
+    public java.lang.String getAssetsDir() {
+        return (java.lang.String) onGuiCall("getAssetsDir", new Object[0]);
+    }
+    public forge.util.ImageFetcher getImageFetcher() {
+        return (forge.util.ImageFetcher) onGuiCall("getImageFetcher", new Object[0]);
     }
     public forge.localinstance.skin.ISkinImage getSkinIcon(forge.localinstance.skin.FSkinProp a0) {
         return (forge.localinstance.skin.ISkinImage) onGuiCall("getSkinIcon", new Object[] { a0 });
@@ -41,14 +44,48 @@ public abstract class GuiBaseCompat implements forge.gui.interfaces.IGuiBase {
     public forge.localinstance.skin.ISkinImage getUnskinnedIcon(java.lang.String a0) {
         return (forge.localinstance.skin.ISkinImage) onGuiCall("getUnskinnedIcon", new Object[] { a0 });
     }
-    public forge.localinstance.skin.ISkinImage getCardArt(forge.item.PaperCard a0) {
-        return (forge.localinstance.skin.ISkinImage) onGuiCall("getCardArt", new Object[] { a0 });
-    }
     public forge.localinstance.skin.ISkinImage getCardArt(forge.item.PaperCard a0, boolean a1) {
         return (forge.localinstance.skin.ISkinImage) onGuiCall("getCardArt", new Object[] { a0, a1 });
     }
     public forge.localinstance.skin.ISkinImage createLayeredImage(forge.item.PaperCard a0, forge.localinstance.skin.FSkinProp a1, java.lang.String a2, float a3) {
         return (forge.localinstance.skin.ISkinImage) onGuiCall("createLayeredImage", new Object[] { a0, a1, a2, a3 });
+    }
+    public void clearImageCache() {
+        onGuiCall("clearImageCache", new Object[0]);
+    }
+    public java.lang.String encodeSymbols(java.lang.String a0, boolean a1) {
+        return (java.lang.String) onGuiCall("encodeSymbols", new Object[] { a0, a1 });
+    }
+    public int getAvatarCount() {
+        final Object r = onGuiCall("getAvatarCount", new Object[0]);
+        return r instanceof Number n ? n.intValue() : 0;
+    }
+    public int getSleevesCount() {
+        final Object r = onGuiCall("getSleevesCount", new Object[0]);
+        return r instanceof Number n ? n.intValue() : 0;
+    }
+    public float getScreenScale() {
+        final Object r = onGuiCall("getScreenScale", new Object[0]);
+        return r instanceof Number n ? n.floatValue() : 0;
+    }
+    public void preventSystemSleep(boolean a0) {
+        onGuiCall("preventSystemSleep", new Object[] { a0 });
+    }
+    public void download(forge.gui.download.GuiDownloadService a0, java.util.function.Consumer<java.lang.Boolean> a1) {
+        onGuiCall("download", new Object[] { a0, a1 });
+    }
+    public void copyToClipboard(java.lang.String a0) {
+        onGuiCall("copyToClipboard", new Object[] { a0 });
+    }
+    public void browseToUrl(java.lang.String a0) throws java.io.IOException, java.net.URISyntaxException {
+        onGuiCall("browseToUrl", new Object[] { a0 });
+    }
+    public void showCardList(java.lang.String a0, java.lang.String a1, java.util.List<forge.item.PaperCard> a2) {
+        onGuiCall("showCardList", new Object[] { a0, a1, a2 });
+    }
+    public boolean showBoxedProduct(java.lang.String a0, java.lang.String a1, java.util.List<forge.item.PaperCard> a2) {
+        final Object r = onGuiCall("showBoxedProduct", new Object[] { a0, a1, a2 });
+        return r instanceof Boolean b && b;
     }
     public void showBugReportDialog(java.lang.String a0, java.lang.String a1, boolean a2) {
         onGuiCall("showBugReportDialog", new Object[] { a0, a1, a2 });
@@ -63,47 +100,20 @@ public abstract class GuiBaseCompat implements forge.gui.interfaces.IGuiBase {
     public java.lang.String showInputDialog(java.lang.String a0, java.lang.String a1, forge.localinstance.skin.FSkinProp a2, java.lang.String a3, java.util.List<java.lang.String> a4, boolean a5) {
         return (java.lang.String) onGuiCall("showInputDialog", new Object[] { a0, a1, a2, a3, a4, a5 });
     }
-    public <T> java.util.List<T> getChoices(java.lang.String a0, int a1, int a2, java.util.Collection<T> a3, java.util.Collection<T> a4, forge.util.FSerializableFunction<T,java.lang.String> a5) {
-        return (java.util.List<T>) onGuiCall("getChoices", new Object[] { a0, a1, a2, a3, a4, a5 });
-    }
-    public <T> java.util.List<T> order(java.lang.String a0, java.lang.String a1, int a2, int a3, java.util.List<T> a4, java.util.List<T> a5) {
-        return (java.util.List<T>) onGuiCall("order", new Object[] { a0, a1, a2, a3, a4, a5 });
-    }
     public java.lang.String showFileDialog(java.lang.String a0, java.lang.String a1) {
         return (java.lang.String) onGuiCall("showFileDialog", new Object[] { a0, a1 });
     }
     public java.io.File getSaveFile(java.io.File a0) {
         return (java.io.File) onGuiCall("getSaveFile", new Object[] { a0 });
     }
-    public void download(forge.gui.download.GuiDownloadService a0, java.util.function.Consumer<java.lang.Boolean> a1) {
-        onGuiCall("download", new Object[] { a0, a1 });
+    public <T> java.util.List<T> order(java.lang.String a0, java.lang.String a1, int a2, int a3, java.util.List<T> a4, java.util.List<T> a5) {
+        return (java.util.List<T>) onGuiCall("order", new Object[] { a0, a1, a2, a3, a4, a5 });
     }
-    public void refreshSkin() {
-        onGuiCall("refreshSkin", new Object[0]);
-    }
-    public void showCardList(java.lang.String a0, java.lang.String a1, java.util.List<forge.item.PaperCard> a2) {
-        onGuiCall("showCardList", new Object[] { a0, a1, a2 });
-    }
-    public boolean showBoxedProduct(java.lang.String a0, java.lang.String a1, java.util.List<forge.item.PaperCard> a2) {
-        final Object r = onGuiCall("showBoxedProduct", new Object[] { a0, a1, a2 });
-        return r instanceof Boolean b && b;
+    public <T> java.util.List<T> getChoices(java.lang.String a0, int a1, int a2, java.util.Collection<T> a3, java.util.Collection<T> a4, forge.util.FSerializableFunction<T,java.lang.String> a5) {
+        return (java.util.List<T>) onGuiCall("getChoices", new Object[] { a0, a1, a2, a3, a4, a5 });
     }
     public forge.item.PaperCard chooseCard(java.lang.String a0, java.lang.String a1, java.util.List<forge.item.PaperCard> a2) {
         return (forge.item.PaperCard) onGuiCall("chooseCard", new Object[] { a0, a1, a2 });
-    }
-    public int getAvatarCount() {
-        final Object r = onGuiCall("getAvatarCount", new Object[0]);
-        return r instanceof Number n ? n.intValue() : 0;
-    }
-    public int getSleevesCount() {
-        final Object r = onGuiCall("getSleevesCount", new Object[0]);
-        return r instanceof Number n ? n.intValue() : 0;
-    }
-    public void copyToClipboard(java.lang.String a0) {
-        onGuiCall("copyToClipboard", new Object[] { a0 });
-    }
-    public void browseToUrl(java.lang.String a0) throws java.io.IOException, java.net.URISyntaxException {
-        onGuiCall("browseToUrl", new Object[] { a0 });
     }
     public boolean isSupportedAudioFormat(java.io.File a0) {
         final Object r = onGuiCall("isSupportedAudioFormat", new Object[] { a0 });
@@ -118,9 +128,6 @@ public abstract class GuiBaseCompat implements forge.gui.interfaces.IGuiBase {
     public void startAltSoundSystem(java.lang.String a0, boolean a1) {
         onGuiCall("startAltSoundSystem", new Object[] { a0, a1 });
     }
-    public void clearImageCache() {
-        onGuiCall("clearImageCache", new Object[0]);
-    }
     public void showSpellShop() {
         onGuiCall("showSpellShop", new Object[0]);
     }
@@ -133,20 +140,11 @@ public abstract class GuiBaseCompat implements forge.gui.interfaces.IGuiBase {
     public forge.gamemodes.match.HostedMatch hostMatch() {
         return (forge.gamemodes.match.HostedMatch) onGuiCall("hostMatch", new Object[0]);
     }
-    public void runBackgroundTask(java.lang.String a0, java.lang.Runnable a1) {
-        onGuiCall("runBackgroundTask", new Object[] { a0, a1 });
-    }
-    public java.lang.String encodeSymbols(java.lang.String a0, boolean a1) {
-        return (java.lang.String) onGuiCall("encodeSymbols", new Object[] { a0, a1 });
-    }
-    public void preventSystemSleep(boolean a0) {
-        onGuiCall("preventSystemSleep", new Object[] { a0 });
-    }
-    public float getScreenScale() {
-        final Object r = onGuiCall("getScreenScale", new Object[0]);
-        return r instanceof Number n ? n.floatValue() : 0;
-    }
     public org.jupnp.UpnpServiceConfiguration getUpnpPlatformService() {
         return (org.jupnp.UpnpServiceConfiguration) onGuiCall("getUpnpPlatformService", new Object[0]);
+    }
+    public boolean hasNetGame() {
+        final Object r = onGuiCall("hasNetGame", new Object[0]);
+        return r instanceof Boolean b && b;
     }
 }
