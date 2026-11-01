@@ -13,8 +13,11 @@ public abstract class GuiGameCompat extends forge.gamemodes.match.AbstractGuiGam
     public void showCombat() {
         onGuiCall("showCombat", new Object[0]);
     }
-    public void showPromptMessage(forge.game.player.PlayerView a0, java.lang.String a1, forge.game.card.CardView a2) {
-        onGuiCall("showPromptMessage", new Object[] { a0, a1, a2 });
+    public void showPromptMessage(forge.game.player.PlayerView a0, java.lang.String a1) {
+        onGuiCall("showPromptMessage", new Object[] { a0, a1 });
+    }
+    public void showCardPromptMessage(forge.game.player.PlayerView a0, java.lang.String a1, forge.game.card.CardView a2) {
+        onGuiCall("showCardPromptMessage", new Object[] { a0, a1, a2 });
     }
     public void updateButtons(forge.game.player.PlayerView a0, java.lang.String a1, java.lang.String a2, boolean a3, boolean a4, boolean a5) {
         onGuiCall("updateButtons", new Object[] { a0, a1, a2, a3, a4, a5 });
@@ -25,8 +28,56 @@ public abstract class GuiGameCompat extends forge.gamemodes.match.AbstractGuiGam
     public void alertUser() {
         onGuiCall("alertUser", new Object[0]);
     }
+    public void updatePhase(boolean a0) {
+        onGuiCall("updatePhase", new Object[] { a0 });
+    }
+    public void updateTurn(forge.game.player.PlayerView a0) {
+        onGuiCall("updateTurn", new Object[] { a0 });
+    }
+    public void updatePlayerControl() {
+        onGuiCall("updatePlayerControl", new Object[0]);
+    }
+    public void enableOverlay() {
+        onGuiCall("enableOverlay", new Object[0]);
+    }
+    public void disableOverlay() {
+        onGuiCall("disableOverlay", new Object[0]);
+    }
     public void finishGame() {
         onGuiCall("finishGame", new Object[0]);
+    }
+    public void showManaPool(forge.game.player.PlayerView a0) {
+        onGuiCall("showManaPool", new Object[] { a0 });
+    }
+    public void hideManaPool(forge.game.player.PlayerView a0) {
+        onGuiCall("hideManaPool", new Object[] { a0 });
+    }
+    public void updateStack() {
+        onGuiCall("updateStack", new Object[0]);
+    }
+    public java.lang.Iterable<forge.player.PlayerZoneUpdate> tempShowZones(forge.game.player.PlayerView a0, java.lang.Iterable<forge.player.PlayerZoneUpdate> a1) {
+        return (java.lang.Iterable<forge.player.PlayerZoneUpdate>) onGuiCall("tempShowZones", new Object[] { a0, a1 });
+    }
+    public void hideZones(forge.game.player.PlayerView a0, java.lang.Iterable<forge.player.PlayerZoneUpdate> a1) {
+        onGuiCall("hideZones", new Object[] { a0, a1 });
+    }
+    public void updateZones(java.lang.Iterable<forge.player.PlayerZoneUpdate> a0) {
+        onGuiCall("updateZones", new Object[] { a0 });
+    }
+    public void updateCards(java.lang.Iterable<forge.game.card.CardView> a0) {
+        onGuiCall("updateCards", new Object[] { a0 });
+    }
+    public forge.ai.GameState getGamestate() {
+        return (forge.ai.GameState) onGuiCall("getGamestate", new Object[0]);
+    }
+    public void updateManaPool(java.lang.Iterable<forge.game.player.PlayerView> a0) {
+        onGuiCall("updateManaPool", new Object[] { a0 });
+    }
+    public void updateLives(java.lang.Iterable<forge.game.player.PlayerView> a0) {
+        onGuiCall("updateLives", new Object[] { a0 });
+    }
+    public void updateShards(java.lang.Iterable<forge.game.player.PlayerView> a0) {
+        onGuiCall("updateShards", new Object[] { a0 });
     }
     public void setPanelSelection(forge.game.card.CardView a0) {
         onGuiCall("setPanelSelection", new Object[] { a0 });
@@ -64,8 +115,8 @@ public abstract class GuiGameCompat extends forge.gamemodes.match.AbstractGuiGam
     public <T> java.util.List<T> getChoices(java.lang.String a0, int a1, int a2, java.util.List<T> a3, java.util.List<T> a4, forge.util.FSerializableFunction<T,java.lang.String> a5) {
         return (java.util.List<T>) onGuiCall("getChoices", new Object[] { a0, a1, a2, a3, a4, a5 });
     }
-    public <T> forge.gui.interfaces.IGuiGame.OrderResult<T> order(java.lang.String a0, java.lang.String a1, int a2, int a3, java.util.List<T> a4, java.util.List<T> a5, forge.game.card.CardView a6, boolean a7, boolean a8) {
-        return (forge.gui.interfaces.IGuiGame.OrderResult<T>) onGuiCall("order", new Object[] { a0, a1, a2, a3, a4, a5, a6, a7, a8 });
+    public <T> java.util.List<T> order(java.lang.String a0, java.lang.String a1, int a2, int a3, java.util.List<T> a4, java.util.List<T> a5, forge.game.card.CardView a6, boolean a7) {
+        return (java.util.List<T>) onGuiCall("order", new Object[] { a0, a1, a2, a3, a4, a5, a6, a7 });
     }
     public java.util.List<forge.item.PaperCard> sideboard(forge.deck.CardPool a0, forge.deck.CardPool a1, java.lang.String a2) {
         return (java.util.List<forge.item.PaperCard>) onGuiCall("sideboard", new Object[] { a0, a1, a2 });
@@ -85,6 +136,12 @@ public abstract class GuiGameCompat extends forge.gamemodes.match.AbstractGuiGam
     public void setPlayerAvatar(forge.LobbyPlayer a0, forge.game.player.IHasIcon a1) {
         onGuiCall("setPlayerAvatar", new Object[] { a0, a1 });
     }
+    public forge.player.PlayerZoneUpdates openZones(forge.game.player.PlayerView a0, java.util.Collection<forge.game.zone.ZoneType> a1, java.util.Map<forge.game.player.PlayerView,java.lang.Object> a2, boolean a3) {
+        return (forge.player.PlayerZoneUpdates) onGuiCall("openZones", new Object[] { a0, a1, a2, a3 });
+    }
+    public void restoreOldZones(forge.game.player.PlayerView a0, forge.player.PlayerZoneUpdates a1) {
+        onGuiCall("restoreOldZones", new Object[] { a0, a1 });
+    }
     public boolean isUiSetToSkipPhase(forge.game.player.PlayerView a0, forge.game.phase.PhaseType a1) {
         final Object r = onGuiCall("isUiSetToSkipPhase", new Object[] { a0, a1 });
         return r instanceof Boolean b && b;
@@ -92,8 +149,20 @@ public abstract class GuiGameCompat extends forge.gamemodes.match.AbstractGuiGam
     protected void updateCurrentPlayer(forge.game.player.PlayerView a0) {
         onGuiCall("updateCurrentPlayer", new Object[] { a0 });
     }
-    public void setSelection(forge.gamemodes.match.Selection a0) {
-        super.setSelection(a0);
-        onGuiEvent("setSelection", new Object[] { a0 });
+    public void setHighlighted(forge.game.player.PlayerView a0, boolean a1) {
+        super.setHighlighted(a0, a1);
+        onGuiEvent("setHighlighted", new Object[] { a0, a1 });
+    }
+    public void setUsedToPay(forge.game.card.CardView a0, boolean a1) {
+        super.setUsedToPay(a0, a1);
+        onGuiEvent("setUsedToPay", new Object[] { a0, a1 });
+    }
+    public void setSelectables(java.lang.Iterable<forge.game.card.CardView> a0) {
+        super.setSelectables(a0);
+        onGuiEvent("setSelectables", new Object[] { a0 });
+    }
+    public void clearSelectables() {
+        super.clearSelectables();
+        onGuiEvent("clearSelectables", new Object[0]);
     }
 }

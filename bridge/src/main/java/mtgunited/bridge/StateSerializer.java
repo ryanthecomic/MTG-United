@@ -243,15 +243,15 @@ final class StateSerializer {
         o.addProperty("isCreature", st.isCreature());
         o.addProperty("isLand", st.isLand());
         o.addProperty("isPlaneswalker", st.isPlaneswalker());
-        o.addProperty("isInstant", st.isInstant());
-        o.addProperty("isSorcery", st.isSorcery());
+        o.addProperty("isInstant", Compat.is(st, "isInstant"));
+        o.addProperty("isSorcery", Compat.is(st, "isSorcery"));
         o.addProperty("isArtifact", st.isArtifact());
         o.addProperty("isEnchantment", st.isEnchantment());
         o.addProperty("isBattle", st.isBattle());
         // Keywords the client animates (combat poses, impact colours).
         final JsonArray kw = new JsonArray();
         for (final Keyword k : ANIMATED_KEYWORDS) {
-            if (st.hasKeyword(k)) { kw.add(k.name()); }
+            if (Compat.hasKeyword(st, k)) { kw.add(k.name()); }
         }
         o.add("keywords", kw);
         if (st.isCreature() || st.isVehicle()) {
@@ -275,7 +275,7 @@ final class StateSerializer {
         o.addProperty("id", si.getId());
         o.addProperty("text", si.getText());
         o.addProperty("isAbility", si.isAbility());
-        o.addProperty("isTrigger", si.isTrigger());
+        o.addProperty("isTrigger", Compat.is(si, "isTrigger"));
         final CardView src = si.getSourceCard();
         o.addProperty("sourceCard", src == null ? -1 : src.getId());
         o.add("source", src == null ? null : card(src));
@@ -369,13 +369,21 @@ final class StateSerializer {
         return r;
     }
 
-    private static JsonObject counters(final Multiset<CounterType> counters) {
+    /** Counters: a Multiset in newer Forge, a Map (type -> count) in older Forge. */
+    private static JsonObject counters(final Object counters) {
         final JsonObject o = new JsonObject();
-        if (counters == null) { return o; }
-        for (final Multiset.Entry<CounterType> e : counters.entrySet()) {
-            o.addProperty(e.getElement().getName(), e.getCount());
+        if (counters instanceof Multiset<?> ms) {
+            for (final Multiset.Entry<?> e : ms.entrySet()) { o.addProperty(counterName(e.getElement()), e.getCount()); }
+        } else if (counters instanceof java.util.Map<?, ?> map) {
+            for (final java.util.Map.Entry<?, ?> e : map.entrySet()) {
+                if (e.getValue() instanceof Number n) { o.addProperty(counterName(e.getKey()), n.intValue()); }
+            }
         }
         return o;
+    }
+
+    private static String counterName(final Object type) {
+        return type instanceof CounterType ct ? ct.getName() : String.valueOf(type);
     }
 
     /** Copies a Forge collection so the game thread can keep changing it while we serialize. */

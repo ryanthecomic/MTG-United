@@ -127,7 +127,7 @@ public final class BridgeGuiBase extends GuiBaseCompat {
     public <T> List<T> order(final String title, final String top, final int remainingObjectsMin, final int remainingObjectsMax, final List<T> sourceChoices, final List<T> destChoices) {
         final BridgeGuiGame g = activeGame;
         if (g == null) { return new ArrayList<>(sourceChoices); }
-        return g.order(title, top, remainingObjectsMin, remainingObjectsMax, sourceChoices, destChoices, null, false, false).ordered();
+        return g.orderPick(title, top, remainingObjectsMin, remainingObjectsMax, sourceChoices, destChoices);
     }
 
     public <T> List<T> getChoices(final String message, final int min, final int max, final Collection<T> choices, final Collection<T> selected, final FSerializableFunction<T, String> display) {

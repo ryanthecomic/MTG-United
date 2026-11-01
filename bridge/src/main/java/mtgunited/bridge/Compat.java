@@ -84,6 +84,47 @@ final class Compat {
         }
     }
 
+    /** A boolean accessor (isInstant, isTrigger...) if this Forge has it; else false. */
+    static boolean is(final Object target, final String name) {
+        final Object v = get(target, name);
+        if (v instanceof Boolean b) { return b; }
+        if (v == null && target != null && (name.equals("isInstant") || name.equals("isSorcery"))) {
+            // Older Forge: ask the card type instead.
+            final Object type = get(target, "getType");
+            return Boolean.TRUE.equals(get(type, name));
+        }
+        return false;
+    }
+
+    /** hasKeyword(Keyword), or hasKeyword(String) in Forge versions that take the keyword's name. */
+    static boolean hasKeyword(final Object state, final Enum<?> keyword) {
+        if (state == null) { return false; }
+        for (final Method m : state.getClass().getMethods()) {
+            if (!m.getName().equals("hasKeyword") || m.getParameterCount() != 1) { continue; }
+            try {
+                final Class<?> p = m.getParameterTypes()[0];
+                if (p.isInstance(keyword)) { return Boolean.TRUE.equals(m.invoke(state, keyword)); }
+                if (p == String.class) { return Boolean.TRUE.equals(m.invoke(state, keyword.toString())); }
+            } catch (final Exception ex) {
+                return false;
+            }
+        }
+        return false;
+    }
+
+    /** Wraps a list in Forge's IGuiGame.OrderResult (newer Forge); older Forge wants the list itself. */
+    static Object orderResult(final List<?> picked) {
+        try {
+            final Class<?> rec = Class.forName("forge.gui.interfaces.IGuiGame$OrderResult");
+            for (final java.lang.reflect.Constructor<?> c : rec.getConstructors()) {
+                if (c.getParameterCount() == 2) { return c.newInstance(picked, false); }
+            }
+        } catch (final Exception ex) {
+            once("orderResult", "Couldn't build Forge's OrderResult: " + ex);
+        }
+        return picked;
+    }
+
     @SuppressWarnings("unchecked")
     static <T> List<T> list(final Object o) {
         final List<T> out = new ArrayList<>();

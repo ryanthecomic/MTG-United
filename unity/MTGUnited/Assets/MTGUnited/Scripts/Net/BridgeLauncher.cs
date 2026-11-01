@@ -47,6 +47,13 @@ namespace MTGUnited
         public void Launch()
         {
             if (Running) { lastLine = "already starting..."; return; }
+            int port0 = GameController.Instance != null ? GameController.Instance.Bridge.Port : 7777;
+            if (PortInUse(port0))
+            {
+                // A bridge is already up (started before scripts reloaded, or by hand): use it, don't start a second.
+                lastLine = "A bridge is already running on port " + port0 + "; connecting to it.";
+                return;
+            }
             ForgeSetup.Load();
             string jar = Environment.GetEnvironmentVariable("MTGU_BRIDGE_JAR");
             string forgeGui = Environment.GetEnvironmentVariable("FORGE_GUI_DIR");
@@ -101,6 +108,7 @@ namespace MTGUnited
                 process.Start();
                 process.BeginOutputReadLine();
                 process.BeginErrorReadLine();
+                PlayerPrefs.SetInt("bridgePid", process.Id);   // so a later session (or a script reload) can stop it
                 lastLine = "starting Forge (loading cards takes ~30-60 s)...";
                 ForgeSetup.Log("==> Starting the bridge");
                 Debug.Log("[MTGUnited] Started bridge: " + psi.FileName + " " + psi.Arguments);
@@ -118,7 +126,41 @@ namespace MTGUnited
             try { if (Running) { process.Kill(); process.WaitForExit(3000); } }
             catch { }
             process = null;
+            KillRemembered();
             lastLine = "Bridge stopped.";
+        }
+
+        /// <summary>
+        /// The bridge started last time (its id is remembered), if it's still running: after a script reload in the
+        /// editor the reference to it is lost, and an orphaned bridge keeps its files locked (Update, Uninstall).
+        /// </summary>
+        static void KillRemembered()
+        {
+            int pid = PlayerPrefs.GetInt("bridgePid", 0);
+            if (pid <= 0) return;
+            try
+            {
+                var p = Process.GetProcessById(pid);
+                string name = p.ProcessName.ToLowerInvariant();
+                if (!p.HasExited && (name == "java" || name == "javaw")) { p.Kill(); p.WaitForExit(3000); }
+            }
+            catch { /* already gone */ }
+            PlayerPrefs.DeleteKey("bridgePid");
+        }
+
+        static bool PortInUse(int port)
+        {
+            try
+            {
+                using (var c = new System.Net.Sockets.TcpClient())
+                {
+                    var ar = c.BeginConnect("127.0.0.1", port, null, null);
+                    bool ok = ar.AsyncWaitHandle.WaitOne(150) && c.Connected;
+                    if (ok) c.EndConnect(ar);
+                    return ok;
+                }
+            }
+            catch { return false; }
         }
 
         void OnLine(string line)

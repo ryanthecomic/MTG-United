@@ -43,6 +43,8 @@ namespace MTGUnited
         /// <summary>Tap: a clockwise turning arrow. Untap: the same arrow turning back.</summary>
         public static Sprite Tap => tap ?? (tap = Make(p => TurnArrowSdf(p, false)));
         public static Sprite Untap => untap ?? (untap = Make(p => TurnArrowSdf(p, true)));
+        /// <summary>Refresh / update: the same turning arrow.</summary>
+        public static Sprite Refresh => Untap;
 
         static Sprite copy, export, import, minus, star, starOutline, pencil, fork;
         /// <summary>Kitchen Table tab: a fork (four tines, a rounded neck, a long handle).</summary>

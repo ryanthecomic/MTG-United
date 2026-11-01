@@ -303,7 +303,16 @@ public final class BridgeGuiGame extends GuiGameCompat {
     }
 
     public void resetForNewMatch() {
-        super.resetForNewMatch();
+        // Forge's own reset first, if this Forge version has one.
+        try {
+            java.lang.invoke.MethodHandles.lookup()
+                .findSpecial(AbstractGuiGame.class, "resetForNewMatch", java.lang.invoke.MethodType.methodType(void.class), BridgeGuiGame.class)
+                .invoke(this);
+        } catch (final NoSuchMethodException | IllegalAccessException ex) {
+            // older Forge: nothing to reset there
+        } catch (final Throwable t) {
+            Log.warn("resetForNewMatch failed: " + t);
+        }
         seenNames.clear();
     }
 
@@ -395,9 +404,12 @@ public final class BridgeGuiGame extends GuiGameCompat {
         return result;
     }
 
-    public <T> OrderResult<T> order(final String title, final String top, final int remainingObjectsMin, final int remainingObjectsMax,
-                                    final List<T> sourceChoices, final List<T> destChoices, final CardView referenceCard,
-                                    final boolean sideboardingMode, final boolean showRememberCheckbox) {
+    /**
+     * Forge's order dialog (its signature differs between Forge versions, so Forge's calls arrive through
+     * {@link #onGuiCall}; this is the shared body).
+     */
+    <T> List<T> orderPick(final String title, final String top, final int remainingObjectsMin, final int remainingObjectsMax,
+                          final List<T> sourceChoices, final List<T> destChoices) {
         // Forge's "order" dialog doubles as a pick-several dialog: the player moves items into the result list until
         // between (size - remainingMax) and (size - remainingMin) items are left. We expose it as choose + order.
         final List<T> all = new ArrayList<>(sourceChoices);
@@ -425,7 +437,7 @@ public final class BridgeGuiGame extends GuiGameCompat {
                 if (!result.contains(t)) { result.add(t); }
             }
         }
-        return new OrderResult<>(result, false);
+        return result;
     }
 
     public boolean confirm(final CardView c, final String question, final boolean defaultIsYes, final List<String> options) {
@@ -675,6 +687,14 @@ public final class BridgeGuiGame extends GuiGameCompat {
     // arrives here through the generated GuiGameCompat; for a client that redraws from state, a push is enough.
 
     protected Object onGuiCall(final String method, final Object[] args) {
+        if ("order".equals(method) && args.length >= 3) {
+            // Older Forge: order(title, top, choices, card) / order(..., 8 args) returning a List.
+            // Newer Forge: order(..., 9 args) returning an OrderResult record wrapping the list.
+            final List<Object> picked = args.length >= 6
+                ? orderPick(str(args[0]), str(args[1]), Compat.integer(args[2]), Compat.integer(args[3]), Compat.list(args[4]), args[5] == null ? null : Compat.list(args[5]))
+                : orderPick(str(args[0]), str(args[1]), 0, 0, Compat.list(args[2]), null);
+            return args.length >= 9 ? Compat.orderResult(picked) : picked;
+        }
         if (method.startsWith("update") || method.startsWith("refresh") || method.startsWith("show") || method.startsWith("set")) {
             markDirty();
         } else if (!QUIET.contains(method)) {
@@ -682,6 +702,8 @@ public final class BridgeGuiGame extends GuiGameCompat {
         }
         return null;
     }
+
+    private static String str(final Object o) { return o == null ? "" : o.toString(); }
 
     private static final Set<String> QUIET = Set.of("getGamestate", "applyMacroState", "clearSelectables", "clearWeaklySelectable");
 

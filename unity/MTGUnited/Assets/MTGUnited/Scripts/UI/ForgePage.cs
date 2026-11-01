@@ -255,7 +255,18 @@ namespace MTGUnited
                 foreach (var dir in found)
                 {
                     string d = dir;
-                    Btn("Use " + Short(d), new Color(0.2f, 0.35f, 0.25f), () => ForgeSetup.UseExisting(d), true);
+                    // "Use" it as it is, or (refresh icon) update it to the newest Forge release first.
+                    if (ax > 0) NewRow();
+                    var b = UIKit.Button("Use", actions, "Use " + Short(d), new Color(0.2f, 0.35f, 0.25f), () => ForgeSetup.UseExisting(d), 17);
+                    var r = (RectTransform)b.transform;
+                    r.anchorMin = r.anchorMax = new Vector2(0, 1); r.pivot = new Vector2(0, 1);
+                    r.sizeDelta = new Vector2(490, 48); r.anchoredPosition = new Vector2(0, -ay);
+                    var up = UIKit.IconButton("Update", actions, Icons.Refresh, 0, 0, 48, () => ConfirmUpdate(d), "Update this Forge to the newest release");
+                    var ur = (RectTransform)up.transform;
+                    ur.anchorMin = ur.anchorMax = new Vector2(0, 1); ur.pivot = new Vector2(0, 1);
+                    ur.sizeDelta = new Vector2(48, 48); ur.anchoredPosition = new Vector2(500, -ay);
+                    up.GetComponent<Image>().color = new Color(0.2f, 0.35f, 0.25f);
+                    ax = 560;
                 }
             }
         }
@@ -408,6 +419,14 @@ namespace MTGUnited
             scanned = true;
             ForgeSetup.Log(found.Count == 0 ? "No Forge installs found." : "Found Forge at: " + string.Join(", ", found));
             lastSignature = null;
+        }
+
+        void ConfirmUpdate(string dir)
+        {
+            ConfirmDialog.Instance.Show(Loc.T("Update this Forge?"),
+                Loc.T("MTG United downloads the newest official Forge release from GitHub and installs it over this folder, then builds the bridge for it. Your Forge settings and decks are kept.") + "\n" + dir,
+                (Loc.T("Update"), Theme.Accent, () => ForgeSetup.UpdateExisting(dir)),
+                (Loc.T("Cancel"), Theme.Secondary, null));
         }
 
         void Btn(string label, Color color, UnityEngine.Events.UnityAction a, bool wide = false)

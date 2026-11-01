@@ -15,6 +15,8 @@ param(
     # version this MTG United release was tested with). "latest" falls back to "tested" if it doesn't build.
     [string]$ForgeVersion = "latest",
     [string]$ForgeInstall = "",
+    # Update a Forge found on this PC to the newest official release, then build the bridge against it.
+    [string]$UpdateForge = "",
     [switch]$Uninstall,
     [switch]$KeepData
 )
@@ -48,8 +50,32 @@ function Write-Compat($cp) {
     $e = $LASTEXITCODE
     Pop-Location
     if ($e -ne 0) { return $false }
-    & java -cp $genDir CompatGen (Join-Path $Root "bridge\src\main\java\mtgunited\bridge") -cp $cp | Out-Host
+    & java "-Dstdout.encoding=UTF-8" "-Dsun.stdout.encoding=UTF-8" -cp $genDir CompatGen (Join-Path $Root "bridge\src\main\java\mtgunited\bridge") -cp $cp | Out-Host
     return ($LASTEXITCODE -eq 0)
+}
+
+# Stops any MTG United bridge still running (it keeps its jar locked, so rebuilding or uninstalling would fail).
+function Stop-Bridges {
+    try {
+        Get-CimInstance Win32_Process -Filter "Name='java.exe' OR Name='javaw.exe'" -ErrorAction Stop |
+            Where-Object { $_.CommandLine -like "*mtgunited.bridge*" -or $_.CommandLine -like "*forge-bridge*" } |
+            ForEach-Object { try { Stop-Process -Id $_.ProcessId -Force -ErrorAction Stop; Write-Host "Stopped a running bridge (pid $($_.ProcessId))." } catch {} }
+    } catch {}
+}
+
+# Zips a folder of .class files into a jar (entries with forward slashes, as Java expects).
+function Write-Jar($dir, $jarPath) {
+    Add-Type -AssemblyName System.IO.Compression
+    Add-Type -AssemblyName System.IO.Compression.FileSystem
+    if (Test-Path $jarPath) { Remove-Item -Force $jarPath }
+    $base = (Resolve-Path $dir).Path.TrimEnd('\') + '\'
+    $zip = [System.IO.Compression.ZipFile]::Open($jarPath, [System.IO.Compression.ZipArchiveMode]::Create)
+    try {
+        foreach ($f in Get-ChildItem -Path $dir -Recurse -File) {
+            $name = $f.FullName.Substring($base.Length).Replace('\', '/')
+            [void][System.IO.Compression.ZipFileExtensions]::CreateEntryFromFile($zip, $f.FullName, $name)
+        }
+    } finally { $zip.Dispose() }
 }
 
 # Removes a directory junction without touching what it points to.
@@ -73,8 +99,14 @@ if ($Uninstall) {
         if (Test-Path $data) { Remove-Item -Recurse -Force $data }
     }
     $target = Join-Path $Root "bridge\target"
-    if (Test-Path $target) { Remove-Item -Recurse -Force $target }
-    if (Test-Path $ToolsDir) { Remove-Item -Recurse -Force $ToolsDir }
+    # A bridge that's still running keeps its jar locked: kill MTG United's Java processes, then retry a few times.
+    Stop-Bridges
+    foreach ($dir in @($target, $ToolsDir)) {
+        for ($i = 0; $i -lt 5 -and (Test-Path $dir); $i++) {
+            try { Remove-Item -Recurse -Force $dir -ErrorAction Stop } catch { Start-Sleep -Seconds 1 }
+        }
+        if (Test-Path $dir) { Fail "Couldn't remove $dir (a file in it is still in use). Close MTG United's bridge (or restart the PC) and try again." }
+    }
     if (Test-Path $Config) { Remove-Item -Force $Config }
     Step "Uninstalled. A Forge you pointed MTG United at was not touched."
     exit 0
@@ -95,11 +127,61 @@ if (-not (Get-Command javac -ErrorAction SilentlyContinue)) { Fail "Found a Java
 [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12
 
 # ================================================================= existing Forge
+Stop-Bridges
+
+# ================================================================= update a Forge on this PC
+if ($UpdateForge -ne "") {
+    $UpdateForge = $UpdateForge.TrimEnd('\')
+    Step "Updating the Forge at $UpdateForge to the newest release"
+    if (-not (Test-Path (Join-Path $UpdateForge "res"))) { Fail "That folder doesn't look like Forge (no 'res' folder)." }
+    $ProgressPreference = "SilentlyContinue"   # PowerShell's progress bar makes big downloads very slow
+    try {
+        $rel = Invoke-RestMethod -Uri "https://api.github.com/repos/Card-Forge/forge/releases/latest" -Headers @{ "User-Agent" = "MTG-United-setup" }
+    } catch { Fail "Couldn't ask GitHub for the newest Forge release: $($_.Exception.Message)" }
+    $asset = $rel.assets | Where-Object { $_.name -like "forge-gui-desktop*.tar.bz2" } | Select-Object -First 1
+    if (-not $asset) { $asset = $rel.assets | Where-Object { $_.name -like "*.tar.bz2" -and $_.name -notlike "*android*" -and $_.name -notlike "*mobile*" } | Select-Object -First 1 }
+    if (-not $asset) { Fail "The newest Forge release ($($rel.tag_name)) has no desktop download MTG United recognises. Get it from https://github.com/Card-Forge/forge/releases and use 'Use my Forge...'." }
+    Write-Host "Newest release: $($rel.tag_name)  ($($asset.name), $([math]::Round($asset.size / 1MB)) MB)"
+
+    $have = Get-ChildItem -Path $UpdateForge -Filter "forge-gui-desktop*jar-with-dependencies*.jar" -File -ErrorAction SilentlyContinue | Select-Object -First 1
+    $newVersion = ($asset.name -replace '^forge-gui-desktop-', '' -replace '\.tar\.bz2$', '')
+    if ($have -and $have.Name -like "*-$newVersion-*") {
+        Write-Host "This Forge is already the newest release ($newVersion)."
+    } else {
+        if (Get-Process -Name "forge" -ErrorAction SilentlyContinue) { Fail "Forge is open. Close it, then try again." }
+        $work = Join-Path $ToolsDir "forge-update"
+        if (Test-Path $work) { Remove-Item -Recurse -Force $work }
+        New-Item -ItemType Directory -Force -Path (Join-Path $work "x") | Out-Null
+        $file = Join-Path $work $asset.name
+        Step "Downloading $($asset.name)"
+        try { Invoke-WebRequest -Uri $asset.browser_download_url -OutFile $file -UseBasicParsing -Headers @{ "User-Agent" = "MTG-United-setup" } }
+        catch { Fail "Download failed: $($_.Exception.Message)" }
+        Step "Unpacking"
+        & tar -xjf $file -C (Join-Path $work "x") | Out-Host
+        if ($LASTEXITCODE -ne 0) { Fail "Couldn't unpack $($asset.name) (Windows 10 or newer is needed for 'tar')." }
+        # The release's root: the folder with 'res' and the desktop jar (the archive may or may not have a top folder).
+        $src = Get-ChildItem -Path (Join-Path $work "x") -Recurse -Directory -Filter "res" | Where-Object {
+            Get-ChildItem -Path $_.Parent.FullName -Filter "*jar-with-dependencies*.jar" -File -ErrorAction SilentlyContinue } | Select-Object -First 1
+        if (-not $src) { Fail "The download doesn't contain a Forge desktop build." }
+        $src = $src.Parent.FullName
+        Step "Installing it over $UpdateForge (your Forge settings and decks live elsewhere and stay as they are)"
+        Get-ChildItem -Path $UpdateForge -Filter "forge-gui-desktop*jar-with-dependencies*.jar" -File -ErrorAction SilentlyContinue | Remove-Item -Force
+        & robocopy $src $UpdateForge /E /NFL /NDL /NJH /NJS /NP | Out-Host
+        if ($LASTEXITCODE -ge 8) { Fail "Copying the new Forge failed (robocopy code $LASTEXITCODE)." }
+        Remove-Item -Recurse -Force $work -ErrorAction SilentlyContinue
+        Write-Host "Forge updated to $($rel.tag_name)."
+    }
+    $ForgeInstall = $UpdateForge   # and build the bridge against it, as for any Forge on this PC
+}
+
 if ($ForgeInstall -ne "") {
     Step "Using the Forge already installed at $ForgeInstall"
     if (-not (Test-Path (Join-Path $ForgeInstall "res"))) { Fail "That folder has no 'res' folder. Pick the folder that contains forge.exe (or the Forge .jar) and 'res'." }
-    $forgeJar = Get-ChildItem -Path $ForgeInstall -Filter "*jar-with-dependencies*.jar" -File -ErrorAction SilentlyContinue | Select-Object -First 1
-    if (-not $forgeJar) { $forgeJar = Get-ChildItem -Path $ForgeInstall -Filter "forge-gui-desktop*.jar" -File -ErrorAction SilentlyContinue | Select-Object -First 1 }
+    # The desktop game's jar: Forge folders also hold other programs (adventure-editor, the installer...).
+    $jars = @(Get-ChildItem -Path $ForgeInstall -Filter "*.jar" -File -ErrorAction SilentlyContinue)
+    $forgeJar = $jars | Where-Object { $_.Name -like "forge-gui-desktop*jar-with-dependencies*.jar" } | Select-Object -First 1
+    if (-not $forgeJar) { $forgeJar = $jars | Where-Object { $_.Name -like "forge-gui-desktop*.jar" } | Select-Object -First 1 }
+    if (-not $forgeJar) { $forgeJar = $jars | Where-Object { $_.Name -like "forge*jar-with-dependencies*.jar" -and $_.Name -notlike "*adventure*" -and $_.Name -notlike "*editor*" -and $_.Name -notlike "*installer*" } | Select-Object -First 1 }
     if (-not $forgeJar) { Fail "Couldn't find Forge's program file (forge-gui-desktop-...-jar-with-dependencies.jar) in that folder." }
     Write-Host "Forge program: $($forgeJar.Name)"
 
@@ -130,8 +212,9 @@ if ($ForgeInstall -ne "") {
     Pop-Location
     if ($javacExit -ne 0) { Fail "The bridge doesn't compile against this Forge version (see the errors above; please report them). 'Install Forge' in the Forge tab builds a Forge that works." }
     $extJar = Join-Path $Root "bridge\target\forge-bridge-ext.jar"
-    & jar cf $extJar -C $classes .
-    if ($LASTEXITCODE -ne 0) { Fail "Packaging the bridge failed." }
+    # Package the classes (a .jar is a zip). Done here instead of with the JDK's 'jar' tool, which often isn't
+    # on PATH (Oracle's Java installer only links java and javac).
+    try { Write-Jar $classes $extJar } catch { Fail "Packaging the bridge failed: $($_.Exception.Message)" }
 
     # Our own assets folder: links to Forge's card data, keeps the bridge's settings out of your Forge folder.
     Step "Linking Forge's card data"

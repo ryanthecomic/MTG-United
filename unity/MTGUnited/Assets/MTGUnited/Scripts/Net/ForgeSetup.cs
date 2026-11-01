@@ -192,6 +192,8 @@ namespace MTGUnited
         }
 
         public static void Install(bool clean) => Run(clean ? "Reinstalling Forge" : "Installing Forge", clean ? "-Clean" : "");
+        /// <summary>Updates a Forge found on this PC to the newest official release, then builds the bridge against it.</summary>
+        public static void UpdateExisting(string dir) => Run("Updating Forge", "-UpdateForge \"" + dir.TrimEnd('\\') + "\"");
         public static void UseExisting(string dir) => Run("Setting up your Forge", "-ForgeInstall \"" + dir.TrimEnd('\\') + "\"");
         public static void Uninstall(bool keepData) => Run("Uninstalling", "-Uninstall" + (keepData ? " -KeepData" : ""));
 

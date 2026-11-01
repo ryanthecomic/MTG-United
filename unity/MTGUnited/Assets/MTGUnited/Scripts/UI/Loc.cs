@@ -233,6 +233,9 @@ Pay|Pagar|Pagar
 Don't pay|Não pagar|No pagar
 right-click: all revealed cards|botão direito: todas as cartas reveladas|clic derecho: todas las cartas reveladas
 Error log|Log de erros|Registro de errores
+Update this Forge?|Atualizar este Forge?|¿Actualizar este Forge?
+Update this Forge to the newest release|Atualizar este Forge para a versão mais nova|Actualizar este Forge a la versión más nueva
+MTG United downloads the newest official Forge release from GitHub and installs it over this folder, then builds the bridge for it. Your Forge settings and decks are kept.|O MTG United baixa a versão oficial mais nova do Forge no GitHub e instala nesta pasta, depois compila a ponte para ela. Suas configurações e decks do Forge são mantidos.|MTG United descarga la versión oficial más nueva de Forge desde GitHub y la instala en esta carpeta; luego compila el puente para ella. Tus ajustes y mazos de Forge se conservan.
 Click the card or player it points at (Esc to cancel).|Clique na carta ou jogador para onde ela aponta (Esc cancela).|Haz clic en la carta o jugador al que apunta (Esc cancela).
 Point at a card or player…|Apontar para uma carta ou jogador…|Apuntar a una carta o jugador…
 Clear my arrows|Limpar minhas setas|Borrar mis flechas
