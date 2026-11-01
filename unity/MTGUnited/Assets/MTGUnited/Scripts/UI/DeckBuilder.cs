@@ -496,7 +496,7 @@ namespace MTGUnited
 
         void BuildFilters()
         {
-            float fx = 600, y = Top - 150, size = 34;
+            float fx = 600, y = Top - 124, size = 34;   // clear of the card grid (which ends at Top - 130)
             Image Pip(string key, Sprite sprite, Color fallback, string letter)
             {
                 var b = UIKit.Rect("Filter" + key, root);

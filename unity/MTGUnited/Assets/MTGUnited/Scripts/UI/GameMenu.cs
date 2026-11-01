@@ -94,44 +94,39 @@ namespace MTGUnited
 
         public static GameMenu Create(RectTransform parent, GameController gc)
         {
-            var shade = UIKit.Panel("GameMenu", parent, new Color(0f, 0f, 0f, 0.68f), false);
-            shade.rectTransform.Stretch();
+            // Same look as Options: a dark veil, the title, a centred column of outlined capsules.
+            var shade = MenuKit.Shade("GameMenu", parent);
             var m = shade.gameObject.AddComponent<GameMenu>();
             m.gc = gc;
-            shade.gameObject.AddComponent<PointerEvents>().OnClick = m.Close;
+            shade.gameObject.AddComponent<PointerEvents>().OnClick = m.Close;   // click outside: back to the game
 
-            var p = UIKit.Panel("Panel", shade.transform, new Color(0.07f, 0.08f, 0.12f, 0.97f));
-            m.panel = p.rectTransform;
+            m.panel = UIKit.Rect("Frame", shade.transform);
             m.panel.anchorMin = m.panel.anchorMax = new Vector2(0.5f, 0.5f);
-            m.panel.sizeDelta = new Vector2(460, 540);
-            p.gameObject.AddComponent<PointerEvents>();   // clicks on the panel don't close it
-            var rim = p.gameObject.AddComponent<UnityEngine.UI.Outline>();
-            rim.effectColor = new Color(0.95f, 0.7f, 0.35f, 0.45f); rim.effectDistance = new Vector2(1.5f, -1.5f);
-            UiScaled.Add(p, Vector2.zero);
+            m.panel.sizeDelta = new Vector2(1100, 900);
+            UiScaled.Add(m.panel, Vector2.zero).MaxScale = 1040f / 900f;
+            MenuKit.Title(m.panel, "Menu", 30, 1100);
+            MenuKit.Back(m.panel, m.Close, 34);
 
-            var title = UIKit.Label("Title", p.transform, "MENU", 30, Theme.Accent, TextAnchor.UpperCenter, FontStyle.Bold).Titled();
-            title.rectTransform.Stretch(20, 0, 20, 22);
-
-            float y = 540 - 130;
-            void Item(string label, Color color, UnityEngine.Events.UnityAction a)
+            float y = 640;
+            void Item(string label, UnityEngine.Events.UnityAction a, bool danger = false)
             {
-                var b = UIKit.Button(label, p.transform, label, color, a, 20);
-                ((RectTransform)b.transform).Place(50, y, 360, 56);
-                y -= 66;
+                MenuKit.Capsule(m.panel, label, a, 1100 / 2f - 160, y, 320, 46, danger);
+                y -= 60;
             }
-            Item("Resume", Theme.Accent, m.Close);
-            Item("Options", Theme.Secondary, () => { m.Close(); gc.Options.Open(false); });
-            Item("Shortcuts", Theme.Secondary, () => { m.Close(); gc.Options.Open(true); });
-            Item("Attack with everything", Theme.Secondary, () => { m.Close(); if (!gc.Table.IsOpen) gc.Send("alphaStrike"); });
-            Item("Concede", new Color(0.45f, 0.14f, 0.14f), () => { m.Close(); if (gc.Table.IsOpen) gc.Table.Leave(); else gc.Send("concede"); });
-            Item("Back to main menu", Theme.Secondary, () =>
+            Item("Resume", m.Close);
+            Item("Options", () => { m.Close(); gc.Options.Open(false); });
+            Item("Shortcuts", () => { m.Close(); gc.Options.Open(true); });
+            Item("Attack with everything", () => { m.Close(); if (!gc.Table.IsOpen) gc.Send("alphaStrike"); });
+            y -= 26;
+            Item("Concede", () => { m.Close(); if (gc.Table.IsOpen) gc.Table.Leave(); else gc.Send("concede"); }, true);
+            Item("Back to main menu", () =>
             {
                 m.Close();
                 if (gc.Table.IsOpen) gc.Table.Leave();
                 else if (gc.RemoteBridge) gc.LeaveForgeLan();   // leaving someone's LAN table
                 else gc.Menu.Show();
             });
-            UIKit.CloseX(p.transform, m.Close);
+            UIKit.CloseX(m.panel, m.Close);
             shade.gameObject.SetActive(false);
             return m;
         }

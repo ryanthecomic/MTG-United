@@ -135,88 +135,144 @@ namespace MTGUnited
         }
     }
 
-    /// <summary>Options: interface size, preview delay, sound and auto-pay. Opened from the main menu or the in-game menu.</summary>
+    /// <summary>
+    /// Options, Arena style: a dark full-screen veil, the title at the top and a centred column of choices
+    /// (Gameplay, Graphics, Audio, Shortcuts, Exit game). Each opens its own page; ‹ goes back.
+    /// Opened from the main menu's gear, the in-game menu, or F1 (straight to Shortcuts).
+    /// </summary>
     public class OptionsPanel : MonoBehaviour
     {
         GameController gc;
-        RectTransform panel;
+        RectTransform frame, rootPage;
+        Text title;
         Text scaleText, delayText, soundText, volumeText, autoPayText;
+        Text cardText, speedText, reduceText, textSizeText, languageText;
+        Text resText, modeText;
+        readonly Dictionary<string, RectTransform> pages = new Dictionary<string, RectTransform>();
+        string page = "";
 
         public bool IsOpen => gameObject.activeSelf;
 
+        // The content frame (board units); everything is laid out inside it.
+        const float W = 1100, H = 900;
+        const float LabelX = 250, ControlX = 600;   // a centred two-column form (labels | controls)
+
         public static OptionsPanel Create(RectTransform parent, GameController gc)
         {
-            var shade = UIKit.Panel("Options", parent, new Color(0, 0, 0, 0.6f), false);
-            shade.rectTransform.Stretch();
+            var shade = MenuKit.Shade("Options", parent);
             var o = shade.gameObject.AddComponent<OptionsPanel>();
             o.gc = gc;
-            shade.gameObject.AddComponent<PointerEvents>().OnClick = o.Close;
 
-            var p = UIKit.Panel("Panel", shade.transform, Theme.Panel);
-            o.panel = p.rectTransform;
-            o.panel.anchorMin = o.panel.anchorMax = new Vector2(0.5f, 0.5f);
-            o.panel.sizeDelta = new Vector2(680, PanelH);
-            p.gameObject.AddComponent<PointerEvents>();   // clicks inside the panel don't close it
-            UiScaled.Add(p, Vector2.zero).MaxScale = 1040f / PanelH;   // always fits on screen
+            o.frame = UIKit.Rect("Frame", shade.transform);
+            o.frame.anchorMin = o.frame.anchorMax = new Vector2(0.5f, 0.5f);
+            o.frame.sizeDelta = new Vector2(W, H);
+            UiScaled.Add(o.frame, Vector2.zero).MaxScale = 1040f / H;
 
-            var title = UIKit.Label("Title", p.transform, "OPTIONS", 30, Theme.Accent, TextAnchor.UpperCenter, FontStyle.Bold).Titled();
-            title.rectTransform.Stretch(20, 0, 20, 24);
+            o.title = MenuKit.Title(o.frame, "Options", 30, W);
+            MenuKit.Back(o.frame, o.Back, 34);
+            UIKit.CloseX(o.frame, o.Close);
 
-            // Tabs: Settings | Shortcuts.
-            o.settingsPage = UIKit.Rect("Settings", p.transform).Stretch();
-            o.shortcutsPage = UIKit.Rect("Shortcuts", p.transform).Stretch();
-            o.tabSettings = UIKit.Button("TabSettings", p.transform, "SETTINGS", Theme.Accent, () => o.ShowTab(false), 18);
-            ((RectTransform)o.tabSettings.transform).Place(150, PanelH - 124, 180, 44);
-            o.tabShortcuts = UIKit.Button("TabShortcuts", p.transform, "SHORTCUTS", Theme.Secondary, () => o.ShowTab(true), 18);
-            ((RectTransform)o.tabShortcuts.transform).Place(350, PanelH - 124, 180, 44);
-            o.BuildShortcuts(o.shortcutsPage);
-
-            float y = PanelH - 200;
-            // Screen: resolution and window mode (the board always fits inside, letterboxed if needed).
-            o.resText = o.Row(o.settingsPage, "Resolution", ref y, () => o.StepResolution(-1), () => o.StepResolution(1));
-            o.modeText = o.ToggleRow(o.settingsPage, "Display mode", ref y, o.CycleDisplayMode);
-            o.scaleText = o.Row(o.settingsPage, "Interface size", ref y, () => o.Step(-1, Setting.Scale), () => o.Step(1, Setting.Scale));
-            o.cardText = o.Row(o.settingsPage, "Card size", ref y, () => o.Step(-1, Setting.Cards), () => o.Step(1, Setting.Cards));
-            o.textSizeText = o.Row(o.settingsPage, "Text size", ref y, () => o.Step(-1, Setting.Text), () => o.Step(1, Setting.Text));
-            o.delayText = o.Row(o.settingsPage, "Card preview delay", ref y, () => o.Step(-1, Setting.Delay), () => o.Step(1, Setting.Delay));
-            o.volumeText = o.Row(o.settingsPage, "Volume", ref y, () => o.Step(-1, Setting.Volume), () => o.Step(1, Setting.Volume));
-            o.speedText = o.ToggleRow(o.settingsPage, "Animation speed", ref y, () =>
+            // ---- the list
+            o.rootPage = UIKit.Rect("Root", o.frame).Stretch();
+            float cx = W / 2f - 150, y = 650;
+            void Item(string label, UnityEngine.Events.UnityAction a, bool danger = false)
             {
-                Motion.SpeedMode = (Motion.SpeedSetting)(((int)Motion.SpeedMode + 1) % 3);
-                o.Refresh();
-            });
-            o.reduceText = o.ToggleRow(o.settingsPage, "Reduce motion", ref y, () => { Motion.ReduceMotion = !Motion.ReduceMotion; o.Refresh(); });
-            o.soundText = o.ToggleRow(o.settingsPage, "Sound", ref y, () => { Sound.Enabled = !Sound.Enabled; o.Refresh(); });
-            o.autoPayText = o.ToggleRow(o.settingsPage, "Auto-pay mana", ref y, () =>
+                MenuKit.Capsule(o.rootPage, label, a, cx, y, 300, 46, danger);
+                y -= 60;
+            }
+            Item("Gameplay", () => o.ShowPage("gameplay"));
+            Item("Graphics", () => o.ShowPage("graphics"));
+            Item("Audio", () => o.ShowPage("audio"));
+            Item("Shortcuts", () => o.ShowPage("shortcuts"));
+            y -= 26;
+            Item("Exit game", o.AskQuit, true);
+
+            // Footer links.
+            float lx = W / 2f - 330;
+            MenuKit.Link(o.rootPage, "GitHub", () => Application.OpenURL(MenuKit.GitHub), lx, 30, 200);
+            MenuKit.Link(o.rootPage, "Report a bug", () => Application.OpenURL(MenuKit.Issues), lx + 230, 30, 200);
+            MenuKit.Link(o.rootPage, "Error log", () => ErrorReporter.OpenLog(gc), lx + 460, 30, 200);
+
+            // ---- Gameplay
+            var gp = o.NewPage("gameplay");
+            y = 650;
+            o.languageText = o.ToggleRow(gp, "Language", ref y, () => { Loc.Language = (Loc.Language + 1) % Loc.Codes.Length; o.Refresh(); });
+            if (o.languageText is SymbolText lt) lt.Localize = false;   // each language's own name
+            o.delayText = o.Row(gp, "Card preview delay", ref y, () => o.Step(-1, Setting.Delay), () => o.Step(1, Setting.Delay));
+            o.autoPayText = o.ToggleRow(gp, "Auto-pay mana", ref y, () =>
             {
                 gc.AutoPayMana = !gc.AutoPayMana;
                 PlayerPrefs.SetInt("autoPay", gc.AutoPayMana ? 1 : 0);
                 o.Refresh();
             });
-            o.languageText = o.ToggleRow(o.settingsPage, "Language", ref y, () =>
+            o.speedText = o.ToggleRow(gp, "Animation speed", ref y, () =>
             {
-                Loc.Language = (Loc.Language + 1) % Loc.Codes.Length;
+                Motion.SpeedMode = (Motion.SpeedSetting)(((int)Motion.SpeedMode + 1) % 3);
                 o.Refresh();
             });
-            if (o.languageText is SymbolText lt) lt.Localize = false;   // each language's own name
+            o.reduceText = o.ToggleRow(gp, "Reduce motion", ref y, () => { Motion.ReduceMotion = !Motion.ReduceMotion; o.Refresh(); });
 
-            // The error log (only real errors, one line each): for bug reports.
-            var log = UIKit.Button("ErrorLog", o.settingsPage, "Error log", Theme.Secondary, () => ErrorReporter.OpenLog(gc), 15);
-            ((RectTransform)log.transform).Place(28, 34, 170, 44);
+            // ---- Graphics
+            var gr = o.NewPage("graphics");
+            y = 650;
+            o.resText = o.Row(gr, "Resolution", ref y, () => o.StepResolution(-1), () => o.StepResolution(1));
+            o.modeText = o.ToggleRow(gr, "Display mode", ref y, o.CycleDisplayMode);
+            o.scaleText = o.Row(gr, "Interface size", ref y, () => o.Step(-1, Setting.Scale), () => o.Step(1, Setting.Scale));
+            o.cardText = o.Row(gr, "Card size", ref y, () => o.Step(-1, Setting.Cards), () => o.Step(1, Setting.Cards));
+            o.textSizeText = o.Row(gr, "Text size", ref y, () => o.Step(-1, Setting.Text), () => o.Step(1, Setting.Text));
 
-            var close = UIKit.Button("Close", p.transform, "DONE", Theme.Accent, o.Close, 22);
-            var cr = (RectTransform)close.transform;
-            cr.anchorMin = cr.anchorMax = new Vector2(0.5f, 0); cr.pivot = new Vector2(0.5f, 0);
-            cr.sizeDelta = new Vector2(240, 56); cr.anchoredPosition = new Vector2(0, 28);
+            // ---- Audio
+            var au = o.NewPage("audio");
+            y = 650;
+            o.soundText = o.ToggleRow(au, "Sound", ref y, () => { Sound.Enabled = !Sound.Enabled; o.Refresh(); });
+            o.volumeText = o.Row(au, "Volume", ref y, () => o.Step(-1, Setting.Volume), () => o.Step(1, Setting.Volume));
 
-            UIKit.CloseX(p.transform, o.Close);
+            // ---- Shortcuts
+            o.BuildShortcuts(o.NewPage("shortcuts"));
+
             shade.gameObject.SetActive(false);
             return o;
         }
 
+        RectTransform NewPage(string id)
+        {
+            var p = UIKit.Rect("Page " + id, frame).Stretch();
+            p.gameObject.SetActive(false);
+            pages[id] = p;
+            return p;
+        }
+
+        static readonly Dictionary<string, string> PageTitles = new Dictionary<string, string>
+        {
+            { "", "Options" }, { "gameplay", "Gameplay" }, { "graphics", "Graphics" }, { "audio", "Audio" }, { "shortcuts", "Shortcuts" },
+        };
+
+        void ShowPage(string id)
+        {
+            page = id ?? "";
+            rootPage.gameObject.SetActive(page == "");
+            foreach (var kv in pages) kv.Value.gameObject.SetActive(kv.Key == page);
+            title.text = PageTitles.TryGetValue(page, out var t) ? t : "Options";
+            var shown = page == "" ? rootPage : pages[page];
+            FadeIn.Play(shown.gameObject, Motion.Short, 1f, new Vector2(page == "" ? -30f : 30f, 0));
+        }
+
+        /// <summary>‹ / Esc: from a page back to the list; from the list, close.</summary>
+        public void Back()
+        {
+            if (page != "") ShowPage("");
+            else Close();
+        }
+
+        void AskQuit()
+        {
+            if (ConfirmDialog.Instance == null) { Application.Quit(); return; }
+            ConfirmDialog.Instance.Show("Exit MTG United?", gc.InGame ? "The game in progress will be lost." : "See you next time.",
+                ("Exit", ConfirmDialog.Danger, () => Application.Quit()),
+                ("Cancel", Theme.Secondary, null));
+        }
+
         enum Setting { Scale, Cards, Text, Delay, Volume }
-        const float PanelH = 960;
-        Text resText, modeText;
 
         static readonly FullScreenMode[] Modes = { FullScreenMode.FullScreenWindow, FullScreenMode.ExclusiveFullScreen, FullScreenMode.Windowed };
 
@@ -278,33 +334,24 @@ namespace MTGUnited
             string mode = ModeName(pendingMode ?? Screen.fullScreenMode);
             if (modeText.text != mode) modeText.text = mode;
         }
-        RectTransform settingsPage, shortcutsPage;
-        Button tabSettings, tabShortcuts;
 
-        void ShowTab(bool shortcuts)
-        {
-            settingsPage.gameObject.SetActive(!shortcuts);
-            shortcutsPage.gameObject.SetActive(shortcuts);
-            tabSettings.GetComponent<Image>().color = shortcuts ? Theme.Secondary : Theme.Accent;
-            tabShortcuts.GetComponent<Image>().color = shortcuts ? Theme.Accent : Theme.Secondary;
-            FadeIn.Play((shortcuts ? shortcutsPage : settingsPage).gameObject, 0.2f);
-        }
+        // ---------------------------------------------------------------- shortcuts page
 
-        /// <summary>The shortcuts tab: every key binding, two columns (key | what it does).</summary>
         readonly List<(Image tab, RectTransform list)> shortcutTabs = new List<(Image, RectTransform)>();
 
-        /// <summary>The shortcuts tab: one sub-tab per mode (Forge game, kitchen table, deck builder, everywhere).</summary>
+        /// <summary>One sub-tab per mode (Forge game, kitchen table, deck builder, everywhere), each a scrolling list.</summary>
         void BuildShortcuts(RectTransform page)
         {
-            float x = 40, w = (680 - 80 - 3 * 8) / (float)Shortcuts.Tabs.Length;
+            const float left = 190, width = 720;
+            float x = left, w = (width - 3 * 8) / Shortcuts.Tabs.Length;
             for (int t = 0; t < Shortcuts.Tabs.Length; t++)
             {
                 int index = t;
                 var b = UIKit.Button("Mode" + t, page, Shortcuts.Tabs[t].tab, Theme.Secondary, () => ShowShortcuts(index), 14);
-                ((RectTransform)b.transform).Place(x, PanelH - 186, w, 38);
+                ((RectTransform)b.transform).Place(x, 712, w, 38);
                 x += w + 8;
                 var list = UIKit.Rect("List" + t, page).Stretch();
-                BuildShortcutList(list, Shortcuts.Tabs[t].list);
+                BuildShortcutList(list, Shortcuts.Tabs[t].list, left, width);
                 shortcutTabs.Add((b.GetComponent<Image>(), list));
             }
         }
@@ -327,12 +374,11 @@ namespace MTGUnited
             return 0;
         }
 
-        void BuildShortcutList(RectTransform page, (string key, string what)[] items)
+        void BuildShortcutList(RectTransform page, (string key, string what)[] items, float left, float width)
         {
-            // A scrolling list (the kitchen table has more shortcuts than fit).
-            float top = PanelH - 200, bottom = 100;
+            float top = 696, bottom = 40;
             var view = UIKit.Rect("View", page);
-            view.Place(30, bottom, 620, top - bottom);
+            view.Place(left, bottom, width, top - bottom);
             view.gameObject.AddComponent<RectMask2D>();
             view.gameObject.AddComponent<Image>().color = Color.clear;
             var sr = view.gameObject.AddComponent<ScrollRect>();
@@ -349,41 +395,42 @@ namespace MTGUnited
                 var k = UIKit.Panel("Key", content, new Color(1f, 1f, 1f, heading ? 0f : 0.08f));
                 var kr = k.rectTransform;
                 kr.anchorMin = kr.anchorMax = new Vector2(0, 1); kr.pivot = new Vector2(0, 1);
-                kr.sizeDelta = new Vector2(190, 34); kr.anchoredPosition = new Vector2(10, y);
+                kr.sizeDelta = new Vector2(210, 34); kr.anchoredPosition = new Vector2(10, y);
                 var kt = UIKit.Label("K", k.transform, key, heading ? 15 : 17, heading ? new Color(1f, 0.72f, 0.4f) : Theme.Accent,
                     heading ? TextAnchor.MiddleLeft : TextAnchor.MiddleCenter, FontStyle.Bold);
                 kt.rectTransform.Stretch(4, 0, 4, 0);
-                var w = UIKit.Label("What", content, what, 17, heading ? Theme.TextDim : Theme.Text, TextAnchor.MiddleLeft);
-                var wr = w.rectTransform;
+                var wl = UIKit.Label("What", content, what, 17, heading ? Theme.TextDim : Theme.Text, TextAnchor.MiddleLeft);
+                var wr = wl.rectTransform;
                 wr.anchorMin = wr.anchorMax = new Vector2(0, 1); wr.pivot = new Vector2(0, 1);
-                wr.sizeDelta = new Vector2(380, 34); wr.anchoredPosition = new Vector2(218, y);
-                w.resizeTextForBestFit = true; w.resizeTextMinSize = 12; w.resizeTextMaxSize = 17;
+                wr.sizeDelta = new Vector2(width - 260, 34); wr.anchoredPosition = new Vector2(238, y);
+                wl.resizeTextForBestFit = true; wl.resizeTextMinSize = 12; wl.resizeTextMaxSize = 17;
                 y -= rowH;
             }
         }
-        Text cardText, speedText, reduceText, textSizeText, languageText;
+
+        // ---------------------------------------------------------------- rows
 
         Text Row(Transform parent, string label, ref float y, Action minus, Action plus)
         {
-            var l = UIKit.Label("Label", parent, label, 22, Theme.Text, TextAnchor.MiddleLeft, FontStyle.Bold);
-            l.rectTransform.Place(40, y, 300, 52);
+            var l = UIKit.Label("Label", parent, label, 21, new Color(0.88f, 0.88f, 0.9f), TextAnchor.MiddleLeft);
+            l.rectTransform.Place(LabelX, y, 330, 48);
             var m = UIKit.Button("Minus", parent, "−", Theme.Secondary, () => minus(), 26);
-            ((RectTransform)m.transform).Place(350, y + 2, 52, 48);
-            var v = UIKit.Label("Value", parent, "", 22, Theme.Accent, TextAnchor.MiddleCenter, FontStyle.Bold);
-            v.rectTransform.Place(406, y, 128, 52);
+            ((RectTransform)m.transform).Place(ControlX, y + 2, 48, 44);
+            var v = UIKit.Label("Value", parent, "", 21, Theme.Accent, TextAnchor.MiddleCenter, FontStyle.Bold);
+            v.rectTransform.Place(ControlX + 52, y, 144, 48);
             var pl = UIKit.Button("Plus", parent, "+", Theme.Secondary, () => plus(), 26);
-            ((RectTransform)pl.transform).Place(538, y + 2, 52, 48);
-            y -= 60;
+            ((RectTransform)pl.transform).Place(ControlX + 200, y + 2, 48, 44);
+            y -= 62;
             return v;
         }
 
         Text ToggleRow(Transform parent, string label, ref float y, Action toggle)
         {
-            var l = UIKit.Label("Label", parent, label, 22, Theme.Text, TextAnchor.MiddleLeft, FontStyle.Bold);
-            l.rectTransform.Place(40, y, 300, 52);
-            var b = UIKit.Button("Toggle", parent, "", Theme.Secondary, () => toggle(), 20);
-            ((RectTransform)b.transform).Place(350, y + 2, 240, 48);
-            y -= 60;
+            var l = UIKit.Label("Label", parent, label, 21, new Color(0.88f, 0.88f, 0.9f), TextAnchor.MiddleLeft);
+            l.rectTransform.Place(LabelX, y, 330, 48);
+            var b = UIKit.Button("Toggle", parent, "", Theme.Secondary, () => toggle(), 18);
+            ((RectTransform)b.transform).Place(ControlX, y + 2, 248, 44);
+            y -= 62;
             return UIKit.LabelOf(b);
         }
 
@@ -423,11 +470,12 @@ namespace MTGUnited
 
         public void Open(bool shortcutsTab)
         {
-            ShowTab(shortcutsTab);
-            ShowShortcuts(ContextShortcutTab());
             Refresh();
+            ShowShortcuts(ContextShortcutTab());
             gameObject.SetActive(true);
             transform.SetAsLastSibling();
+            ShowPage(shortcutsTab ? "shortcuts" : "");
+            Sound.Play(Sfx.Popup, 0.4f);
         }
 
         public void Close() => gameObject.SetActive(false);

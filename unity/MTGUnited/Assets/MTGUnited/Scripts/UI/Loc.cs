@@ -233,6 +233,43 @@ Pay|Pagar|Pagar
 Don't pay|Não pagar|No pagar
 right-click: all revealed cards|botão direito: todas as cartas reveladas|clic derecho: todas las cartas reveladas
 Error log|Log de erros|Registro de errores
+Play with friends|Jogue com amigos|Juega con amigos
+Host a table or join one on your network. Only the host needs Forge.|Crie uma mesa ou entre em uma na sua rede. Só o anfitrião precisa do Forge.|Crea una mesa o únete a una en tu red. Solo el anfitrión necesita Forge.
+Change|Alterar|Cambiar
+A free table: nothing is enforced, custom sets welcome.|Mesa livre: nada é imposto, coleções próprias são bem-vindas.|Mesa libre: nada se impone, colecciones propias bienvenidas.
+AI|IA|IA
+Random decks|Decks aleatórios|Mazos aleatorios
+Precon decks|Decks pré-montados|Mazos precon
+Choose a deck|Escolha um deck|Elige un mazo
+Any deck, any size. Nothing is enforced; custom sets welcome.|Qualquer deck, qualquer tamanho. Nada é imposto; coleções próprias são bem-vindas.|Cualquier mazo, cualquier tamaño. Nada se impone; colecciones propias bienvenidas.
+Players|Jogadores|Jugadores
+AI opponents|Oponentes IA|Rivales IA
+Other seats|Outros lugares|Otros asientos
+Their decks|Decks deles|Sus mazos
+Playing alone? Pick each seat's deck to goldfish a matchup.|Jogando sozinho? Escolha o deck de cada lugar para testar um confronto.|¿Juegas solo? Elige el mazo de cada asiento para probar un enfrentamiento.
+Forge isn't running yet: start it in the Forge tab.|O Forge ainda não está rodando: inicie-o na aba Forge.|Forge aún no está en marcha: inícialo en la pestaña Forge.
+Kitchen table: any deck works, nothing is enforced.|Mesa da cozinha: qualquer deck serve, nada é imposto.|Mesa de cocina: cualquier mazo sirve, nada se impone.
+Commander: 100 cards, led by a legendary commander.|Commander: 100 cartas, lideradas por um comandante lendário.|Commander: 100 cartas, lideradas por un comandante legendario.
+40 cards: limited-style decks, 40 cards or more.|40 cartas: decks estilo limitado, 40 cartas ou mais.|40 cartas: mazos estilo limitado, 40 cartas o más.
+60 cards: constructed decks, 60 cards or more.|60 cartas: decks construídos, 60 cartas ou mais.|60 cartas: mazos construidos, 60 cartas o más.
+My decks|Meus decks|Mis mazos
+Other formats (they still play, as the chosen format)|Outros formatos (também jogam, no formato escolhido)|Otros formatos (también se juegan, en el formato elegido)
+A ready-made deck|Um deck pronto|Un mazo ya armado
+cards|cartas|cartas
+Open source|Código aberto|Código abierto
+MTG United on GitHub|MTG United no GitHub|MTG United en GitHub
+Follow the project, grab new versions, report bugs and suggest features. Stars help a lot!|Acompanhe o projeto, baixe novas versões, reporte bugs e sugira ideias. Estrelas ajudam muito!|Sigue el proyecto, descarga nuevas versiones, informa errores y sugiere ideas. ¡Las estrellas ayudan mucho!
+Open GitHub|Abrir GitHub|Abrir GitHub
+Concede|Conceder|Rendirse
+Exit game|Sair do jogo|Salir del juego
+Exit|Sair|Salir
+Gameplay|Jogabilidade|Jugabilidad
+Graphics|Gráficos|Gráficos
+Audio|Áudio|Audio
+Report a bug|Reportar um bug|Informar de un error
+Exit MTG United?|Sair do MTG United?|¿Salir de MTG United?
+The game in progress will be lost.|A partida em andamento será perdida.|Se perderá la partida en curso.
+See you next time.|Até a próxima.|Hasta la próxima.
 Language|Idioma|Idioma
 # ---------------------------------------------------------------- zones & game words
 Hand|Mão|Mano

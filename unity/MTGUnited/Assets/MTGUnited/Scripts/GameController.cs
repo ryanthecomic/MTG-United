@@ -268,12 +268,13 @@ namespace MTGUnited
                 if (ConfirmDialog.Instance != null && ConfirmDialog.Instance.IsOpen) { ConfirmDialog.Instance.Cancel(); return; }
                 if (ImportDialog.Instance != null && ImportDialog.Instance.IsOpen) { ImportDialog.Instance.Close(); return; }
                 if (Inspector != null && Inspector.IsOpen) { Inspector.Hide(); return; }
-                if (Options.IsOpen) { Options.Close(); return; }
+                if (Options.IsOpen) { Options.Back(); return; }
                 if (GameMenu.IsOpen) { GameMenu.Close(); return; }
                 if (ZoneViewer.IsOpen) { ZoneViewer.Close(); return; }
                 if (PopupMenu.Instance != null && PopupMenu.Instance.IsOpen) { PopupMenu.Instance.Close(); return; }
                 if (Lan.IsOpen) { Lan.Close(); return; }
                 if (ForgeLan.Instance != null && ForgeLan.Instance.IsOpen) { ForgeLan.Instance.Close(); return; }
+                if (Menu.IsOpen && Menu.PlayPanelOpen) { Menu.ClosePlayPanel(); return; }
                 if (Menu.IsOpen && Menu.Builder != null && Menu.Builder.IsOpen) { Menu.Builder.Escape(); return; }
                 if (Table.IsOpen && !Menu.IsOpen) { if (!Table.CloseTopDialog()) GameMenu.Open(); return; }   // kitchen table: Esc opens the menu
             }

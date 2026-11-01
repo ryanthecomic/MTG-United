@@ -10,7 +10,7 @@ namespace MTGUnited
     /// Front end: animated table background, a top navigation bar (Home / Decks / Profile), and a play cluster in
     /// the bottom-right corner showing the selected deck, pod size and a large PLAY button.
     /// </summary>
-    public class MainMenu : MonoBehaviour
+    public partial class MainMenu : MonoBehaviour
     {
         GameController gc;
         RectTransform root, content;
@@ -25,11 +25,10 @@ namespace MTGUnited
         Image connDot;
 
         // Play cluster
-        Text deckTitle, deckSub, modeText, oppText, aiText, statusText, launcherText;
+        Text deckTitle, deckSub, statusText, launcherText;
         RawImage deckArt;
         Button playButton, launchButton;
         RectTransform playCluster;   // deck summary + PLAY; only shown on the Home tab
-        Image aiPreconBtn, aiRandomBtn;
 
         // Decks page
         RectTransform deckGrid;
@@ -45,16 +44,10 @@ namespace MTGUnited
         int opponents;
         string aiDecks;
         string aiStrength;
-        readonly Dictionary<string, Image> strengthBtns = new Dictionary<string, Image>();
         string selectedDeckId;
         bool connected;
-        RawImage heroArt;
         Text deckCountText;
         string playMode;
-        Image modeForgeBtn, modeTableBtn;
-        Text skillTitle, tableHint;
-        GameObject lanButton;
-        readonly List<GameObject> forgeOnly = new List<GameObject>();
         CustomSetsPanel customSets;
 
         public bool IsOpen => gameObject.activeSelf;
@@ -237,8 +230,9 @@ namespace MTGUnited
         // =================================================================================================== home
 
         /// <summary>
-        /// Home: a carousel in the big panel. Slide 1 is the Forge bridge (status, and a way into the Forge tab);
-        /// slide 2 is the selected deck's commander art. Arrows, dots, and it advances on its own unless hovered.
+        /// Home: a carousel in the big panel: the Forge bridge (status, a way into the Forge tab), the kitchen table,
+        /// the project on GitHub, and any extra pictures in Resources/Visuals/Carousel. Arrows, dots, and it
+        /// advances on its own unless hovered. (The selected deck lives in its own tile, not here.)
         /// </summary>
         RectTransform BuildHome(RectTransform parent)
         {
@@ -275,28 +269,6 @@ namespace MTGUnited
             launchButton = UIKit.Button("Launch", forge, "START FORGE", Theme.Secondary, () => gc.Launcher.Launch(), 18);
             ((RectTransform)launchButton.transform).Place(400, 80, 240, 52);
 
-            // ---- slide 2: gather your pod (commander art)
-            var pod = UIKit.Rect("PodSlide", hero.transform).Stretch();
-            var artRt = UIKit.Rect("Art", pod);
-            artRt.anchorMin = artRt.anchorMax = new Vector2(0.5f, 0.5f);
-            artRt.sizeDelta = new Vector2(1150, 1610);        // card-shaped; the banner shows the art band
-            artRt.anchoredPosition = new Vector2(0, -260);
-            heroArt = artRt.gameObject.AddComponent<RawImage>();
-            heroArt.raycastTarget = false;
-            var fade = UIKit.Rect("Fade", pod).Stretch();
-            var fadeImg = fade.gameObject.AddComponent<RawImage>();
-            fadeImg.texture = UIKit.Gradient(new Color(0, 0, 0, 0f), new Color(0, 0, 0, 0.55f));
-            fadeImg.raycastTarget = false;
-            var strip = UIKit.Panel("Caption", pod, new Color(0.03f, 0.03f, 0.05f, 0.82f), false);
-            strip.rectTransform.anchorMin = new Vector2(0, 0); strip.rectTransform.anchorMax = new Vector2(1, 0);
-            strip.rectTransform.pivot = new Vector2(0.5f, 0); strip.rectTransform.sizeDelta = new Vector2(0, 150);
-            var title = UIKit.Label("Title", strip.transform, "Gather your pod", 44, Theme.Text, TextAnchor.UpperLeft, FontStyle.Bold).Outline(1.5f).Titled();
-            title.rectTransform.Stretch(30, 0, 30, 16);
-            var body = UIKit.Label("Body", strip.transform,
-                "Commander with full rules from the Forge engine, against up to five AI opponents. Pick a deck, set the pod, press Play.",
-                20, new Color(0.88f, 0.9f, 0.95f), TextAnchor.UpperLeft);
-            body.rectTransform.Stretch(32, 20, 40, 76);
-
             // ---- slide 3: kitchen table & custom sets
             var kt = UIKit.Rect("KitchenSlide", hero.transform).Stretch();
             var kbg = kt.gameObject.AddComponent<RawImage>();
@@ -319,7 +291,11 @@ namespace MTGUnited
             var imp = UIKit.Button("Import", kt, "IMPORT A SET", Theme.Secondary, () => { SelectTab("kitchen"); customSets.Import(); }, 18);
             ((RectTransform)imp.transform).Place(400, 80, 240, 52);
 
-            slides.Add(forge); slides.Add(pod); slides.Add(kt);
+            slides.Add(forge); slides.Add(kt);
+            BuildGitHubSlide(hero.rectTransform);
+            BuildImageSlides(hero.rectTransform);
+            SlideImage(forge, "forge");
+            SlideImage(kt, "kitchen");
 
             // ---- arrows + dots
             var left = UIKit.Button("Prev", hero.transform, "‹", new Color(0, 0, 0, 0.45f), () => ShowSlide(slide - 1), 40);
@@ -877,176 +853,6 @@ namespace MTGUnited
             gc.Toasts.Show("Deleted " + n + " cached images. They download again when needed (restart to clear memory too).");
         }
 
-        // =================================================================================================== play cluster
-
-        /// <summary>
-        /// Home's right column: three tiles (deck, pod, AI skill) beside the hero banner, and the big Play button
-        /// in the bottom-right corner. Only shown on Home.
-        /// </summary>
-        void BuildPlayCluster(RectTransform frame)
-        {
-            playCluster = UIKit.Rect("PlayCluster", frame).Stretch();
-
-            // Tile 1: selected deck (click to pick another).
-            var deckTile = Tile(playCluster, 1260, 662, 600, 218);
-            deckTile.gameObject.AddComponent<PointerEvents>().OnClick = () => { Sound.Play(Sfx.UiClick, 0.6f); SelectTab("decks"); };
-            var artMask = UIKit.Panel("ArtMask", deckTile, Color.black);
-            artMask.rectTransform.Stretch();
-            artMask.pixelsPerUnitMultiplier = 3f;
-            artMask.raycastTarget = false;
-            artMask.gameObject.AddComponent<Mask>().showMaskGraphic = true;
-            var artImg = UIKit.Rect("Img", artMask.transform);
-            UIKit.CropToArt(artImg, new Vector2(600, 218));
-            deckArt = artImg.gameObject.AddComponent<RawImage>();
-            deckArt.raycastTarget = false;
-            var cap = UIKit.Panel("Caption", deckTile, new Color(0.02f, 0.02f, 0.04f, 0.8f), false);
-            cap.rectTransform.anchorMin = new Vector2(0, 0); cap.rectTransform.anchorMax = new Vector2(1, 0);
-            cap.rectTransform.pivot = new Vector2(0.5f, 0); cap.rectTransform.sizeDelta = new Vector2(0, 80);
-            cap.raycastTarget = false;
-            deckTitle = UIKit.Label("Title", cap.transform, "", 30, Theme.Text, TextAnchor.UpperLeft, FontStyle.Bold).Outline(1.2f).Titled();
-            deckTitle.rectTransform.Stretch(22, 0, 22, 6);
-            deckSub = UIKit.Label("Sub", cap.transform, "", 14, new Color(0.82f, 0.84f, 0.9f), TextAnchor.LowerLeft);
-            deckSub.rectTransform.Stretch(24, 8, 22, 0);
-
-            // Tile 2: pod (opponents + AI decks).
-            var pod = Tile(playCluster, 1260, 426, 600, 216);
-            modeText = UIKit.Label("Mode", pod, "", 30, Theme.Text, TextAnchor.UpperLeft, FontStyle.Bold).Outline(1.2f).Titled();
-            modeText.rectTransform.Stretch(24, 0, 24, 14);
-            oppText = UIKit.Label("Opp", pod, "", 19, Theme.Text, TextAnchor.MiddleLeft, FontStyle.Bold);
-            oppText.rectTransform.Place(26, 92, 260, 44);
-            var minus = UIKit.Button("Minus", pod, "−", Theme.Secondary, () => { opponents = Mathf.Max(1, opponents - 1); RefreshPlayCluster(); }, 26);
-            ((RectTransform)minus.transform).Place(430, 94, 66, 42);
-            var plus = UIKit.Button("Plus", pod, "+", Theme.Secondary, () => { opponents = Mathf.Min(5, opponents + 1); RefreshPlayCluster(); }, 26);
-            ((RectTransform)plus.transform).Place(506, 94, 66, 42);
-            aiText = UIKit.Label("AiLabel", pod, "AI DECKS", 15, Theme.TextDim, TextAnchor.MiddleLeft, FontStyle.Bold);
-            aiText.rectTransform.Place(26, 28, 160, 42);
-            var precon = UIKit.Button("Precon", pod, "PRECONS", Theme.Secondary, () => { aiDecks = "precon"; RefreshPlayCluster(); }, 16);
-            ((RectTransform)precon.transform).Place(250, 28, 156, 42);
-            aiPreconBtn = precon.GetComponent<Image>();
-            var random = UIKit.Button("Random", pod, "RANDOM", Theme.Secondary, () => { aiDecks = "random"; RefreshPlayCluster(); }, 16);
-            ((RectTransform)random.transform).Place(416, 28, 156, 42);
-            aiRandomBtn = random.GetComponent<Image>();
-            forgeOnly.Add(aiText.gameObject); forgeOnly.Add(precon.gameObject); forgeOnly.Add(random.gameObject);
-            // Format (rules engine): a segmented switch — Commander, 60 cards or 40 cards. The AI's decks follow it.
-            formatSwitch = FormatSwitch.Create(pod, new Rect(292, 164, 282, 36), new[]
-            {
-                (DeckFormat.Commander, "Commander"), (DeckFormat.Constructed, "60 cards"), (DeckFormat.Limited, "40 cards"),
-            }, SetForgeFormat);
-            forgeOnly.Add(formatSwitch.gameObject);
-            // Kitchen table, playing alone: pick each other seat's deck (goldfishing / playtesting a matchup).
-            var seatDecks = UIKit.Button("SeatDecks", pod, "CHOOSE THEIR DECKS", new Color(0.16f, 0.3f, 0.72f), () => SeatDeckMenu(Input.mousePosition), 16);
-            ((RectTransform)seatDecks.transform).Place(26, 28, 546, 42);
-            seatDecksButton = seatDecks.gameObject;
-
-            // Tile 3: AI skill. Strong is Forge's maximum (simulates mulligans and combat) and is slow in big pods.
-            var skill = Tile(playCluster, 1260, 190, 600, 216);
-            var sTitle = UIKit.Label("Title", skill, "AI Skill", 30, Theme.Text, TextAnchor.UpperLeft, FontStyle.Bold).Outline(1.2f).Titled();
-            sTitle.rectTransform.Stretch(24, 0, 24, 14);
-            skillTitle = sTitle;
-            // Mode: Forge rules (AI opponents) or Kitchen table (free table, custom cards, no Forge needed).
-            var forgeMode = UIKit.Button("ModeForge", skill, "FORGE RULES", Theme.Secondary, () => SetPlayMode("forge"), 16);
-            ((RectTransform)forgeMode.transform).Place(26, 104, 266, 46);
-            modeForgeBtn = forgeMode.GetComponent<Image>();
-            var tableMode = UIKit.Button("ModeTable", skill, "KITCHEN TABLE", Theme.Secondary, () => SetPlayMode("table"), 16);
-            ((RectTransform)tableMode.transform).Place(306, 104, 266, 46);
-            modeTableBtn = tableMode.GetComponent<Image>();
-            tableHint = UIKit.Label("TableHint", skill, "A free table like Cockatrice: nothing is enforced, custom sets welcome, no Forge needed. PLAY seats everyone on this screen.",
-                14, Theme.TextDim, TextAnchor.UpperLeft);
-            tableHint.rectTransform.Place(26, 56, 548, 44);
-            // LAN: host or join a table with other PCs on the same network.
-            var lan = UIKit.Button("Lan", skill, "PLAY ON LAN (HOST / JOIN)", new Color(0.16f, 0.3f, 0.72f), () =>
-            {
-                var d = FindDeck(selectedDeckId);
-                if (d == null) { gc.Toasts.Show("Pick a deck first (Decks tab).", true); return; }
-                gc.Lan.Open(d);
-            }, 16);
-            ((RectTransform)lan.transform).Place(26, 12, 548, 40);
-            lanButton = lan.gameObject;
-            string[] ids = { "fast", "normal", "strong" };
-            string[] labels = { "FAST", "NORMAL", "STRONG" };
-            for (int i = 0; i < ids.Length; i++)
-            {
-                string id = ids[i];
-                var b = UIKit.Button("Skill " + id, skill, labels[i], Theme.Secondary, () => { aiStrength = id; RefreshPlayCluster(); }, 16);
-                ((RectTransform)b.transform).Place(26 + i * 186, 28, 174, 46);
-                strengthBtns[id] = b.GetComponent<Image>();
-                forgeOnly.Add(b.gameObject);
-            }
-
-            statusText = UIKit.Label("Status", playCluster, "", 15, Theme.Danger, TextAnchor.LowerRight);
-            statusText.rectTransform.Place(900, 120, 600, 60);
-
-            // The big button.
-            playButton = UIKit.Pill("Play", playCluster, "Play", new Color(0.95f, 0.43f, 0.1f), OnPlay, 1520, 34, 340, 92, 46);
-            // LAN: the kitchen table's lobby, or a rules-engine table (people + AIs) in Forge mode.
-            var lanPlay = UIKit.Button("LanPlay", playCluster, "PLAY ON LAN", new Color(0.16f, 0.3f, 0.72f), () =>
-            {
-                var d = FindDeck(selectedDeckId);
-                if (d == null) { gc.Toasts.Show("Pick a deck first (Decks tab).", true); return; }
-                if (playMode == "table") gc.Lan.Open(d);
-                else ForgeLan.Instance.Open();
-            }, 18);
-            ((RectTransform)lanPlay.transform).Place(1260, 50, 244, 60);
-        }
-
-        /// <summary>A home tile: dark rounded panel with a soft shadow and a faint light rim.</summary>
-        RectTransform Tile(Transform parent, float x, float y, float w, float h)
-        {
-            var img = UIKit.Panel("Tile", parent, new Color(0.05f, 0.06f, 0.09f, 0.9f));
-            img.rectTransform.Place(x, y, w, h);
-            img.pixelsPerUnitMultiplier = 3f;
-            UIKit.AddShadow(img.transform, 22, new Vector2(0, -10), 0.6f);
-            var edge = img.gameObject.AddComponent<UnityEngine.UI.Outline>();
-            edge.effectColor = new Color(1, 1, 1, 0.08f);
-            edge.effectDistance = new Vector2(1, -1);
-            return img.rectTransform;
-        }
-
-        void RefreshPlayCluster()
-        {
-            PlayerPrefs.SetInt("opponents", opponents);
-            PlayerPrefs.SetString("aiDecks", aiDecks);
-            bool table = playMode == "table";
-            modeText.text = (table ? "Table · " : "") + (opponents + 1) + " players";
-            if (formatSwitch != null) formatSwitch.Select(forgeFormat);
-            oppText.text = (table ? "OTHER SEATS   " : "OPPONENTS   ") + opponents;
-            foreach (var go in forgeOnly) go.SetActive(!table);
-            tableHint.gameObject.SetActive(table);
-            lanButton.SetActive(table);
-            seatDecksButton.SetActive(table);
-            skillTitle.text = table ? "Mode" : "Mode & AI skill";
-            modeForgeBtn.color = table ? Theme.Secondary : Theme.Accent;
-            modeTableBtn.color = table ? Theme.Accent : Theme.Secondary;
-            playButton.interactable = table || connected;
-            aiPreconBtn.color = aiDecks == "precon" ? Theme.Accent : Theme.Secondary;
-            aiRandomBtn.color = aiDecks == "random" ? Theme.Accent : Theme.Secondary;
-            PlayerPrefs.SetString("aiStrength", aiStrength);
-            foreach (var kv in strengthBtns) kv.Value.color = kv.Key == aiStrength ? Theme.Accent : Theme.Secondary;
-
-            var deck = FindDeck(selectedDeckId);
-            if (deck == null)
-            {
-                deckTitle.text = "Random precon";
-                deckSub.text = "Click to choose one of your decks";
-                deckArt.texture = GameArt.CardBack;
-                heroArt.texture = GameArt.TableBackground;
-            }
-            else
-            {
-                deckTitle.text = deck.Name;
-                string cmd = deck.CommanderName;
-                deckSub.text = (cmd ?? "No commander set") + "  ·  " + deck.CardCount + " cards";
-                string artCard = deck.ArtCard;
-                if (!string.IsNullOrEmpty(artCard) && CardImageCache.Instance != null)
-                    CardImageCache.Instance.Get(artCard, CustomSets.Get(artCard)?.Set, tex =>
-                    {
-                        if (deckArt != null) deckArt.texture = tex;
-                        if (heroArt != null) heroArt.texture = tex;
-                    });
-                else { deckArt.texture = GameArt.CardBack; heroArt.texture = GameArt.TableBackground; }
-            }
-        }
-
         // =================================================================================================== shared bits
 
         RectTransform Card(Transform parent, float x, float y, float w, float h)
@@ -1066,6 +872,7 @@ namespace MTGUnited
             // Leaving the builder with unsaved changes asks first, then switches.
             if (builder != null && builder.IsOpen && builder.Dirty) { builder.RequestClose(() => SelectTab(id)); return; }
             currentTab = id;
+            ClosePlayPanel(true);
             if (builder != null && builder.IsOpen) builder.Done();
             foreach (var kv in tabs)
             {
@@ -1094,7 +901,7 @@ namespace MTGUnited
             if (connText == null) return;
             connDot.color = isConnected ? Theme.Good : Theme.Danger;
             connText.text = isConnected ? "Connected to Forge" : "Waiting for Forge (port " + gc.Bridge.Port + ")";
-            playButton.interactable = isConnected || playMode == "table";
+            RefreshPlayCluster();
 
         }
 
@@ -1114,6 +921,7 @@ namespace MTGUnited
 
         void Update()
         {
+            AnimatePlayPanel();
             if (slides.Count > 1 && !heroHovered && currentTab == "home" && Time.unscaledTime - slideShownAt > 8f) ShowSlide(slide + 1);
             if (forgeStatus != null)
             {
@@ -1152,7 +960,6 @@ namespace MTGUnited
             gc.Table.Begin(seats);
         }
 
-        GameObject seatDecksButton;
 
         /// <summary>The deck chosen for a seat (2, 3...), else your other decks in turn, else your own.</summary>
         SavedDeck SeatDeck(int seat, SavedDeck mine)
@@ -1252,7 +1059,6 @@ namespace MTGUnited
 
         // Rules-engine format: Commander, 60-card constructed or 40-card limited (AI decks follow it).
         string forgeFormat = DeckFormat.Commander;
-        FormatSwitch formatSwitch;
 
         void SetForgeFormat(string f)
         {
