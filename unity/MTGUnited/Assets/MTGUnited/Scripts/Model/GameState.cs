@@ -75,6 +75,8 @@ namespace MTGUnited
         public List<CardData> Graveyard = new List<CardData>();
         public List<CardData> Exile = new List<CardData>();
         public List<CardData> Command = new List<CardData>();
+        /// <summary>Library cards you can see (revealed top card, looked at...), top first.</summary>
+        public List<CardData> LibraryKnown = new List<CardData>();
         public int LibrarySize, HandSize, GraveyardSize, ExileSize;
 
         /// <summary>Name without the "(deck [SET] [year])" tag, cut to 18 characters with an ellipsis.</summary>
@@ -131,6 +133,7 @@ namespace MTGUnited
             p.Graveyard = Cards(zones, "graveyard", s);
             p.Exile = Cards(zones, "exile", s);
             p.Command = Cards(zones, "command", s);
+            p.LibraryKnown = Cards(zones, "libraryKnown", s);
             var sizes = d.Obj("zoneSizes");
             p.LibrarySize = sizes.Int("library");
             p.HandSize = sizes.Int("hand");

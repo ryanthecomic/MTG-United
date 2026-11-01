@@ -75,6 +75,7 @@ namespace MTGUnited
             }),
             ("EVERYWHERE", new[]
             {
+                ("Hold Alt", "Big view of the card under the mouse (any screen)"),
                 ("M", "Mute / unmute sound"),
                 ("F1", "These shortcuts"),
                 ("Esc", "Close the top pop-up"),
@@ -96,21 +97,24 @@ namespace MTGUnited
         {
             // Same look as Options: a dark veil, the title, a centred column of outlined capsules.
             var shade = MenuKit.Shade("GameMenu", parent);
+            shade.color = MenuKit.Dim;
             var m = shade.gameObject.AddComponent<GameMenu>();
             m.gc = gc;
             shade.gameObject.AddComponent<PointerEvents>().OnClick = m.Close;   // click outside: back to the game
 
-            m.panel = UIKit.Rect("Frame", shade.transform);
+            const float W = 1100, H = 640;
+            var band = MenuKit.Band(shade.transform, H, MenuKit.JodahArt, 30);   // same band as Options
+            m.panel = UIKit.Rect("Frame", band);
             m.panel.anchorMin = m.panel.anchorMax = new Vector2(0.5f, 0.5f);
-            m.panel.sizeDelta = new Vector2(1100, 900);
-            UiScaled.Add(m.panel, Vector2.zero).MaxScale = 1040f / 900f;
-            MenuKit.Title(m.panel, "Menu", 30, 1100);
-            MenuKit.Back(m.panel, m.Close, 34);
+            m.panel.sizeDelta = new Vector2(W, H);
+            UiScaled.Add(m.panel, Vector2.zero).MaxScale = 1f;
+            MenuKit.Title(m.panel, "Menu", 14, W);
+            MenuKit.Back(m.panel, m.Close, 14);
 
-            float y = 640;
+            float y = 466;
             void Item(string label, UnityEngine.Events.UnityAction a, bool danger = false)
             {
-                MenuKit.Capsule(m.panel, label, a, 1100 / 2f - 160, y, 320, 46, danger);
+                MenuKit.Capsule(m.panel, label, a, W / 2f - 160, y, 320, 46, danger);
                 y -= 60;
             }
             Item("Resume", m.Close);

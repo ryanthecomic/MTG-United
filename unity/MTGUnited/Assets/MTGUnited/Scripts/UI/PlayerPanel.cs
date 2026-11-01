@@ -28,6 +28,12 @@ namespace MTGUnited
         int lastLife = int.MinValue;
         float lifePulse;
         readonly Dictionary<string, (RectTransform rt, Text count)> zones = new Dictionary<string, (RectTransform, Text)>();
+        // Zones you can play a card from right now (flashback, escape, cards in exile...): their symbol glows.
+        readonly Dictionary<string, Image> zoneGlow = new Dictionary<string, Image>();
+        readonly Dictionary<string, Image> zoneHalo = new Dictionary<string, Image>();
+        readonly Dictionary<string, Image> zoneIcon = new Dictionary<string, Image>();
+        Image outerGlow;   // around the whole panel when your commander can be cast
+        readonly HashSet<string> playableZones = new HashSet<string>();
 
         public RectTransform Rect => (RectTransform)transform;
 
@@ -43,6 +49,10 @@ namespace MTGUnited
             p.ring = ring;
             ring.raycastTarget = false;
 
+            p.outerGlow = UIKit.Panel("PlayableHalo", ring.transform, Color.clear);
+            p.outerGlow.rectTransform.Stretch(-10, -10, -10, -10);
+            p.outerGlow.pixelsPerUnitMultiplier = 0.6f;
+            p.outerGlow.raycastTarget = false;
             p.bg = UIKit.Panel("Bg", ring.transform, Theme.Panel);
             p.bg.rectTransform.Stretch(4, 4, 4, 4);
             p.bg.gameObject.AddComponent<Mask>().showMaskGraphic = true;   // clips the commander art to the rounded panel
@@ -165,8 +175,19 @@ namespace MTGUnited
 
             bool targetable = s.Prompt.TargetPlayers.Contains(pd.Id);
             bool chosen = s.Prompt.ChosenPlayers.Contains(pd.Id);
-            ringState = chosen ? 2 : targetable ? 1 : pd.HasPriority ? 3 : 0;
-            var tint = Color.Lerp(new Color(0.07f, 0.08f, 0.12f), playerColor, 0.22f);
+            // Playable from a zone (only your own): that zone's symbol glows; a castable commander lights the whole panel.
+            playableZones.Clear();
+            bool commanderPlayable = false;
+            if (me)
+            {
+                var act = s.Prompt.ActionableCards;
+                foreach (var c in pd.Graveyard) if (act.Contains(c.Id)) { playableZones.Add("Graveyard"); break; }
+                foreach (var c in pd.Exile) if (act.Contains(c.Id)) { playableZones.Add("Exile"); break; }
+                foreach (var c in pd.LibraryKnown) if (act.Contains(c.Id)) { playableZones.Add("Library"); break; }
+                foreach (var c in pd.Command) if (act.Contains(c.Id)) { commanderPlayable = true; break; }
+            }
+            ringState = chosen ? 2 : targetable ? 1 : commanderPlayable ? 4 : pd.HasPriority ? 3 : 0;
+            var tint = Color.Lerp(new Color(0.07f, 0.07f, 0.08f), playerColor, 0.22f);
             tint.a = 0.94f;
             currentBg = pd.HasLost ? new Color(0.2f, 0.08f, 0.08f, 0.9f) : tint;
         }
@@ -190,6 +211,20 @@ namespace MTGUnited
                 var hit = cell.gameObject.AddComponent<Image>();
                 hit.sprite = UIKit.Rounded; hit.type = Image.Type.Sliced; hit.pixelsPerUnitMultiplier = 32f / 30f;
                 hit.color = new Color(1, 1, 1, viewer ? 0.09f : 0f);
+                // Playable-from-here glow: a soft halo plus a bright rim, pulsing (see Update).
+                var halo = UIKit.Panel("Halo", cell, Color.clear);
+                halo.rectTransform.Stretch(-12, -12, -12, -12);
+                halo.pixelsPerUnitMultiplier = 32f / 56f;
+                halo.raycastTarget = false;
+                zoneHalo[id] = halo;
+                var glow = UIKit.Panel("Glow", cell, Color.clear);
+                glow.rectTransform.Stretch(-4, -4, -4, -4);
+                glow.pixelsPerUnitMultiplier = 32f / 38f;
+                glow.raycastTarget = false;
+                var glowRim = glow.gameObject.AddComponent<UnityEngine.UI.Outline>();
+                glowRim.effectColor = new Color(0.75f, 0.95f, 1f, 1f);
+                glowRim.effectDistance = new Vector2(2.5f, -2.5f);
+                zoneGlow[id] = glow;
                 var pe = cell.gameObject.AddComponent<PointerEvents>();
                 pe.OnClick = () =>
                 {
@@ -197,7 +232,12 @@ namespace MTGUnited
                     if (viewer) { Sound.Play(Sfx.UiClick, 0.6f); gc.ZoneViewer.Open(playerId, id); }
                     else gc.ClickPlayer(playerId);
                 };
-                pe.OnRightClick = () => { if (RightClicked != null) RightClicked(); else gc.ZoneViewer.Open(playerId, "Command"); };
+                pe.OnRightClick = () =>
+                {
+                    if (RightClicked != null) { RightClicked(); return; }
+                    // Library: the cards in it you can see (revealed top card...); elsewhere, the commander(s).
+                    gc.ZoneViewer.Open(playerId, id == "Library" ? "Library" : "Command");
+                };
                 var pop = cell.gameObject.AddComponent<HoverPop>();
                 pe.OnEnter = () => pop.Hovered = true;
                 pe.OnExit = () => pop.Hovered = false;
@@ -207,6 +247,7 @@ namespace MTGUnited
                 ic.sizeDelta = new Vector2(22, 22); ic.anchoredPosition = new Vector2(6, 0);
                 var img = ic.gameObject.AddComponent<Image>();
                 img.sprite = icons[i]; img.color = new Color(0.88f, 0.9f, 0.95f); img.raycastTarget = false; img.preserveAspect = true;
+                zoneIcon[id] = img;
                 var t = UIKit.Label("Count", cell, "0", 17, Theme.Text, TextAnchor.MiddleLeft, FontStyle.Bold).Outline(1f);
                 t.rectTransform.Stretch(34, 0, 2, 0);
                 zones[id] = (cell, t);
@@ -413,8 +454,8 @@ namespace MTGUnited
             if (rollT >= 1f) displayedLife = lastLife;
             if (lastLife != int.MinValue) lifeText.text = Mathf.RoundToInt(displayedLife).ToString();
 
-            // Flash: pop and tint, fading over the budget.
-            float ft = Mathf.Clamp01((now - lifeFlashStart) / Motion.Budget);
+            // Flash: pop and tint, fading over the emphasis time.
+            float ft = Mathf.Clamp01((now - lifeFlashStart) / Motion.Emphasis);
             float flashAmt = 1f - Easing.Eval(Ease.Out, ft);
             lifeText.transform.localScale = Vector3.one * (1f + 0.2f * flashAmt);
             Color baseColor = Theme.Life;
@@ -447,7 +488,33 @@ namespace MTGUnited
                     c.a = Mathf.Lerp(0.4f, 1f, 0.5f + 0.5f * Mathf.Sin(now * Mathf.PI * 2f / 1.2f));
                     ring.color = c; break;
                 case 3: ring.color = new Color(1f, 1f, 1f, 0.25f); break;
+                case 4:   // your commander can be cast: the panel's contour glows in the "playable" blue
+                    ring.color = Color.Lerp(Theme.Playable, new Color(0.8f, 0.97f, 1f), 0.5f + 0.5f * Mathf.Sin(now * Mathf.PI * 2f / 1.1f)); break;
                 default: ring.color = Color.clear; break;
+            }
+            // Playable from a zone: bright pulsing rim + halo, and the symbol itself turns playable-blue.
+            float pulse = 0.5f + 0.5f * Mathf.Sin(now * Mathf.PI * 2f / 1.1f);
+            foreach (var kv in zoneGlow)
+            {
+                bool on = playableZones.Contains(kv.Key);
+                var pc = Theme.Playable;
+                float ga = on ? Mathf.Lerp(0.55f, 0.95f, pulse) : 0f;
+                if (!Mathf.Approximately(kv.Value.color.a, ga)) kv.Value.color = new Color(pc.r, pc.g, pc.b, ga);
+                if (zoneHalo.TryGetValue(kv.Key, out var halo))
+                {
+                    float ha = on ? Mathf.Lerp(0.18f, 0.45f, pulse) : 0f;
+                    if (!Mathf.Approximately(halo.color.a, ha)) halo.color = new Color(pc.r, pc.g, pc.b, ha);
+                    halo.rectTransform.localScale = Vector3.one * (on ? Mathf.Lerp(0.96f, 1.12f, pulse) : 1f);
+                }
+                if (zoneIcon.TryGetValue(kv.Key, out var icon))
+                    icon.color = on ? Color.Lerp(new Color(0.88f, 0.9f, 0.95f), new Color(0.55f, 0.9f, 1f), pulse) : new Color(0.88f, 0.9f, 0.95f);
+            }
+            // Castable commander: the whole panel gets a wide pulsing halo as well as the bright contour.
+            if (outerGlow != null)
+            {
+                float oa = ringState == 4 ? Mathf.Lerp(0.2f, 0.55f, pulse) : 0f;
+                if (!Mathf.Approximately(outerGlow.color.a, oa)) outerGlow.color = new Color(Theme.Playable.r, Theme.Playable.g, Theme.Playable.b, oa);
+                outerGlow.rectTransform.localScale = Vector3.one * (ringState == 4 ? Mathf.Lerp(1f, 1.03f, pulse) : 1f);
             }
         }
 

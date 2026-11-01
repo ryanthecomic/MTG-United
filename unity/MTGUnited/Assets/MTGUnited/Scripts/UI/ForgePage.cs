@@ -51,7 +51,14 @@ namespace MTGUnited
             f.details.rectTransform.Place(32, 150, 800, 200);
             f.details.supportRichText = true;
             f.javaText = UIKit.Label("Java", card, "", 15, Theme.TextDim, TextAnchor.UpperLeft);
-            f.javaText.rectTransform.Place(32, 110, 800, 30);
+            f.javaText.rectTransform.Place(32, 110, 560, 30);
+            // Java's official download page (Temurin JDK 21), for anyone who'd rather install it by hand.
+            var dl = UIKit.Button("DownloadJava", card, "DOWNLOAD JAVA", new Color(0.62f, 0.33f, 0.12f), () =>
+            {
+                Application.OpenURL(JavaDownloadUrl);
+                gc.Toasts.Show("Opening Java's download page. Install it, then restart MTG United.");
+            }, 15);
+            ((RectTransform)dl.transform).Place(600, 104, 230, 40);
             f.hint = UIKit.Label("Hint", card, "", 15, new Color(1f, 0.75f, 0.45f), TextAnchor.UpperLeft);
             f.hint.rectTransform.Place(32, 20, 800, 84);
 
@@ -65,6 +72,11 @@ namespace MTGUnited
             var con = Card(page, 70, 30, 1780, 310);
             var ct = UIKit.Label("Title", con, "OUTPUT", 16, Theme.Accent, TextAnchor.UpperLeft, FontStyle.Bold).Titled();
             ct.rectTransform.Stretch(28, 0, 28, 16);
+            // Copy everything in the output (to paste into a bug report or a message).
+            var copy = UIKit.Button("Copy", con, "COPY OUTPUT", Theme.Secondary, () => f.CopyOutput(), 14);
+            var cr = (RectTransform)copy.transform;
+            cr.anchorMin = cr.anchorMax = new Vector2(1, 1); cr.pivot = new Vector2(1, 1);
+            cr.sizeDelta = new Vector2(180, 32); cr.anchoredPosition = new Vector2(-24, -8);
             var view = UIKit.Rect("View", con).Stretch(20, 16, 20, 46);
             view.gameObject.AddComponent<RectMask2D>();
             view.gameObject.AddComponent<Image>().color = new Color(0, 0, 0, 0.35f);
@@ -77,6 +89,9 @@ namespace MTGUnited
             f.consoleText = UIKit.Label("Log", content, "", 14, new Color(0.8f, 0.84f, 0.9f), TextAnchor.UpperLeft);
             f.consoleText.verticalOverflow = VerticalWrapMode.Overflow;
             f.consoleText.supportRichText = false;
+            if (f.consoleText is SymbolText cst) { cst.Localize = false; cst.Symbols = false; }   // raw output, exactly as written
+            // Right-click the output: copy it too.
+            view.gameObject.AddComponent<PointerEvents>().OnRightClick = () => f.CopyOutput();
             f.consoleScroll.content = content; f.consoleScroll.horizontal = false; f.consoleScroll.scrollSensitivity = 40;
             f.consoleScroll.movementType = ScrollRect.MovementType.Clamped;
             UIKit.AddScrollbar(f.consoleScroll);
@@ -154,6 +169,16 @@ namespace MTGUnited
                 consoleText.text = tail.Length == 0 ? "Nothing yet." : tail;
                 if (atBottom) { Canvas.ForceUpdateCanvases(); consoleScroll.verticalNormalizedPosition = 0f; }
             }
+        }
+
+        const string JavaDownloadUrl = "https://adoptium.net/temurin/releases/?version=21&os=windows&package=jdk";
+
+        void CopyOutput()
+        {
+            string all = ForgeSetup.LogTail(100000);
+            if (string.IsNullOrEmpty(all)) { gc.Toasts.Show("Nothing to copy yet."); return; }
+            GUIUtility.systemCopyBuffer = all;
+            gc.Toasts.Show("Output copied (" + all.Split('\n').Length + " lines).");
         }
 
         static string Short(string path)
@@ -287,7 +312,7 @@ namespace MTGUnited
             shade.rectTransform.Stretch(0, 0, 0, -96);   // also darkens the nav bar area
             tutorial = shade.rectTransform;
             shade.gameObject.AddComponent<PointerEvents>().OnClick = CloseTutorial;
-            var p = UIKit.Panel("Panel", shade.transform, new Color(0.07f, 0.08f, 0.12f, 0.98f));
+            var p = UIKit.Panel("Panel", shade.transform, new Color(0.07f, 0.07f, 0.08f, 0.98f));
             p.rectTransform.anchorMin = p.rectTransform.anchorMax = new Vector2(0.5f, 0.5f);
             p.rectTransform.sizeDelta = new Vector2(1000, 640);
             p.rectTransform.anchoredPosition = new Vector2(0, -40);

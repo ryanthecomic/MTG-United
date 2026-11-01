@@ -22,7 +22,7 @@ namespace MTGUnited
             var c = shade.gameObject.AddComponent<CustomSetsPanel>();
             c.gc = gc;
             shade.gameObject.AddComponent<PointerEvents>().OnClick = c.Close;
-            var p = UIKit.Panel("Panel", shade.transform, new Color(0.07f, 0.08f, 0.12f, 0.98f));
+            var p = UIKit.Panel("Panel", shade.transform, new Color(0.07f, 0.07f, 0.08f, 0.98f));
             p.rectTransform.anchorMin = p.rectTransform.anchorMax = new Vector2(0.5f, 0.5f);
             p.rectTransform.sizeDelta = new Vector2(1000, 720);
             p.gameObject.AddComponent<PointerEvents>();
@@ -57,6 +57,7 @@ namespace MTGUnited
             }, 16);
             ((RectTransform)folder.transform).Place(700, 34, 260, 52);
             UIKit.CloseX(p.transform, c.Close);
+            MenuKit.Bandify(p);   // Arena look: a full-width band, dim shadow behind
             shade.gameObject.SetActive(false);
             return c;
         }

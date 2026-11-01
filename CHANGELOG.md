@@ -1,14 +1,36 @@
 # MTG United changelog
 
-## Unreleased
+## 0.1.2
 
-- Language: Português (Brasil), English and Español (Options → Language). Switches live.
-- Rules engine: the mulligan hand and card-choice screens dim the board and sit above the buttons.
-- Kitchen table: interface size and card size now apply there too.
-- Home: a cleaner Commander / 60 cards / 40 cards switch.
+**Forge**
+- Works with any Forge version: the bridge adapts itself to the Forge it's built against (official releases,
+  newer releases, nightly code). Install / Update get Forge's newest code and fall back to the tested version
+  if it doesn't build. "Use my Forge" accepts any version.
+- Forge tab: COPY OUTPUT button (or right-click the output), and a DOWNLOAD JAVA button.
+
+**Look and feel (Arena style)**
+- Play opens a panel from the right: mode tabs, format, players, AI skill and decks, and your decks to pick
+  from on the left (double-click one to play).
+- Options and the in-game menu are a band across the screen over Jodah, the Unifier, with Gameplay /
+  Graphics / Audio / Shortcuts pages. Clicking outside closes them.
+- Every other window (zone viewers, choices, dialogs, LAN lobbies, custom sets) uses the same dark band;
+  the blue tint is gone everywhere.
+- Home carousel: GitHub first, then the Forge and Kitchen Table slides with new art; your deck stays in its tile.
+- Hold Alt over any card on any screen for the big view.
+
+**Rules engine**
+- The mulligan hand and card-choice screens dim the board and sit above the buttons.
+- Cards playable from your graveyard, exile or library make that zone's symbol glow; a castable commander
+  lights up your whole panel. Right-click your library to see its revealed cards.
+- Set codes and years are hidden from AI deck names (Options → Gameplay to show them).
+
+**Everything else**
+- Language: Português (Brasil), English and Español (Options → Gameplay → Language). Switches live.
+- Animation speed: Normal plays the motion doc's exact timings; Fast caps every animation at 400 ms.
+- Kitchen Table: interface size and card size apply there too.
+- Deck builder: the colour filters sit above the card grid again (they were covered and couldn't be clicked).
 - Errors: real errors go to `logs/errors.log` (once each, with what you were doing) and show one friendly
-  message; a crashed session is noticed on the next start. Options → Error log opens the file.
-  A table action that fails is rolled back instead of leaving the table half-changed.
+  message; a crashed session is noticed on the next start. A table action that fails is rolled back.
 
 ## 0.1.1
 

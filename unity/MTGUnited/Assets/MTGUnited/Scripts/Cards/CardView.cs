@@ -115,8 +115,8 @@ namespace MTGUnited
             var pe = frame.gameObject.AddComponent<PointerEvents>();
             pe.OnClick = () => { if (!IsExiting) Clicked?.Invoke(this); };
             pe.OnRightClick = () => { if (!IsExiting) RightClicked?.Invoke(this); };
-            pe.OnEnter = () => { if (IsExiting) return; Hovered = true; HoverStart?.Invoke(this); };
-            pe.OnExit = () => { Hovered = false; HoverEnd?.Invoke(this); };
+            pe.OnEnter = () => { if (IsExiting) return; Hovered = true; AltZoom.Enter(Data); HoverStart?.Invoke(this); };
+            pe.OnExit = () => { Hovered = false; HoverEnd?.Invoke(this); AltZoom.Exit(Data); };
             frame.gameObject.AddComponent<CardDragHandler>().Owner = this;
 
             nameText = UIKit.Label("Name", frame.transform, "", 12, Color.black, TextAnchor.UpperLeft, FontStyle.Bold);
@@ -480,8 +480,8 @@ namespace MTGUnited
         Vector2 lungeTarget; float lungeStart = -1;
 
         /// <summary>
-        /// Damage step (section 5.2), compressed into the 400 ms budget: wind-up 60, lunge 120 (ease.in),
-        /// impact at the end of the lunge, recoil 220 (ease.out). Calls onImpact when it lands.
+        /// Damage step (section 5.2): wind-up, lunge (ease.in), impact at the end of the lunge, recoil (ease.out).
+        /// Doc timings in Normal; 60 / 120 / 220 ms in Fast. Calls onImpact when it lands.
         /// </summary>
         public void Lunge(Vector2 towardBoardPos, float delay, Action onImpact)
         {
@@ -564,7 +564,11 @@ namespace MTGUnited
             if (lungeStart < 0) return Vector2.zero;
             float t = now - lungeStart;
             if (t < 0) return Vector2.zero;
-            float windUp = 0.060f * Motion.Speed, strike = 0.120f * Motion.Speed, recoil = 0.220f * Motion.Speed;
+            // Normal: the doc's tokens (micro wind-up, short lunge, base recoil). Fast / Instant: squeezed into 400 ms.
+            bool full = Motion.SpeedMode == Motion.SpeedSetting.Normal;
+            float windUp = full ? Motion.Micro : 0.060f * Motion.Speed;
+            float strike = full ? Motion.Short : 0.120f * Motion.Speed;
+            float recoil = full ? Motion.Base : 0.220f * Motion.Speed;
             Vector2 dir = lungeTarget - basePos;
             float reach = Mathf.Max(0f, dir.magnitude - TargetSize.y * 0.55f);   // stop just short of the target
             Vector2 n = dir.sqrMagnitude > 1f ? dir.normalized : Vector2.up;

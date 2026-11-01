@@ -233,6 +233,15 @@ Pay|Pagar|Pagar
 Don't pay|Não pagar|No pagar
 right-click: all revealed cards|botão direito: todas as cartas reveladas|clic derecho: todas las cartas reveladas
 Error log|Log de erros|Registro de errores
+Download Java|Baixar Java|Descargar Java
+Copy output|Copiar saída|Copiar salida
+Opening Java's download page. Install it, then restart MTG United.|Abrindo a página de download do Java. Instale e depois reinicie o MTG United.|Abriendo la página de descarga de Java. Instálalo y reinicia MTG United.
+Nothing to copy yet.|Nada para copiar ainda.|Nada que copiar todavía.
+Library — revealed cards|Grimório — cartas reveladas|Biblioteca — cartas reveladas
+no revealed cards in the library|nenhuma carta revelada no grimório|ninguna carta revelada en la biblioteca
+commander is not in the command zone|o comandante não está na zona de comando|el comandante no está en la zona de mando
+Big view of the card under the mouse (any screen)|Visão ampliada da carta sob o mouse (em qualquer tela)|Vista ampliada de la carta bajo el ratón (en cualquier pantalla)
+Show set codes in names|Mostrar códigos de coleção|Mostrar códigos de colección
 Play with friends|Jogue com amigos|Juega con amigos
 Host a table or join one on your network. Only the host needs Forge.|Crie uma mesa ou entre em uma na sua rede. Só o anfitrião precisa do Forge.|Crea una mesa o únete a una en tu red. Solo el anfitrión necesita Forge.
 Change|Alterar|Cambiar

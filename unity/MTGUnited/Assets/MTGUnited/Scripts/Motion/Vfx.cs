@@ -133,7 +133,7 @@ namespace MTGUnited
         /// <summary>Board wipe / "each creature": a ring expands from the stack across the battlefield.</summary>
         public void AreaPulse(Vector2 from, Palette pal)
         {
-            float dur = Motion.Budget;
+            float dur = Motion.Emphasis;   // a board-wide ring: emphasis (520 ms; 400 in Fast)
             int i = Spawn(from, from, from, 0f, dur, 60f, 2600f, WithA(pal.Secondary, 0.8f), WithA(pal.Primary, 0f), Ease.Out);
             if (i >= 0) parts[i].img.sprite = Ring;
             Burst(from, pal, 0f, 0.7f);

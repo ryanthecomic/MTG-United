@@ -43,6 +43,7 @@ namespace MTGUnited
             sr.content = v.content; sr.horizontal = false; sr.scrollSensitivity = 40; sr.movementType = ScrollRect.MovementType.Clamped;
             UIKit.AddScrollbar(sr);
             UIKit.CloseX(panel.transform, v.Close);
+            MenuKit.Bandify(panel);   // Arena look: a full-width band, dim shadow behind
             shade.gameObject.SetActive(false);
             return v;
         }
@@ -136,6 +137,7 @@ namespace MTGUnited
             }, 20);
             ((RectTransform)create.transform).Place(500, 28, 220, 56);
             UIKit.CloseX(p.transform, d.Close);
+            MenuKit.Bandify(p);   // Arena look: a full-width band, dim shadow behind
             shade.gameObject.SetActive(false);
             return d;
         }
@@ -217,6 +219,7 @@ namespace MTGUnited
             var clear = UIKit.Button("Clear", p.transform, "REMOVE NOTE", ConfirmDialog.Danger, () => { d.onSave?.Invoke(""); d.Close(); }, 17);
             ((RectTransform)clear.transform).Place(40, 28, 220, 56);
             UIKit.CloseX(p.transform, d.Close);
+            MenuKit.Bandify(p);   // Arena look: a full-width band, dim shadow behind
             shade.gameObject.SetActive(false);
             return d;
         }

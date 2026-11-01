@@ -16,7 +16,6 @@ import forge.game.phase.PhaseType;
 import forge.game.player.PlayerView;
 import forge.game.spellability.StackItemView;
 import forge.game.zone.ZoneType;
-import forge.gamemodes.match.Selection;
 import forge.trackable.TrackableObject;
 
 import java.util.ArrayList;
@@ -140,6 +139,7 @@ final class StateSerializer {
         zones.add("graveyard", zone(p, ZoneType.Graveyard));
         zones.add("exile", zone(p, ZoneType.Exile));
         zones.add("command", zone(p, ZoneType.Command));
+        zones.add("libraryKnown", knownLibrary(p));
         o.add("zones", zones);
 
         final JsonObject sizes = new JsonObject();
@@ -149,6 +149,25 @@ final class StateSerializer {
         sizes.addProperty("exile", p.getZoneSize(ZoneType.Exile));
         o.add("zoneSizes", sizes);
         return o;
+    }
+
+    /** Library cards this player may see right now (top card revealed, looked at...), top first, with their depth. */
+    private JsonArray knownLibrary(final PlayerView p) {
+        final JsonArray arr = new JsonArray();
+        try {
+            int depth = 0;
+            for (final CardView c : snapshot(p.getCards(ZoneType.Library))) {
+                depth++;
+                if (c == null || !gui.mayView(c)) { continue; }
+                final JsonObject cj = card(c);
+                cj.addProperty("depth", depth);
+                arr.add(cj);
+                if (arr.size() >= 30) { break; }
+            }
+        } catch (final RuntimeException ex) {
+            gui.logOnce("Reading the library", ex);
+        }
+        return arr;
     }
 
     private JsonArray zone(final PlayerView p, final ZoneType zt) {
@@ -286,30 +305,46 @@ final class StateSerializer {
         return arr;
     }
 
-    JsonObject selection(final Selection sel) {
+    /** What the waiting prompt marks, in a form that doesn't depend on the Forge version. */
+    static final class Sel {
+        List<CardView> cards = new ArrayList<>();
+        int min, max;
+        List<Object> targets = new ArrayList<>();
+        List<Object> chosen = new ArrayList<>();
+        List<CardView> actionable = new ArrayList<>();
+
+        Sel copy() {
+            final Sel s = new Sel();
+            s.cards = new ArrayList<>(cards); s.min = min; s.max = max;
+            s.targets = new ArrayList<>(targets); s.chosen = new ArrayList<>(chosen); s.actionable = new ArrayList<>(actionable);
+            return s;
+        }
+    }
+
+    JsonObject selection(final Sel sel) {
         final JsonObject o = new JsonObject();
         final JsonArray cards = new JsonArray();
         final JsonArray cardData = new JsonArray();
-        for (final CardView c : sel.cards()) {
+        for (final CardView c : sel.cards) {
             cards.add(c.getId());
             // Full data too, so the client can show selectable cards from zones it doesn't otherwise draw (library...)
             cardData.add(card(c));
         }
         o.add("cards", cards);
         o.add("cardData", cardData);
-        o.addProperty("min", sel.min());
-        o.addProperty("max", sel.max());
-        o.add("targets", refs(sel.targets()));
-        o.add("chosen", refs(sel.chosen()));
+        o.addProperty("min", sel.min);
+        o.addProperty("max", sel.max);
+        o.add("targets", refs(sel.targets));
+        o.add("chosen", refs(sel.chosen));
         final JsonArray actionable = new JsonArray();
-        for (final CardView c : sel.actionable()) { actionable.add(c.getId()); }
+        for (final CardView c : sel.actionable) { actionable.add(c.getId()); }
         o.add("actionable", actionable);
         return o;
     }
 
-    private JsonArray refs(final List<TrackableObject> objs) {
+    private JsonArray refs(final List<?> objs) {
         final JsonArray arr = new JsonArray();
-        for (final TrackableObject t : objs) {
+        for (final Object t : objs) {
             final JsonObject r = entityRef(t);
             if (r != null) { arr.add(r); }
         }

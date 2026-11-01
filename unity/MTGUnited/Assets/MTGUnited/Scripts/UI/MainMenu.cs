@@ -66,6 +66,7 @@ namespace MTGUnited
             m.selectedDeckId = PlayerPrefs.GetString("selectedDeck", "");
             m.playMode = PlayerPrefs.GetString("playMode", "forge");
             m.forgeFormat = PlayerPrefs.GetString("forgeFormat", DeckFormat.Commander);
+            if (Array.IndexOf(OfferedFormats, m.forgeFormat) < 0) m.forgeFormat = DeckFormat.Commander;   // a format no longer offered
             m.decks = DeckStore.LoadAll();
             m.Build();
             return m;
@@ -294,8 +295,8 @@ namespace MTGUnited
             slides.Add(forge); slides.Add(kt);
             BuildGitHubSlide(hero.rectTransform);
             BuildImageSlides(hero.rectTransform);
-            SlideImage(forge, "forge");
-            SlideImage(kt, "kitchen");
+            SlideImage(forge, "forge", ForgeArt, 0.62f, mark.gameObject);      // Urabrask's Forge
+            SlideImage(kt, "kitchen", KitchenArt, 0.72f, kmark.gameObject);   // Trivia Contest (her face in view)
 
             // ---- arrows + dots
             var left = UIKit.Button("Prev", hero.transform, "‹", new Color(0, 0, 0, 0.45f), () => ShowSlide(slide - 1), 40);

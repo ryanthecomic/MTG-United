@@ -39,6 +39,8 @@ namespace MTGUnited
         public void Request(CardData c, bool onRight)
         {
             if (c == null || c.Hidden) { Hide(); return; }
+            AltZoom.Enter(c);
+            if (AltZoom.Active) return;   // Alt is held: the big view follows the mouse instead
             if (UiScale.PreviewDelay <= 0f) { Show(c, onRight); return; }
             pending = c; pendingRight = onRight; pendingSince = Time.unscaledTime;
             if (timer == null) { timer = transform.parent.gameObject.AddComponent<PreviewTimer>(); timer.Preview = this; }
@@ -54,6 +56,8 @@ namespace MTGUnited
         public void Show(CardData c, bool onRight)
         {
             if (c == null || c.Hidden) { Hide(); return; }
+            AltZoom.Enter(c);
+            if (AltZoom.Active) return;
             pending = null;
             showing = c;
             gameObject.SetActive(true);
@@ -78,10 +82,37 @@ namespace MTGUnited
 
         public void Hide()
         {
+            AltZoom.Exit(null);
+            HideKeepHover();
+        }
+
+        /// <summary>Hides the small preview without forgetting which card the mouse is over (Alt zoom takes over).</summary>
+        public void HideKeepHover()
+        {
             pending = null;
             showing = null;
             gameObject.SetActive(false);
         }
+    }
+
+    /// <summary>
+    /// Hold Alt over any card, anywhere (board, hand, stack, zone viewers, choices, deck builder, kitchen table):
+    /// the big view of it, which follows the mouse to other cards until Alt is released. Every card UI reports
+    /// hovering here (directly or through the hover preview); GameController shows and hides the view.
+    /// </summary>
+    public static class AltZoom
+    {
+        public static CardData Hovered { get; private set; }
+        /// <summary>The card shown by Alt right now (null when Alt isn't zooming).</summary>
+        public static CardData Showing;
+        public static bool Active => Showing != null;
+
+        public static void Enter(CardData c) { if (c != null && !c.Hidden && !string.IsNullOrEmpty(c.Name)) Hovered = c; }
+
+        /// <summary>The mouse left a card (null: whatever was hovered).</summary>
+        public static void Exit(CardData c) { if (c == null || c == Hovered) Hovered = null; }
+
+        public static bool Held => Input.GetKey(KeyCode.LeftAlt) || Input.GetKey(KeyCode.RightAlt);
     }
 
     /// <summary>Drives the preview delay while the (inactive) preview itself can't update.</summary>
@@ -161,11 +192,8 @@ namespace MTGUnited
             var pe = frame.gameObject.AddComponent<PointerEvents>();
             pe.OnClick = () => onClick?.Invoke();
             pe.OnRightClick = () => { if (c != null) CardInspector.Instance?.Show(c); };
-            if (onHover != null)
-            {
-                pe.OnEnter = () => onHover(c);
-                pe.OnExit = () => onHover(null);
-            }
+            pe.OnEnter = () => { AltZoom.Enter(c); onHover?.Invoke(c); };
+            pe.OnExit = () => { onHover?.Invoke(null); AltZoom.Exit(c); };
             return frame;
         }
     }
@@ -194,7 +222,7 @@ namespace MTGUnited
             var panel = UIKit.Panel("Panel", shade.transform, Theme.Panel);
             var pr = panel.rectTransform;
             pr.anchorMin = pr.anchorMax = new Vector2(0.5f, 0.5f);
-            pr.sizeDelta = new Vector2(1400, 640);
+            pr.sizeDelta = new Vector2(1500, 720);
             panel.gameObject.AddComponent<PointerEvents>(); // swallow clicks so they don't close the viewer
             v.title = UIKit.Label("Title", panel.transform, "", 26, Theme.Text, TextAnchor.UpperCenter, FontStyle.Bold).Titled();
             v.title.rectTransform.Stretch(0, 0, 0, 14);
@@ -204,8 +232,8 @@ namespace MTGUnited
             v.content = UIKit.Rect("Content", scroll);
             v.content.anchorMin = new Vector2(0, 1); v.content.anchorMax = new Vector2(1, 1); v.content.pivot = new Vector2(0.5f, 1);
             var grid = v.content.gameObject.AddComponent<GridLayoutGroup>();
-            grid.cellSize = new Vector2(160, 224);
-            grid.spacing = new Vector2(12, 12);
+            grid.cellSize = new Vector2(186, 260);
+            grid.spacing = new Vector2(16, 16);
             grid.childAlignment = TextAnchor.UpperCenter;
             v.content.gameObject.AddComponent<ContentSizeFitter>().verticalFit = ContentSizeFitter.FitMode.PreferredSize;
             sr.content = v.content;
@@ -216,6 +244,7 @@ namespace MTGUnited
             var cr = (RectTransform)close.transform;
             cr.anchorMin = cr.anchorMax = new Vector2(0.5f, 0); cr.sizeDelta = new Vector2(200, 46); cr.anchoredPosition = new Vector2(0, 36);
             UIKit.CloseX(panel.transform, v.Close);
+            MenuKit.Bandify(panel);   // Arena look: a full-width band, dim shadow behind
             shade.gameObject.SetActive(false);
             return v;
         }
@@ -254,10 +283,11 @@ namespace MTGUnited
                 if (playerId < 0) return;
                 var p = s.Player(playerId);
                 if (p == null) { Close(); return; }
-                list = zone == "Exile" ? p.Exile : zone == "Command" ? p.Command : p.Graveyard;
-                string label = zone == "Command" ? (list.Count == 1 ? "Commander" : "Commanders") : zone;
+                list = zone == "Exile" ? p.Exile : zone == "Command" ? p.Command : zone == "Library" ? p.LibraryKnown : p.Graveyard;
+                string label = zone == "Command" ? (list.Count == 1 ? "Commander" : "Commanders") : zone == "Library" ? Loc.T("Library — revealed cards") : Loc.T(zone);
                 title.text = p.ShortName + " — " + label + " (" + list.Count + ")";
-                if (zone == "Command" && list.Count == 0) title.text = p.ShortName + " — commander is not in the command zone";
+                if (zone == "Command" && list.Count == 0) title.text = p.ShortName + " — " + Loc.T("commander is not in the command zone");
+                if (zone == "Library" && list.Count == 0) title.text = p.ShortName + " — " + Loc.T("no revealed cards in the library");
             }
             // Rebuild only when the cards or what's playable among them changed.
             var sig = new System.Text.StringBuilder(zone).Append(playerId).Append(':');
@@ -265,11 +295,11 @@ namespace MTGUnited
             if (sig.ToString() == lastSig) return;
             lastSig = sig.ToString();
             foreach (Transform child in content) Destroy(child.gameObject);
-            for (int i = list.Count - 1; i >= 0; i--)
+            for (int k = 0; k < list.Count; k++)
             {
-                var c = list[i];
+                var c = zone == "Library" ? list[k] : list[list.Count - 1 - k];   // library: top first; piles: newest first
                 System.Action click = zone == "Revealed" ? (System.Action)null : () => gc.ClickCard(c.Id);
-                var tile = CardTile.Create(content, c, 160, 224, click, cd => { if (cd != null) gc.Preview.Request(cd, false); else gc.Preview.Hide(); });
+                var tile = CardTile.Create(content, c, 186, 260, click, cd => { if (cd != null) gc.Preview.Request(cd, false); else gc.Preview.Hide(); });
                 bool playable = s.Prompt.ActionableCards.Contains(c.Id) || s.Prompt.SelectableCards.Contains(c.Id);
                 if (playable)
                 {

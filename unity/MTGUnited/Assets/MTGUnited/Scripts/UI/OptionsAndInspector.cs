@@ -143,10 +143,10 @@ namespace MTGUnited
     public class OptionsPanel : MonoBehaviour
     {
         GameController gc;
-        RectTransform frame, rootPage;
+        RectTransform frame, rootPage, band;
         Text title;
         Text scaleText, delayText, soundText, volumeText, autoPayText;
-        Text cardText, speedText, reduceText, textSizeText, languageText;
+        Text cardText, speedText, reduceText, textSizeText, languageText, setTagsText;
         Text resText, modeText;
         readonly Dictionary<string, RectTransform> pages = new Dictionary<string, RectTransform>();
         string page = "";
@@ -154,27 +154,34 @@ namespace MTGUnited
         public bool IsOpen => gameObject.activeSelf;
 
         // The content frame (board units); everything is laid out inside it.
-        const float W = 1100, H = 900;
+        const float W = 1100, H = 640;   // the band across the middle of the screen
         const float LabelX = 250, ControlX = 600;   // a centred two-column form (labels | controls)
 
         public static OptionsPanel Create(RectTransform parent, GameController gc)
         {
+            // Arena style: whatever is behind stays visible, dimly shadowed; the menu is a band across the middle
+            // of the screen, with Jodah, the Unifier painted behind it (his face kept in view).
             var shade = MenuKit.Shade("Options", parent);
+            shade.color = MenuKit.Dim;
             var o = shade.gameObject.AddComponent<OptionsPanel>();
             o.gc = gc;
 
-            o.frame = UIKit.Rect("Frame", shade.transform);
+            var band = MenuKit.Band(shade.transform, H, MenuKit.JodahArt, 30);   // Jodah at 50% brightness, face in view
+            shade.gameObject.AddComponent<PointerEvents>().OnClick = o.Close;  // clicking outside the band closes it
+            o.band = band;
+
+            o.frame = UIKit.Rect("Frame", band);
             o.frame.anchorMin = o.frame.anchorMax = new Vector2(0.5f, 0.5f);
             o.frame.sizeDelta = new Vector2(W, H);
-            UiScaled.Add(o.frame, Vector2.zero).MaxScale = 1040f / H;
+            UiScaled.Add(o.frame, Vector2.zero).MaxScale = 1f;   // the band is fixed; only shrink with a smaller UI
 
-            o.title = MenuKit.Title(o.frame, "Options", 30, W);
-            MenuKit.Back(o.frame, o.Back, 34);
+            o.title = MenuKit.Title(o.frame, "Options", 14, W);
+            MenuKit.Back(o.frame, o.Back, 14);
             UIKit.CloseX(o.frame, o.Close);
 
             // ---- the list
             o.rootPage = UIKit.Rect("Root", o.frame).Stretch();
-            float cx = W / 2f - 150, y = 650;
+            float cx = W / 2f - 150, y = 466;
             void Item(string label, UnityEngine.Events.UnityAction a, bool danger = false)
             {
                 MenuKit.Capsule(o.rootPage, label, a, cx, y, 300, 46, danger);
@@ -189,13 +196,13 @@ namespace MTGUnited
 
             // Footer links.
             float lx = W / 2f - 330;
-            MenuKit.Link(o.rootPage, "GitHub", () => Application.OpenURL(MenuKit.GitHub), lx, 30, 200);
-            MenuKit.Link(o.rootPage, "Report a bug", () => Application.OpenURL(MenuKit.Issues), lx + 230, 30, 200);
-            MenuKit.Link(o.rootPage, "Error log", () => ErrorReporter.OpenLog(gc), lx + 460, 30, 200);
+            MenuKit.Link(o.rootPage, "GitHub", () => Application.OpenURL(MenuKit.GitHub), lx, 22, 200);
+            MenuKit.Link(o.rootPage, "Report a bug", () => Application.OpenURL(MenuKit.Issues), lx + 230, 22, 200);
+            MenuKit.Link(o.rootPage, "Error log", () => ErrorReporter.OpenLog(gc), lx + 460, 22, 200);
 
             // ---- Gameplay
             var gp = o.NewPage("gameplay");
-            y = 650;
+            y = 466;
             o.languageText = o.ToggleRow(gp, "Language", ref y, () => { Loc.Language = (Loc.Language + 1) % Loc.Codes.Length; o.Refresh(); });
             if (o.languageText is SymbolText lt) lt.Localize = false;   // each language's own name
             o.delayText = o.Row(gp, "Card preview delay", ref y, () => o.Step(-1, Setting.Delay), () => o.Step(1, Setting.Delay));
@@ -211,10 +218,11 @@ namespace MTGUnited
                 o.Refresh();
             });
             o.reduceText = o.ToggleRow(gp, "Reduce motion", ref y, () => { Motion.ReduceMotion = !Motion.ReduceMotion; o.Refresh(); });
+            o.setTagsText = o.ToggleRow(gp, "Show set codes in names", ref y, () => { SetTags.Show = !SetTags.Show; o.Refresh(); });
 
             // ---- Graphics
             var gr = o.NewPage("graphics");
-            y = 650;
+            y = 466;
             o.resText = o.Row(gr, "Resolution", ref y, () => o.StepResolution(-1), () => o.StepResolution(1));
             o.modeText = o.ToggleRow(gr, "Display mode", ref y, o.CycleDisplayMode);
             o.scaleText = o.Row(gr, "Interface size", ref y, () => o.Step(-1, Setting.Scale), () => o.Step(1, Setting.Scale));
@@ -223,7 +231,7 @@ namespace MTGUnited
 
             // ---- Audio
             var au = o.NewPage("audio");
-            y = 650;
+            y = 466;
             o.soundText = o.ToggleRow(au, "Sound", ref y, () => { Sound.Enabled = !Sound.Enabled; o.Refresh(); });
             o.volumeText = o.Row(au, "Volume", ref y, () => o.Step(-1, Setting.Volume), () => o.Step(1, Setting.Volume));
 
@@ -348,7 +356,7 @@ namespace MTGUnited
             {
                 int index = t;
                 var b = UIKit.Button("Mode" + t, page, Shortcuts.Tabs[t].tab, Theme.Secondary, () => ShowShortcuts(index), 14);
-                ((RectTransform)b.transform).Place(x, 712, w, 38);
+                ((RectTransform)b.transform).Place(x, 470, w, 38);
                 x += w + 8;
                 var list = UIKit.Rect("List" + t, page).Stretch();
                 BuildShortcutList(list, Shortcuts.Tabs[t].list, left, width);
@@ -376,7 +384,7 @@ namespace MTGUnited
 
         void BuildShortcutList(RectTransform page, (string key, string what)[] items, float left, float width)
         {
-            float top = 696, bottom = 40;
+            float top = 456, bottom = 20;
             var view = UIKit.Rect("View", page);
             view.Place(left, bottom, width, top - bottom);
             view.gameObject.AddComponent<RectMask2D>();
@@ -462,6 +470,7 @@ namespace MTGUnited
             soundText.text = Sound.Enabled ? "ON" : "OFF";
             speedText.text = Motion.SpeedMode == Motion.SpeedSetting.Normal ? "NORMAL" : Motion.SpeedMode == Motion.SpeedSetting.Fast ? "FAST" : "INSTANT";
             reduceText.text = Motion.ReduceMotion ? "ON" : "OFF";
+            setTagsText.text = SetTags.Show ? "ON" : "OFF";
             autoPayText.text = gc.AutoPayMana ? "ON" : "OFF";
             languageText.text = Loc.Names[Loc.Language];
         }

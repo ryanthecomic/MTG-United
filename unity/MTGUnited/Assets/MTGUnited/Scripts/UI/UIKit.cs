@@ -8,16 +8,16 @@ namespace MTGUnited
     /// <summary>Colours and sizes for the whole client, so the look can be retuned in one place.</summary>
     public static class Theme
     {
-        public static readonly Color BgTop = new Color(0.07f, 0.09f, 0.14f);
-        public static readonly Color BgBottom = new Color(0.03f, 0.04f, 0.07f);
-        public static readonly Color Panel = new Color(0.10f, 0.12f, 0.18f, 0.92f);
-        public static readonly Color PanelLight = new Color(0.16f, 0.19f, 0.27f, 0.95f);
+        public static readonly Color BgTop = new Color(0.08f, 0.08f, 0.09f);
+        public static readonly Color BgBottom = new Color(0.03f, 0.03f, 0.035f);
+        public static readonly Color Panel = new Color(0.08f, 0.08f, 0.09f, 0.94f);     // neutral black-grey (no blue cast)
+        public static readonly Color PanelLight = new Color(0.15f, 0.15f, 0.16f, 0.95f);
         public static readonly Color Line = new Color(1f, 1f, 1f, 0.08f);
-        public static readonly Color Text = new Color(0.92f, 0.94f, 0.98f);
-        public static readonly Color TextDim = new Color(0.62f, 0.67f, 0.76f);
+        public static readonly Color Text = new Color(0.94f, 0.94f, 0.95f);
+        public static readonly Color TextDim = new Color(0.66f, 0.66f, 0.69f);
         public static readonly Color Accent = new Color(0.98f, 0.62f, 0.18f);       // primary button
         public static readonly Color AccentDim = new Color(0.55f, 0.38f, 0.16f);
-        public static readonly Color Secondary = new Color(0.25f, 0.30f, 0.42f);
+        public static readonly Color Secondary = new Color(0.25f, 0.25f, 0.27f);
         public static readonly Color Playable = new Color(0.25f, 0.75f, 1.00f);     // card you can play/activate
         public static readonly Color Selectable = new Color(1.00f, 0.86f, 0.25f);   // valid target / choice
         public static readonly Color Chosen = new Color(1.00f, 0.45f, 0.15f);       // already picked

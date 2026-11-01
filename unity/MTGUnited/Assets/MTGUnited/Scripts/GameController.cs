@@ -235,6 +235,8 @@ namespace MTGUnited
                 if (pingTimer <= 0) { pingTimer = 10f; Bridge.Send("ping"); }
             }
 
+            UpdateAltZoom();
+
             int budget = 50;
             while (budget-- > 0 && Bridge.TryReceive(out var msg))
             {
@@ -242,6 +244,32 @@ namespace MTGUnited
                 catch (Exception ex) { ErrorReporter.Report(ex, "handling the message '" + msg.Str("t") + "' from Forge"); }
             }
             HandleKeys();
+        }
+
+        /// <summary>
+        /// Hold Alt over any card on any screen: the big view of it (not blocking the mouse, so it follows to other
+        /// cards); releasing Alt closes it. Ignored while typing in a text field.
+        /// </summary>
+        void UpdateAltZoom()
+        {
+            bool held = AltZoom.Held;
+            if (held)
+            {
+                var es = UnityEngine.EventSystems.EventSystem.current;
+                if (es != null && es.currentSelectedGameObject != null && es.currentSelectedGameObject.GetComponent<InputField>() != null) held = false;
+            }
+            var c = AltZoom.Hovered;
+            if (held && c != null && c != AltZoom.Showing)
+            {
+                AltZoom.Showing = c;
+                Preview.HideKeepHover();
+                Inspector.ShowPassive(c);
+            }
+            else if (!held && AltZoom.Showing != null)
+            {
+                AltZoom.Showing = null;
+                if (Inspector.IsOpen) Inspector.ForceHide();
+            }
         }
 
         /// <summary>Save power in the background: the bridge keeps running, the client draws less often.</summary>

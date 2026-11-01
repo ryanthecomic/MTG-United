@@ -53,6 +53,7 @@ namespace MTGUnited
             d.peek.gameObject.SetActive(false);
             var peekInPanel = UIKit.Button("PeekIn", p.transform, "View board", Theme.Secondary, d.TogglePeek, 18);
             Anchor((RectTransform)peekInPanel.transform, 0, 0, 120, 46, 200, 50);
+            MenuKit.Bandify(p);   // Arena look: a full-width band, dim shadow behind
             shade.gameObject.SetActive(false);
             return d;
         }

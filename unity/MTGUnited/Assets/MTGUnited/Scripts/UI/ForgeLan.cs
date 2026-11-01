@@ -37,7 +37,7 @@ namespace MTGUnited
             l.gc = gc;
             l.bots = PlayerPrefs.GetInt("forgeLanBots", 1);
             shade.gameObject.AddComponent<PointerEvents>();
-            var p = UIKit.Panel("Panel", shade.transform, new Color(0.07f, 0.08f, 0.12f, 0.98f));
+            var p = UIKit.Panel("Panel", shade.transform, new Color(0.07f, 0.07f, 0.08f, 0.98f));
             p.rectTransform.anchorMin = p.rectTransform.anchorMax = new Vector2(0.5f, 0.5f);
             p.rectTransform.sizeDelta = new Vector2(1000, 840);
             p.gameObject.AddComponent<PointerEvents>();
@@ -92,6 +92,7 @@ namespace MTGUnited
             UIKit.CloseX(p.transform, l.Close);
             gc.Net.LobbyChanged += () => { if (l != null && l.IsOpen) l.Refresh(); };
             gc.LanLobbyChanged += msg => { if (l != null) l.OnLobby(msg); };
+            MenuKit.Bandify(p);   // Arena look: a full-width band, dim shadow behind
             shade.gameObject.SetActive(false);
             return l;
         }

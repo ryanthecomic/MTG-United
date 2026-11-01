@@ -4,14 +4,20 @@ namespace MTGUnited
 {
     /// <summary>
     /// Motion tokens (design doc section 2). Every animation reads its timing from here so one change retunes the
-    /// whole client. Durations follow the doc, but nothing may exceed <see cref="Budget"/> (400 ms): the longer doc
-    /// tokens (emphasis, dramatic) are capped.
+    /// whole client.
+    ///  • Normal: exactly the doc's timings (emphasis 520 ms, dramatic 900 ms...), no cap.
+    ///  • Fast: the same, but nothing longer than 400 ms (<see cref="Budget"/>).
+    ///  • Instant: short fades only (30 %, also capped).
     /// </summary>
     public static class Motion
     {
-        public const float Budget = 0.40f;
+        /// <summary>The 400 ms ceiling used by Fast (and Instant).</summary>
+        public const float FastCap = 0.40f;
 
-        /// <summary>Animation speed setting (design doc 10.2): Normal 1.0, Fast 0.65, Instant (short fades only).</summary>
+        /// <summary>The longest any animation may run in the current speed setting (Normal: no limit).</summary>
+        public static float Budget => SpeedMode == SpeedSetting.Normal ? 10f : FastCap;
+
+        /// <summary>Animation speed setting (design doc 10.2): Normal (doc timings), Fast (≤ 400 ms), Instant.</summary>
         public enum SpeedSetting { Normal, Fast, Instant }
 
         static int speedSetting = -1;
@@ -21,14 +27,11 @@ namespace MTGUnited
             set { speedSetting = (int)value; PlayerPrefs.SetInt("animSpeed", speedSetting); }
         }
 
-        /// <summary>Global duration multiplier. Instant keeps a ~120 ms fade/highlight so changes are still visible.</summary>
-        public static float Speed
-        {
-            get
-            {
-                switch (SpeedMode) { case SpeedSetting.Fast: return 0.65f; case SpeedSetting.Instant: return 0.3f; default: return 1f; }
-            }
-        }
+        /// <summary>Global duration multiplier: 1 for Normal and Fast (Fast only caps); Instant keeps ~30 %.</summary>
+        public static float Speed => SpeedMode == SpeedSetting.Instant ? 0.3f : 1f;
+
+        /// <summary>A doc duration in the current setting: scaled, then capped (Fast / Instant).</summary>
+        static float T(float doc) => Mathf.Min(doc * Speed, Budget);
 
         static int reduce = -1;
         /// <summary>Accessibility (10.3): no shakes or lunges, flatter travel, fewer particles.</summary>
@@ -38,14 +41,14 @@ namespace MTGUnited
             set { reduce = value ? 1 : 0; PlayerPrefs.SetInt("reduceMotion", reduce); }
         }
 
-        public static float Micro => 0.090f * Speed;
-        public static float Short => 0.160f * Speed;
-        public static float Base => 0.260f * Speed;
-        public static float Travel => 0.380f * Speed;
-        public static float Emphasis => Mathf.Min(0.520f, Budget) * Speed;   // capped from 520 ms
-        public static float Impact => 0.220f * Speed;
-        public static float Dramatic => Mathf.Min(0.900f, Budget) * Speed;   // capped from 900 ms
-        public static float Stagger => 0.040f * Speed;
+        public static float Micro => T(0.090f);
+        public static float Short => T(0.160f);
+        public static float Base => T(0.260f);
+        public static float Travel => T(0.380f);
+        public static float Emphasis => T(0.520f);
+        public static float Impact => T(0.220f);
+        public static float Dramatic => T(0.900f);
+        public static float Stagger => T(0.040f);
 
         // Spatial tokens, in board pixels (the board is 1920x1080; one "unit" in the doc ~ one card height).
         public const float HoverScale = 1.08f;

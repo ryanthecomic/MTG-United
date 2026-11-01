@@ -806,7 +806,7 @@ namespace MTGUnited
             var cv = CardView.Create(cardLayer, id);
             cv.Clicked = OnClick;
             cv.RightClicked = OnRightClick;
-            cv.HoverStart = v => { hovered = v; if (!altZoom && v.Data != null && !v.Data.Hidden) gc.Preview.Request(v.Data, v.CurrentPos.x < 960); };
+            cv.HoverStart = v => { hovered = v; if (!AltZoom.Active && v.Data != null && !v.Data.Hidden) gc.Preview.Request(v.Data, v.CurrentPos.x < 960); };
             cv.HoverEnd = v => { if (hovered == v) hovered = null; gc.Preview.Hide(); };
             cv.DragBegan = OnDragBegan;
             cv.DragMoved = OnDragMoved;
@@ -1117,18 +1117,9 @@ namespace MTGUnited
 
         // =================================================================================================== keys
 
-        bool altZoom;
-        int altCard = -1;
-
         void Update()
         {
             if (State == null) return;
-            if (altZoom && !(Input.GetKey(KeyCode.LeftAlt) || Input.GetKey(KeyCode.RightAlt)))
-            {
-                altZoom = false;
-                altCard = -1;
-                if (gc.Inspector.IsOpen) gc.Inspector.ForceHide();
-            }
 #if ENABLE_LEGACY_INPUT_MANAGER
             if (viewer.IsOpen || tokenDialog.IsOpen || noteDialog.IsOpen || PopupMenu.Instance.IsOpen || gc.GameMenu.IsOpen || gc.Options.IsOpen) return;
             var es = UnityEngine.EventSystems.EventSystem.current;
@@ -1153,17 +1144,7 @@ namespace MTGUnited
             if (Input.GetKeyDown(KeyCode.N) && !shift) NextTurn();
             if (Input.GetKeyDown(KeyCode.R)) DiceMenu(Input.mousePosition);
             if (Input.GetKeyDown(KeyCode.G)) OpenTokenDialog();
-            // Hold Alt over a card: the big zoomed view, until Alt is released.
-            bool alt = Input.GetKey(KeyCode.LeftAlt) || Input.GetKey(KeyCode.RightAlt);
-            if (alt && hovered != null && hovered.Data != null && !hovered.Data.Hidden && !string.IsNullOrEmpty(hovered.Data.Name)
-                && (!altZoom || altCard != hovered.CardId))
-            {
-                // Follows the mouse while Alt stays down: hover another card and the big view switches to it.
-                altZoom = true;
-                altCard = hovered.CardId;
-                gc.Preview.Hide();
-                gc.Inspector.ShowPassive(hovered.Data);
-            }
+            // (Hold Alt over a card: the big view. Works on every screen: see AltZoom / GameController.)
 #endif
         }
 

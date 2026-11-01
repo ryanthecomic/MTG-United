@@ -36,7 +36,7 @@ namespace MTGUnited
             d.gc = gc;
             shade.gameObject.AddComponent<PointerEvents>().OnClick = d.Close;
 
-            var p = UIKit.Panel("Panel", shade.transform, new Color(0.07f, 0.08f, 0.12f, 0.98f));
+            var p = UIKit.Panel("Panel", shade.transform, new Color(0.07f, 0.07f, 0.08f, 0.98f));
             d.panel = p.rectTransform;
             d.panel.anchorMin = d.panel.anchorMax = new Vector2(0.5f, 0.5f);
             d.panel.sizeDelta = new Vector2(760, 690);
@@ -55,7 +55,7 @@ namespace MTGUnited
             foreach (var (format, title, how) in Formats)
             {
                 var f = format;
-                var b = UIKit.Button(title, p.transform, "", new Color(0.13f, 0.15f, 0.21f), () => d.FromClipboard(f), 18);
+                var b = UIKit.Button(title, p.transform, "", new Color(0.14f, 0.14f, 0.15f), () => d.FromClipboard(f), 18);
                 ((RectTransform)b.transform).Place(40, y, 680, 88);
                 var bt = UIKit.Label("T", b.transform, title, 22, Theme.Text, TextAnchor.UpperLeft, FontStyle.Bold);
                 bt.rectTransform.Stretch(22, 0, 22, 12);
@@ -71,6 +71,7 @@ namespace MTGUnited
             }, 16);
             ((RectTransform)file.transform).Place(40, 24, 420, 46);
             UIKit.CloseX(p.transform, d.Close);
+            MenuKit.Bandify(p);   // Arena look: a full-width band, dim shadow behind
             shade.gameObject.SetActive(false);
             return d;
         }

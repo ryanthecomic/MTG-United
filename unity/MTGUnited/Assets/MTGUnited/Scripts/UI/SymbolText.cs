@@ -67,7 +67,7 @@ namespace MTGUnited
                 value = value ?? "";
                 if (value == raw || value == base.text) return;
                 raw = value;
-                base.text = Symbols ? Convert(Localize ? Loc.T(value) : value) : value;
+                base.text = Symbols ? Convert(Shown(value)) : value;
             }
         }
 
@@ -79,8 +79,15 @@ namespace MTGUnited
 
         void Relocalize()
         {
-            if (!Symbols || !Localize || string.IsNullOrEmpty(raw)) return;
-            base.text = Convert(Loc.T(raw));
+            if (!Symbols || string.IsNullOrEmpty(raw)) return;
+            base.text = Convert(Shown(raw));
+        }
+
+        /// <summary>What a label displays: set tags hidden (unless Options say otherwise), then translated.</summary>
+        string Shown(string value)
+        {
+            value = SetTags.Clean(value);
+            return Localize ? Loc.T(value) : value;
         }
 
         /// <summary>The text as it was set, with {codes} intact.</summary>
@@ -299,6 +306,29 @@ namespace MTGUnited
                 return l;
             }
             return l;
+        }
+    }
+
+    /// <summary>
+    /// Forge names AI decks like "Tramplesaurus Rex [FDC] [2026]". Players don't need the set code and year, so
+    /// those tags are hidden everywhere (Options → Gameplay → Show set codes brings them back).
+    /// </summary>
+    public static class SetTags
+    {
+        static readonly System.Text.RegularExpressions.Regex Tags =
+            new System.Text.RegularExpressions.Regex(@"\s*\[(?:[A-Z0-9]{2,5}|\d{4})\]");
+
+        static int show = -1;
+        public static bool Show
+        {
+            get { if (show < 0) show = PlayerPrefs.GetInt("showSetCodes", 0); return show == 1; }
+            set { show = value ? 1 : 0; PlayerPrefs.SetInt("showSetCodes", show); SymbolText.RelocalizeAll(); }
+        }
+
+        public static string Clean(string s)
+        {
+            if (Show || string.IsNullOrEmpty(s) || s.IndexOf('[') < 0) return s;
+            return Tags.Replace(s, "");
         }
     }
 }

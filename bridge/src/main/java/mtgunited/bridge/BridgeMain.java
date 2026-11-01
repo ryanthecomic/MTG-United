@@ -286,7 +286,7 @@ public final class BridgeMain {
             }
             case "stack" -> {
                 final StackItemView si = gui.findStackItem(msg.get("id").getAsInt());
-                if (si != null) { c.selectStackItem(si); }
+                if (si != null) { Compat.call(c, "selectStackItem", si); }   // newer Forge only
             }
             case "mana" -> c.useMana(msg.get("color").getAsByte());
             case "undo" -> c.undoLastAction();
@@ -362,7 +362,7 @@ public final class BridgeMain {
 
             final ForgePreferences prefs = FModel.getPreferences();
             prefs.setPref(FPref.PLAYER_NAME, playerName);
-            prefs.setPref(FPref.MATCH_AI_FLAT_MONTE_CARLO, !"fast".equals(aiStrength));
+            Compat.setPref(prefs, "MATCH_AI_FLAT_MONTE_CARLO", !"fast".equals(aiStrength));
 
             final List<RegisteredPlayer> players = new ArrayList<>();
             final Map<RegisteredPlayer, IGuiGame> guis = new java.util.HashMap<>();
@@ -437,8 +437,8 @@ public final class BridgeMain {
             // shuffling at this point, so this takes effect before the AI's first decision (its mulligan).
             final Game started = hm.getGame();
             if (started != null) {
-                started.AI_FLAT_MONTE_CARLO = !"fast".equals(aiStrength);
-                started.AI_FLAT_MONTE_CARLO_MAX = "strong".equals(aiStrength);
+                Compat.setField(started, "AI_FLAT_MONTE_CARLO", !"fast".equals(aiStrength));
+                Compat.setField(started, "AI_FLAT_MONTE_CARLO_MAX", "strong".equals(aiStrength));
             }
             Log.info("AI strength: " + aiStrength);
         } catch (final Exception ex) {

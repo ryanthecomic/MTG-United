@@ -14,6 +14,9 @@ against Forge's AI. Forge enforces the rules; the Unity client draws the game an
 
 * `bridge/` runs Forge with no window and implements Forge's GUI interface (`IGuiGame`). Every
   prompt, highlight and question Forge would normally show on screen becomes a JSON message.
+  It works with any Forge version: setup runs `bridge/tools/CompatGen.java` against the installed Forge,
+  which writes `GuiGameCompat` / `GuiBaseCompat` (stubs for every GUI method that Forge version has), and
+  the bridge extends those instead of implementing Forge's interfaces directly.
 * `unity/MTGUnited/` is the client. The whole UI is built from code, so you don't need to set up a
   scene. Card images come from [Scryfall](https://scryfall.com) and are cached on disk.
 * `PROTOCOL.md` documents the messages, in case you want to build another front end.
@@ -29,7 +32,8 @@ You need:
 Then:
 
 1. Double-click **`scripts\setup.bat`**. It will:
-   * download Forge's source at a pinned commit into `forge\` (about 500 MB, git-ignored)
+   * download Forge's newest source into `forge\` (about 500 MB, git-ignored); if it doesn't build, the
+     commit this release was tested with (`-ForgeVersion tested` forces that one)
    * download Maven into `.tools\` if you don't have it
    * build the Forge engine and then the bridge, producing `bridge\target\forge-bridge-all.jar`
 
@@ -92,6 +96,15 @@ Not done yet, or deliberately simple:
 * no sound, no sideboarding, no deck builder
 * local play against AI only. Forge supports network play, and multiple Unity clients on one
   bridge would be the next step for playing with friends.
+
+## Art credits
+
+The menu and carousel art is Magic: The Gathering card art by these artists (© Wizards of the Coast),
+used under Wizards' Fan Content Policy:
+
+* *Jodah, the Unifier* (Dominaria United): **Ryan Pancoast** (Options and menus, GitHub slide)
+* *Urabrask's Forge* (Phyrexia: All Will Be One): **Lie Setiawan** (Forge slide)
+* *Trivia Contest* (Unfinity): **Caroline Gariba** (Kitchen Table slide)
 
 ## Licensing
 

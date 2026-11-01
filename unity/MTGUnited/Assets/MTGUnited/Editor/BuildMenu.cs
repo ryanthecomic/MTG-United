@@ -23,7 +23,7 @@ namespace MTGUnited.EditorTools
         const string ScenePath = "Assets/MTGUnited/Main.unity";
         const string ProductName = "MTG United";
         /// <summary>The release being built (shown on the main menu, in the zip's name and in the guide).</summary>
-        public const string Version = "0.1.1";
+        public const string Version = "0.1.2";
 
         static string ProjectDir => Directory.GetParent(Application.dataPath).FullName;           // unity/MTGUnited
         static string RepoDir => Directory.GetParent(ProjectDir).Parent.FullName;                // repo root
@@ -133,6 +133,7 @@ namespace MTGUnited.EditorTools
         {
             CopyDir(Path.Combine(RepoDir, "scripts"), Path.Combine(OutDir, "scripts"));
             CopyDir(Path.Combine(RepoDir, "bridge", "src"), Path.Combine(OutDir, "bridge", "src"));
+            CopyDir(Path.Combine(RepoDir, "bridge", "tools"), Path.Combine(OutDir, "bridge", "tools"));   // adapts the bridge to any Forge
             CopyFile(Path.Combine(RepoDir, "bridge", "pom.xml"), Path.Combine(OutDir, "bridge", "pom.xml"));
             CopyFile(Path.Combine(RepoDir, "README.md"), Path.Combine(OutDir, "README.md"));
             CopyFile(Path.Combine(RepoDir, "CHANGELOG.md"), Path.Combine(OutDir, "CHANGELOG.md"));

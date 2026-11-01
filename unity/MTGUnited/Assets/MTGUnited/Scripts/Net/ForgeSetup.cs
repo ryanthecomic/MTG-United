@@ -10,8 +10,9 @@ namespace MTGUnited
     /// <summary>
     /// Where Forge and the bridge live, and the install / update / uninstall actions behind the Forge tab.
     /// Two setups are supported:
-    ///  • bundled  - MTG United downloads Forge's source at the pinned version and builds it (scripts/setup.ps1);
-    ///  • existing - a Forge the player already has: the bridge is compiled against its program file and reads its
+    ///  • bundled  - MTG United downloads Forge's newest source and builds it (scripts/setup.ps1); if the newest
+    ///               doesn't build, the version this release was tested with. Update = get the newest again;
+    ///  • existing - a Forge the player already has (any version): the bridge is compiled against its program file and reads its
     ///               card data through a link, so nothing is downloaded twice and their Forge folder isn't modified.
     /// The choice is stored by the setup script in &lt;repo&gt;/mtgunited-forge.json.
     /// </summary>

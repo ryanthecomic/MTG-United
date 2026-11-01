@@ -30,6 +30,7 @@ namespace MTGUnited
         FormatSwitch skillSwitch, aiDeckSwitch;
         float panelT, panelTarget;   // 0 = hidden, 1 = shown
         const float SideW = 460;
+        static readonly string[] OfferedFormats = { DeckFormat.Commander };
         CanvasGroup panelGroup;
         string chooserClickId; float chooserClickAt = -1f;
 
@@ -242,7 +243,8 @@ namespace MTGUnited
             formatGroup = UIKit.Rect("Format", side).Stretch();
             Caption(formatGroup, "FORMAT", 832);
             float fy = 772;
-            foreach (var (f, label) in new[] { (DeckFormat.Commander, "Commander"), (DeckFormat.Constructed, "60 cards"), (DeckFormat.Limited, "40 cards") })
+            // Only Commander is offered for now; 60 / 40-card games still work in the bridge if they come back.
+            foreach (var (f, label) in new[] { (DeckFormat.Commander, "Commander") })
             {
                 string ff = f;
                 var row = UIKit.Panel("Row " + label, formatGroup, Color.clear, false);

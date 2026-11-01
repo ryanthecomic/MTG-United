@@ -3,7 +3,6 @@ package mtgunited.bridge;
 import com.google.gson.JsonArray;
 import com.google.gson.JsonElement;
 import com.google.gson.JsonObject;
-import forge.LobbyPlayer;
 import forge.deck.CardPool;
 import forge.game.GameEntityView;
 import forge.game.GameView;
@@ -11,16 +10,13 @@ import forge.game.card.CardFaceView;
 import forge.game.card.CardView;
 import forge.game.phase.PhaseType;
 import forge.game.player.DelayedReveal;
-import forge.game.player.IHasIcon;
 import forge.game.player.PlayerView;
 import forge.game.spellability.SpellAbilityView;
 import forge.game.spellability.StackItemView;
 import forge.gamemodes.match.AbstractGuiGame;
-import forge.gamemodes.match.Selection;
 import forge.interfaces.IGameController;
 import forge.item.PaperCard;
 import forge.localinstance.skin.FSkinProp;
-import forge.player.PlayerZoneUpdate;
 import forge.trackable.TrackableCollection;
 import forge.trackable.TrackableTypes;
 import forge.game.zone.ZoneType;
@@ -47,7 +43,7 @@ import java.util.concurrent.atomic.AtomicInteger;
  * ask questions; we turn each into a JSON message for Unity. Blocking questions (choose a card, pick a number...)
  * become a {@code request} that waits for the client's matching {@code response}.
  */
-public final class BridgeGuiGame extends AbstractGuiGame {
+public final class BridgeGuiGame extends GuiGameCompat {
     private final Channel conn;
     private final StateSerializer serializer = new StateSerializer(this);
     private final ScheduledExecutorService sync = Executors.newSingleThreadScheduledExecutor(r -> {
@@ -89,6 +85,7 @@ public final class BridgeGuiGame extends AbstractGuiGame {
 
     /** Coalesces bursts of Forge updates into one state message every ~40 ms. */
     void markDirty() {
+        if (flushScheduled == null || sync == null) { return; }   // called by Forge while still constructing
         if (flushScheduled.compareAndSet(false, true)) {
             sync.schedule(this::flushNow, 40, TimeUnit.MILLISECONDS);
         }
@@ -141,7 +138,6 @@ public final class BridgeGuiGame extends AbstractGuiGame {
     }
 
     /** Forge's visibility check can fail for a card that is mid-move; fall back to the plain rule instead of throwing. */
-    @Override
     public boolean mayView(final CardView c) {
         try {
             return super.mayView(c);
@@ -175,7 +171,7 @@ public final class BridgeGuiGame extends AbstractGuiGame {
         cancel.addProperty("label", cancelLabel);
         cancel.addProperty("enabled", cancelEnabled);
         p.add("cancel", cancel);
-        p.add("selection", serializer.selection(getSelection()));
+        p.add("selection", serializer.selection(currentSelection()));
         // A cost asked for while something is resolving (Mana Vault's "you may pay {4}", unless costs, ward...)
         // is a choice, not a cast: the client must not auto-pay it.
         p.addProperty("duringResolution", isStackResolving());
@@ -306,7 +302,6 @@ public final class BridgeGuiGame extends AbstractGuiGame {
         if (name != null && !name.isEmpty()) { seenNames.add(name); }
     }
 
-    @Override
     public void resetForNewMatch() {
         super.resetForNewMatch();
         seenNames.clear();
@@ -360,7 +355,6 @@ public final class BridgeGuiGame extends AbstractGuiGame {
         return result;
     }
 
-    @Override
     public <T> List<T> getChoices(final String message, final int min, final int max, final List<T> choices, final List<T> selected, final FSerializableFunction<T, String> display) {
         if (choices == null || choices.isEmpty()) { return new ArrayList<>(); }
         if (min >= 0 && max <= 1 && choices.get(0) instanceof CardFaceView) {
@@ -401,7 +395,6 @@ public final class BridgeGuiGame extends AbstractGuiGame {
         return result;
     }
 
-    @Override
     public <T> OrderResult<T> order(final String title, final String top, final int remainingObjectsMin, final int remainingObjectsMax,
                                     final List<T> sourceChoices, final List<T> destChoices, final CardView referenceCard,
                                     final boolean sideboardingMode, final boolean showRememberCheckbox) {
@@ -435,7 +428,6 @@ public final class BridgeGuiGame extends AbstractGuiGame {
         return new OrderResult<>(result, false);
     }
 
-    @Override
     public boolean confirm(final CardView c, final String question, final boolean defaultIsYes, final List<String> options) {
         final JsonObject body = new JsonObject();
         body.addProperty("title", question);
@@ -451,7 +443,6 @@ public final class BridgeGuiGame extends AbstractGuiGame {
         return idx == null ? defaultIsYes : idx.getAsInt() == 0;
     }
 
-    @Override
     public boolean showConfirmDialog(final String message, final String title, final String yesButtonText, final String noButtonText, final boolean defaultYes) {
         final JsonObject body = new JsonObject();
         body.addProperty("title", title == null || title.isEmpty() ? message : title + ": " + message);
@@ -465,7 +456,6 @@ public final class BridgeGuiGame extends AbstractGuiGame {
         return idx == null ? defaultYes : idx.getAsInt() == 0;
     }
 
-    @Override
     public int showOptionDialog(final String message, final String title, final FSkinProp icon, final List<String> options, final int defaultOption) {
         final JsonObject body = new JsonObject();
         body.addProperty("title", title == null || title.isEmpty() ? message : title + ": " + message);
@@ -478,7 +468,6 @@ public final class BridgeGuiGame extends AbstractGuiGame {
         return idx == null ? defaultOption : idx.getAsInt();
     }
 
-    @Override
     public String showInputDialog(final String message, final String title, final FSkinProp icon, final String initialInput, final List<String> inputOptions, final boolean isNumeric) {
         if (inputOptions != null && !inputOptions.isEmpty()) {
             final String choice = one(title == null ? message : title + ": " + message, inputOptions);
@@ -493,7 +482,6 @@ public final class BridgeGuiGame extends AbstractGuiGame {
         return v == null || v.isJsonNull() ? null : v.getAsString();
     }
 
-    @Override
     public SpellAbilityView getAbilityToPlay(final CardView hostCard, final List<SpellAbilityView> abilities, final ITriggerEvent triggerEvent) {
         if (abilities == null || abilities.isEmpty()) { return null; }
         if (abilities.size() == 1 && !abilities.get(0).promptIfOnlyPossibleAbility()) {
@@ -519,7 +507,6 @@ public final class BridgeGuiGame extends AbstractGuiGame {
         return idx.isEmpty() || idx.get(0) < 0 || idx.get(0) >= playable.size() ? null : playable.get(idx.get(0));
     }
 
-    @Override
     public Map<CardView, Integer> assignCombatDamage(final CardView attacker, final List<CardView> blockers, final int damage,
                                                      final GameEntityView defender, final boolean overrideOrder, final boolean maySkip) {
         // Arena-style: assign lethal damage to each blocker in order, the rest to the player (trample) or last blocker.
@@ -546,7 +533,6 @@ public final class BridgeGuiGame extends AbstractGuiGame {
         return result;
     }
 
-    @Override
     public Map<Object, Integer> assignGenericAmount(final CardView effectSource, final Map<Object, Integer> target, final int amount,
                                                     final boolean atLeastOne, final String amountLabel) {
         final List<Object> keys = new ArrayList<>(target.keySet());
@@ -590,7 +576,6 @@ public final class BridgeGuiGame extends AbstractGuiGame {
         return result;
     }
 
-    @Override
     public GameEntityView chooseSingleEntityForEffect(final String title, final List<? extends GameEntityView> optionList, final DelayedReveal delayedReveal, final boolean isOptional) {
         if (delayedReveal != null) {
             reveal(delayedReveal.getMessagePrefix(), new ArrayList<>(delayedReveal.getCards()));
@@ -599,7 +584,6 @@ public final class BridgeGuiGame extends AbstractGuiGame {
         return isOptional ? oneOrNone(title, list) : one(title, list);
     }
 
-    @Override
     public List<GameEntityView> chooseEntitiesForEffect(final String title, final List<? extends GameEntityView> optionList, final int min, final int max, final DelayedReveal delayedReveal) {
         if (delayedReveal != null) {
             reveal(delayedReveal.getMessagePrefix(), new ArrayList<>(delayedReveal.getCards()));
@@ -607,7 +591,6 @@ public final class BridgeGuiGame extends AbstractGuiGame {
         return getChoices(title, min, max, new ArrayList<>(optionList), null, null);
     }
 
-    @Override
     public List<CardView> manipulateCardList(final String title, final Iterable<CardView> cards, final Iterable<CardView> manipulable,
                                              final boolean toTop, final boolean toBottom, final boolean toAnywhere) {
         final List<CardView> list = StateSerializer.snapshot(cards);
@@ -624,12 +607,10 @@ public final class BridgeGuiGame extends AbstractGuiGame {
         return result;
     }
 
-    @Override
     public List<PaperCard> sideboard(final CardPool sideboard, final CardPool main, final String message) {
         return null; // keep the main deck unchanged
     }
 
-    @Override
     public void message(final String message, final String title) {
         final JsonObject body = new JsonObject();
         body.addProperty("title", title);
@@ -637,7 +618,6 @@ public final class BridgeGuiGame extends AbstractGuiGame {
         sendEvent("message", body);
     }
 
-    @Override
     public void showErrorDialog(final String message, final String title) {
         final JsonObject body = new JsonObject();
         body.addProperty("title", title);
@@ -649,14 +629,12 @@ public final class BridgeGuiGame extends AbstractGuiGame {
     // ------------------------------------------------------------------------------------------------------------
     // Prompt / buttons / highlighting
 
-    @Override
     public void showPromptMessage(final PlayerView playerView, final String message, final CardView card) {
         promptMessage = message == null ? "" : message;
         promptCardId = card == null ? -1 : card.getId();
         markDirty();
     }
 
-    @Override
     public void updateButtons(final PlayerView owner, final String label1, final String label2, final boolean enable1, final boolean enable2, final boolean focus1) {
         okLabel = label1 == null ? "" : label1;
         cancelLabel = label2 == null ? "" : label2;
@@ -666,25 +644,18 @@ public final class BridgeGuiGame extends AbstractGuiGame {
         markDirty();
     }
 
-    @Override
-    public void setSelection(final Selection next) {
-        super.setSelection(next);
-        markDirty();
-    }
 
-    @Override public void flashIncorrectAction() { sendEvent("flash", new JsonObject()); }
-    @Override public void alertUser() { sendEvent("alert", new JsonObject()); }
+    public void flashIncorrectAction() { sendEvent("flash", new JsonObject()); }
+    public void alertUser() { sendEvent("alert", new JsonObject()); }
 
     // ------------------------------------------------------------------------------------------------------------
     // State change notifications: all simply schedule a state push.
 
-    @Override
     public void setGameView(final GameView gameView0) {
         super.setGameView(gameView0);
         markDirty();
     }
 
-    @Override
     public void openView(final TrackableCollection<PlayerView> myPlayers) {
         if (myPlayers != null && !myPlayers.isEmpty()) {
             me = myPlayers.iterator().next();
@@ -699,24 +670,78 @@ public final class BridgeGuiGame extends AbstractGuiGame {
         return me;
     }
 
-    @Override protected void updateCurrentPlayer(final PlayerView player) { markDirty(); }
-    @Override public void showCombat() { markDirty(); }
-    @Override public void updatePhase(final boolean saveState) { markDirty(); }
-    @Override public void updateTurn(final PlayerView player) { markDirty(); }
-    @Override public void updatePlayerControl() { markDirty(); }
-    @Override public void updateStack() { markDirty(); }
-    @Override public void updateZones(final Iterable<PlayerZoneUpdate> zonesToUpdate) { markDirty(); }
-    @Override public void updateCards(final Iterable<CardView> cards) { markDirty(); }
-    @Override public void refreshCardDetails(final Iterable<CardView> cards) { markDirty(); }
-    @Override public void refreshField() { markDirty(); }
-    @Override public void updateManaPool(final Iterable<PlayerView> manaPoolUpdate) { markDirty(); }
-    @Override public void updateLives(final Iterable<PlayerView> livesUpdate) { markDirty(); }
-    @Override public void setPanelSelection(final CardView hostCard) { }
-    @Override public void setCard(final CardView card) { }
-    @Override public void setPlayerAvatar(final LobbyPlayer player, final IHasIcon ihi) { }
+    // ------------------------------------------------------------------------------------------------------------
+    // Everything else Forge tells "the screen" (zones, stack, lives, phase, new calls in newer Forge versions...)
+    // arrives here through the generated GuiGameCompat; for a client that redraws from state, a push is enough.
+
+    protected Object onGuiCall(final String method, final Object[] args) {
+        if (method.startsWith("update") || method.startsWith("refresh") || method.startsWith("show") || method.startsWith("set")) {
+            markDirty();
+        } else if (!QUIET.contains(method)) {
+            Compat.unknownCall("IGuiGame", method);
+        }
+        return null;
+    }
+
+    private static final Set<String> QUIET = Set.of("getGamestate", "applyMacroState", "clearSelectables", "clearWeaklySelectable");
+
+    /**
+     * Selection changes. Newer Forge keeps one Selection object (read in {@link #currentSelection}); older Forge
+     * (2.0.15 and before) sends separate calls, tracked here.
+     */
+    protected void onGuiEvent(final String method, final Object[] args) {
+        if (tracked == null) { return; }
+        synchronized (tracked) {
+            switch (method) {
+                case "setSelectables" -> {
+                    tracked.cards = Compat.list(args[0]);
+                    tracked.min = Compat.integer(args[1]);
+                    tracked.max = Compat.integer(args[2]);
+                }
+                case "clearSelectables" -> { tracked.cards = new ArrayList<>(); tracked.min = 0; tracked.max = 0; tracked.chosen = new ArrayList<>(); }
+                case "setHighlighted" -> {
+                    final List<Object> es = Compat.list(args[0]);
+                    final boolean on = args.length > 1 && Boolean.TRUE.equals(args[1]);
+                    final List<Object> chosen = new ArrayList<>(tracked.chosen);
+                    if (on) { for (final Object e : es) { if (!chosen.contains(e)) { chosen.add(e); } } } else { chosen.removeAll(es); }
+                    tracked.chosen = chosen;
+                }
+                case "setWeaklySelectable" -> tracked.actionable = Compat.list(args[0]);
+                case "clearWeaklySelectable" -> tracked.actionable = new ArrayList<>();
+                default -> { }
+            }
+        }
+        markDirty();
+    }
+
+    private final StateSerializer.Sel tracked = new StateSerializer.Sel();
+    private static volatile java.lang.reflect.Method getSelection;
+    private static volatile boolean lookedUp;
+
+    StateSerializer.Sel currentSelection() {
+        if (!lookedUp) {
+            try { getSelection = AbstractGuiGame.class.getMethod("getSelection"); } catch (final NoSuchMethodException ex) { getSelection = null; }
+            lookedUp = true;
+        }
+        if (getSelection != null) {
+            try {
+                final Object sel = getSelection.invoke(this);
+                final StateSerializer.Sel out = new StateSerializer.Sel();
+                out.cards = Compat.list(Compat.get(sel, "cards"));
+                out.min = Compat.integer(Compat.get(sel, "min"));
+                out.max = Compat.integer(Compat.get(sel, "max"));
+                out.targets = Compat.list(Compat.get(sel, "targets"));
+                out.chosen = Compat.list(Compat.get(sel, "chosen"));
+                out.actionable = Compat.list(Compat.get(sel, "actionable"));
+                return out;
+            } catch (final Exception ex) {
+                Log.warn("Couldn't read Forge's selection: " + ex);
+            }
+        }
+        synchronized (tracked) { return tracked.copy(); }
+    }
 
     /** Forge calls this once the game is decided (GameEventGameFinished). */
-    @Override
     public void finishGame() {
         final GameView gv = getGameView();
         final JsonObject body = new JsonObject();
@@ -728,7 +753,6 @@ public final class BridgeGuiGame extends AbstractGuiGame {
     // ------------------------------------------------------------------------------------------------------------
     // Phase stops
 
-    @Override
     public boolean isUiSetToSkipPhase(final PlayerView playerTurn, final PhaseType phase) {
         if (phase == null) { return false; }
         final boolean myTurn = me != null && playerTurn != null && playerTurn.getId() == me.getId();

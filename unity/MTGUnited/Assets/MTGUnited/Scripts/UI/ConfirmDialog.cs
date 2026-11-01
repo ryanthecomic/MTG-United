@@ -26,7 +26,7 @@ namespace MTGUnited
             var d = shade.gameObject.AddComponent<ConfirmDialog>();
             Instance = d;
             shade.gameObject.AddComponent<PointerEvents>().OnClick = d.Cancel;
-            var p = UIKit.Panel("Panel", shade.transform, new Color(0.07f, 0.08f, 0.12f, 0.98f));
+            var p = UIKit.Panel("Panel", shade.transform, new Color(0.07f, 0.07f, 0.08f, 0.98f));
             d.panel = p.rectTransform;
             d.panel.anchorMin = d.panel.anchorMax = new Vector2(0.5f, 0.5f);
             d.panel.sizeDelta = new Vector2(640, 280);
@@ -45,6 +45,7 @@ namespace MTGUnited
             hl.spacing = 12; hl.childAlignment = TextAnchor.MiddleRight; hl.childControlWidth = false; hl.childControlHeight = true;
             hl.childForceExpandWidth = false;
             UiScaled.Add(p, Vector2.zero).MaxScale = 1.2f;
+            MenuKit.Bandify(p);   // Arena look: a full-width band, dim shadow behind
             shade.gameObject.SetActive(false);
             return d;
         }

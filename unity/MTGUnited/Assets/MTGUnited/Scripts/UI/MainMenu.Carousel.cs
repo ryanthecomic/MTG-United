@@ -15,22 +15,36 @@ namespace MTGUnited
     {
         const string CarouselFolder = "Visuals/Carousel";
 
-        /// <summary>Puts a picture behind a slide's content, cropped to fill, with a dark fade so text stays readable.</summary>
-        void SlideImage(RectTransform slide, string name)
+        /// <summary>
+        /// Puts a picture behind a slide's content, cropped to fill, with a dark fade so text stays readable:
+        /// Resources/Visuals/Carousel/&lt;name&gt; if present, else the built-in art (focusY keeps that height in view).
+        /// Hides the slide's faint icon when there's a picture. Returns true if one was used.
+        /// </summary>
+        bool SlideImage(RectTransform slide, string name, string builtIn = null, float focusY = 0.5f, GameObject icon = null)
         {
             var tex = Resources.Load<Texture2D>(CarouselFolder + "/" + name);
-            if (tex == null) return;
-            AddCover(slide, tex, 0.78f);
+            if (tex == null && builtIn != null) tex = Resources.Load<Texture2D>(builtIn); else focusY = 0.5f;
+            if (tex == null) return false;
+            AddCover(slide, tex, 0.78f, focusY);
+            if (icon != null) icon.SetActive(false);
+            return true;
         }
 
-        static void AddCover(RectTransform slide, Texture2D tex, float fade)
+        // Built-in slide art (credited in README.md).
+        const string ForgeArt = "Visuals/Images/Urabrasks-Forge-2-Phyrexia-All-Will-Be-One-MtG-Art";   // Lie Setiawan
+        const string KitchenArt = "Visuals/Images/Trivia-Contest-Unfinity-MtG-Art";                      // Caroline Gariba
+
+        static void AddCover(RectTransform slide, Texture2D tex, float fade, float focusY = 0.5f)
         {
             const float W = 1150, H = 690;
             var pic = UIKit.Rect("Picture", slide);
             pic.anchorMin = pic.anchorMax = new Vector2(0.5f, 0.5f);
-            float k = Mathf.Max(W / tex.width, H / tex.height);   // cover
-            pic.sizeDelta = new Vector2(tex.width * k, tex.height * k);
-            pic.anchoredPosition = Vector2.zero;
+            float k = Mathf.Max(W / tex.width, H / tex.height);   // cover: fills the slide, keeps the picture's shape
+            float w = tex.width * k, h = tex.height * k;
+            pic.sizeDelta = new Vector2(w, h);
+            // Keep the interesting part (focusY: 0 = bottom, 1 = top of the picture) in view.
+            float dy = Mathf.Clamp((0.5f - focusY) * h, -(h - H) / 2f, (h - H) / 2f);
+            pic.anchoredPosition = new Vector2(0, dy);
             var img = pic.gameObject.AddComponent<RawImage>();
             img.texture = tex;
             img.raycastTarget = false;
@@ -68,8 +82,11 @@ namespace MTGUnited
             UIKit.Pill("Open", gh, "Open GitHub", new Color(0.22f, 0.3f, 0.62f), () => Application.OpenURL(MenuKit.GitHub), 50, 70, 320, 70, 28);
             var bug = UIKit.Button("Bug", gh, "REPORT A BUG", Theme.Secondary, () => Application.OpenURL(MenuKit.Issues), 18);
             ((RectTransform)bug.transform).Place(400, 80, 240, 52);
-            slides.Add(gh);
-            SlideImage(gh, "github");
+            slides.Insert(0, gh);   // GitHub comes first
+            // Banner: Resources/Visuals/Carousel/github if there is one, else Jodah, the Unifier (his face near the top).
+            var custom = Resources.Load<Texture2D>(CarouselFolder + "/github");
+            var art = custom != null ? custom : MenuKit.JodahArt;
+            if (art != null) { AddCover(gh, art, 0.8f, custom != null ? 0.5f : 0.8f); mark.gameObject.SetActive(false); }
         }
 
         /// <summary>Every other picture in the carousel folder becomes a slide of its own.</summary>
