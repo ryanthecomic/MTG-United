@@ -132,7 +132,7 @@ namespace MTGUnited
         {
             var sb = new StringBuilder();
             sb.Append("==== ").Append(e.Time.ToString("yyyy-MM-dd HH:mm:ss")).Append("  ").Append(e.Type)
-              .Append("  v").Append(Application.version).Append("  ").Append(Where()).Append('\n');
+              .Append("  v").Append(AppInfo.Version).Append("  ").Append(Where()).Append('\n');
             if (!string.IsNullOrEmpty(e.Context)) sb.Append("While: ").Append(e.Context).Append('\n');
             sb.Append(e.Message.Trim()).Append('\n');
             if (!string.IsNullOrEmpty(e.Stack)) sb.Append(Indent(e.Stack.Trim(), 12)).Append('\n');

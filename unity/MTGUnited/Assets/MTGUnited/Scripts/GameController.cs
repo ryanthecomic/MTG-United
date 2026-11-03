@@ -197,6 +197,9 @@ namespace MTGUnited
             Net = TableNet.Create(this);
             Lan = LanLobby.Create(OverlayLayer, this);
             ForgeLan.Create(OverlayLayer, this);
+            LimitedSession.Create(this);
+            DraftView.Create(OverlayLayer, this);
+            LimitedSetup.Create(OverlayLayer, this);
             Options = OptionsPanel.Create(OverlayLayer, this);
             Reveals = RevealPopup.Create(OverlayLayer, this);
             Toasts = Toasts.Create(OverlayLayer);
@@ -313,10 +316,13 @@ namespace MTGUnited
                 if (ConfirmDialog.Instance != null && ConfirmDialog.Instance.IsOpen) { ConfirmDialog.Instance.Cancel(); return; }
                 if (ImportDialog.Instance != null && ImportDialog.Instance.IsOpen) { ImportDialog.Instance.Close(); return; }
                 if (Inspector != null && Inspector.IsOpen) { Inspector.Hide(); return; }
+                if (CardPicker.Instance != null && CardPicker.Instance.IsOpen) { CardPicker.Instance.Close(); return; }
+                if (LimitedSetup.Instance != null && LimitedSetup.Instance.IsOpen) { LimitedSetup.Instance.Close(); return; }
                 if (Options.IsOpen) { Options.Back(); return; }
                 if (GameMenu.IsOpen) { GameMenu.Close(); return; }
                 if (ZoneViewer.IsOpen) { ZoneViewer.Close(); return; }
                 if (PopupMenu.Instance != null && PopupMenu.Instance.IsOpen) { PopupMenu.Instance.Close(); return; }
+                if (DraftView.Instance != null && DraftView.Instance.IsOpen && !(Menu.IsOpen && Menu.Builder != null && Menu.Builder.IsOpen)) { DraftView.Instance.AskLeave(); return; }
                 if (Lan.IsOpen) { Lan.Close(); return; }
                 if (ForgeLan.Instance != null && ForgeLan.Instance.IsOpen) { ForgeLan.Instance.Close(); return; }
                 if (Menu.IsOpen && Menu.PlayPanelOpen) { Menu.ClosePlayPanel(); return; }

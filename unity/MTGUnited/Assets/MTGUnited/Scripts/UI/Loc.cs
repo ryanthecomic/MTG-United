@@ -133,6 +133,130 @@ namespace MTGUnited
             (new Regex(@"^Exile \((\d+)\)$"), "Exílio ({1})", "Exilio ({1})"),
             (new Regex(@"^Command zone \((\d+)\)$"), "Zona de comando ({1})", "Zona de mando ({1})"),
             (new Regex(@"^Revealed this game \((\d+)\)$"), "Revelados nesta partida ({1})", "Reveladas en esta partida ({1})"),
+            (new Regex(@"^You can\x27t play (.+) right now\.$"), "Você não pode jogar {1} agora.", "No puedes jugar {1} ahora."),
+            (new Regex(@"^Imported (.+) \((.+)\): (\d+) cards, (\d+) images \((\d+) without an image: they\x27ll show as text cards\)\.$"), "Importado {1} ({2}): {3} cartas, {4} imagens ({5} sem imagem: aparecerão como cartas de texto).", "Importado {1} ({2}): {3} cartas, {4} imágenes ({5} sin imagen: se verán como cartas de texto)."),
+            (new Regex(@"^Imported (.+) \((.+)\): (\d+) cards, (\d+) images\.$"), "Importado {1} ({2}): {3} cartas, {4} imagens.", "Importado {1} ({2}): {3} cartas, {4} imágenes."),
+            (new Regex(@"^(\d+) cards  ·  (\d+) with images  ·  (\d+) tokens$"), "{1} cartas  ·  {2} com imagem  ·  {3} fichas", "{1} cartas  ·  {2} con imagen  ·  {3} fichas"),
+            (new Regex(@"^Removed (.+)\.$"), "{1} removido.", "{1} eliminado."),
+            (new Regex(@"^Your opened cards \((\d+)\) and basic lands  ·  click to add  ·  build 40 cards$"), "Suas cartas abertas ({1}) e terrenos básicos  ·  clique para adicionar  ·  monte 40 cartas", "Tus cartas abiertas ({1}) y tierras básicas  ·  haz clic para añadir  ·  construye 40 cartas"),
+            (new Regex(@"^All (\d+) cards of (.+)  ·  click to add  ·  type to filter$"), "Todas as {1} cartas de {2}  ·  clique para adicionar  ·  digite para filtrar", "Las {1} cartas de {2}  ·  haz clic para añadir  ·  escribe para filtrar"),
+            (new Regex(@"^No cards match ""(.*)""$"), "Nenhuma carta corresponde a \"{1}\"", "Ninguna carta coincide con \"{1}\""),
+            (new Regex(@"^(\d+) cards \(Scryfall search\)  ·  click or drag to add$"), "{1} cartas (busca do Scryfall)  ·  clique ou arraste para adicionar", "{1} cartas (búsqueda de Scryfall)  ·  haz clic o arrastra para añadir"),
+            (new Regex(@"^(\d+) closest matches  ·  click or drag to the list to add  ·  ◆ = in your deck  \(Forge isn\x27t running: only custom sets searched\)$"), "{1} resultados mais próximos  ·  clique ou arraste para a lista para adicionar  ·  ◆ = no seu deck  (o Forge não está rodando: só coleções custom foram buscadas)", "{1} resultados más cercanos  ·  haz clic o arrastra a la lista para añadir  ·  ◆ = en tu mazo  (Forge no está en marcha: solo se buscaron colecciones custom)"),
+            (new Regex(@"^(\d+) closest matches  ·  click or drag to the list to add  ·  ◆ = in your deck$"), "{1} resultados mais próximos  ·  clique ou arraste para a lista para adicionar  ·  ◆ = no seu deck", "{1} resultados más cercanos  ·  haz clic o arrastra a la lista para añadir  ·  ◆ = en tu mazo"),
+            (new Regex(@"^""(.+)"" has changes that aren\x27t saved yet\.$"), "\"{1}\" tem alterações que ainda não foram salvas.", "\"{1}\" tiene cambios que aún no se han guardado."),
+            (new Regex(@"^Saved a copy: (.+)$"), "Cópia salva: {1}", "Copia guardada: {1}"),
+            (new Regex(@"^Imported (\d+) cards\. Save to keep them, or close and discard\.$"), "{1} cartas importadas. Salve para mantê-las, ou feche e descarte.", "{1} cartas importadas. Guarda para conservarlas, o cierra y descarta."),
+            (new Regex(@"^Imported (\d+) cards\. Type a name for the deck\.$"), "{1} cartas importadas. Digite um nome para o deck.", "{1} cartas importadas. Escribe un nombre para el mazo."),
+            (new Regex(@"^(\d+) SETS$"), "{1} COLEÇÕES", "{1} COLECCIONES"),
+            (new Regex(@"^(\d+) sets?$"), "{1} coleções", "{1} colecciones"),
+            (new Regex(@"^You opened only one (.+)\.$"), "Você abriu só um(a) {1}.", "Solo abriste un(a) {1}."),
+            (new Regex(@"^You opened (\d+) (.+)\.$"), "Você abriu {1} {2}.", "Abriste {1} {2}."),
+            (new Regex(@"^(.+) is already in the deck \(Commander is singleton\)\.$"), "{1} já está no deck (Commander só permite uma cópia).", "{1} ya está en el mazo (Commander solo permite una copia)."),
+            (new Regex(@"^POOL: (.+)$"), "POOL: {1}", "POOL: {1}"),
+            (new Regex(@"^Couldn\x27t read the file: (.+)$"), "Não foi possível ler o arquivo: {1}", "No se pudo leer el archivo: {1}"),
+            (new Regex(@"^Couldn\x27t export: (.+)$"), "Não foi possível exportar: {1}", "No se pudo exportar: {1}"),
+            (new Regex(@"^Exported to (.+)$"), "Exportado para {1}", "Exportado a {1}"),
+            (new Regex(@"^Heads up: ""(.+)"" is a (.+) deck, playing it as (.+)\.$"), "Atenção: \"{1}\" é um deck {2}, jogando como {3}.", "Atención: \"{1}\" es un mazo {2}, jugándolo como {3}."),
+            (new Regex(@"^Your sets: (.+)  <color=#9aa0aa>\((\d+) cards\)</color>$"), "Suas coleções: {1}  <color=#9aa0aa>({2} cartas)</color>", "Tus colecciones: {1}  <color=#9aa0aa>({2} cartas)</color>"),
+            (new Regex(@"^""(.+)"" will be deleted for good\.$"), "\"{1}\" será excluído para sempre.", "\"{1}\" se eliminará para siempre."),
+            (new Regex(@"^Deleted ""(.+)""$"), "\"{1}\" excluído", "\"{1}\" eliminado"),
+            (new Regex(@"^GAMES  (\d+)        WINS  <color=#f7a540>(\d+)</color>        LOSSES  (\d+)        WIN RATE  (.+)$"), "PARTIDAS  {1}        VITÓRIAS  <color=#f7a540>{2}</color>        DERROTAS  {3}        APROVEITAMENTO  {4}", "PARTIDAS  {1}        VICTORIAS  <color=#f7a540>{2}</color>        DERROTAS  {3}        % DE VICTORIAS  {4}"),
+            (new Regex(@"^Deleted (\d+) cached images\. They download again when needed \(restart to clear memory too\)\.$"), "{1} imagens em cache apagadas. Elas são baixadas de novo quando preciso (reinicie para liberar a memória também).", "{1} imágenes en caché eliminadas. Se descargan de nuevo cuando hagan falta (reinicia para liberar también la memoria)."),
+            (new Regex(@"^Waiting for Forge \(port (\d+)\)$"), "Esperando o Forge (porta {1})", "Esperando a Forge (puerto {1})"),
+            (new Regex(@"^\(\+(\d+) more\)$"), "(+{1} mais)", "(+{1} más)"),
+            (new Regex(@"^<color=#f7a540>●</color>  (.+)\.\.\.$"), "<color=#f7a540>●</color>  {1}...", "<color=#f7a540>●</color>  {1}..."),
+            (new Regex(@"^Using your own Forge \((.+)\)\.$"), "Usando o seu próprio Forge ({1}).", "Usando tu propio Forge ({1})."),
+            (new Regex(@"^Seat (\d+):  (.+)$"), "Lugar {1}:  {2}", "Asiento {1}:  {2}"),
+            (new Regex(@"^SEAT (\d+)$"), "LUGAR {1}", "ASIENTO {1}"),
+            (new Regex(@"^Winner: (.+)$"), "Vencedor: {1}", "Ganador: {1}"),
+            (new Regex(@"^Assigned (\d+) of (\d+)$"), "Atribuído {1} de {2}", "Asignado {1} de {2}"),
+            (new Regex(@"^Known in this game \(your deck and cards you\x27ve seen\)\. Type to search all (\d+) names\.$"), "Conhecidas nesta partida (seu deck e cartas que você viu). Digite para buscar entre todos os {1} nomes.", "Conocidas en esta partida (tu mazo y cartas que has visto). Escribe para buscar entre los {1} nombres."),
+            (new Regex(@"^Type to search all (\d+) card names\.$"), "Digite para buscar entre os {1} nomes de cartas.", "Escribe para buscar entre los {1} nombres de cartas."),
+            (new Regex(@"^No card named like ""(.*)""\.$"), "Nenhuma carta com nome parecido com \"{1}\".", "Ninguna carta con un nombre como \"{1}\"."),
+            (new Regex(@"^Pick at least (\d+)\.  Selected: (\d+)$"), "Escolha pelo menos {1}.  Selecionadas: {2}", "Elige al menos {1}.  Seleccionadas: {2}"),
+            (new Regex(@"^at least (\d+)$"), "pelo menos {1}", "al menos {1}"),
+            (new Regex(@"^Bridge running: (.*)$"), "Ponte rodando: {1}", "Puente en marcha: {1}"),
+            (new Regex(@"^Bridge stopped \(exit (-?\d+)\)\. (.*)$"), "Ponte parada (saída {1}). {2}", "Puente detenido (salida {1}). {2}"),
+            (new Regex(@"^Click in order \(first = top\)\. Pick (.+)\.  Selected: (\d+)$"), "Clique na ordem (primeira = topo). Escolha {1}.  Selecionadas: {2}", "Haz clic en orden (primera = arriba). Elige {1}.  Seleccionadas: {2}"),
+            (new Regex(@"^Pick (.+)\.  Selected: (\d+)$"), "Escolha {1}.  Selecionadas: {2}", "Elige {1}.  Seleccionadas: {2}"),
+            (new Regex(@"^COMMANDER   ·   (.+) GOES FIRST$"), "COMMANDER   ·   {1} COMEÇA", "COMMANDER   ·   {1} EMPIEZA"),
+            (new Regex(@"^Scryfall has no cards for set ""(.+)""\.$"), "O Scryfall não tem cartas da coleção \"{1}\".", "Scryfall no tiene cartas de la colección \"{1}\"."),
+            (new Regex(@"^No cards found for (.+)\.$"), "Nenhuma carta encontrada para {1}.", "No se encontraron cartas para {1}."),
+            (new Regex(@"^Cube: (.+)$"), "Cubo: {1}", "Cubo: {1}"),
+            (new Regex(@"^Cube from deck: (.+)$"), "Cubo do deck: {1}", "Cubo del mazo: {1}"),
+            (new Regex(@"^Cube · (.+)$"), "Cubo · {1}", "Cubo · {1}"),
+            (new Regex(@"^Your deck: (.+?)  ·  name: (.+?)  ·  the host picks the format$"), "Seu deck: {1}  ·  nome: {2}  ·  o anfitrião escolhe o formato", "Tu mazo: {1}  ·  nombre: {2}  ·  el anfitrión elige el formato"),
+            (new Regex(@"^Your deck: (.+?)  ·  name: (.+?)  ·  format: <color=#f7a540>(.+)</color> \(change it on Home\)$"), "Seu deck: {1}  ·  nome: {2}  ·  formato: <color=#f7a540>{3}</color> (mude no Início)", "Tu mazo: {1}  ·  nombre: {2}  ·  formato: <color=#f7a540>{3}</color> (cámbialo en Inicio)"),
+            (new Regex(@"^Your deck: (.+?)  ·  (.+?)  ·  name: (.+)$"), "Seu deck: {1}  ·  {2}  ·  nome: {3}", "Tu mazo: {1}  ·  {2}  ·  nombre: {3}"),
+            (new Regex(@"^Your address: <color=#f7a540>(.+)</color>$"), "Seu endereço: <color=#f7a540>{1}</color>", "Tu dirección: <color=#f7a540>{1}</color>"),
+            (new Regex(@"^Seated at (.+)\. The host starts the game\.$"), "Sentado em {1}. O anfitrião inicia a partida.", "Sentado en {1}. El anfitrión inicia la partida."),
+            (new Regex(@"^Connecting to (.+)\.\.\.$"), "Conectando a {1}...", "Conectando a {1}..."),
+            (new Regex(@"^(\d+)\.  (.+)  \(host\)$"), "{1}.  {2}  (anfitrião)", "{1}.  {2}  (anfitrión)"),
+            (new Regex(@"^(\d+)\.  AI opponent$"), "{1}.  Oponente IA", "{1}.  Oponente IA"),
+            (new Regex(@"^A (.+) deck from Forge$"), "Um deck {1} do Forge", "Un mazo {1} de Forge"),
+            (new Regex(@"^Hosting a (.+) table · (\d+) people, (\d+) AI$"), "Hospedando uma mesa de {1} · {2} pessoas, {3} IA", "Organizando una mesa de {1} · {2} personas, {3} IA"),
+            (new Regex(@"^(.+)  ·  (\d+) people  ·  in a game$"), "{1}  ·  {2} pessoas  ·  em partida", "{1}  ·  {2} personas  ·  en partida"),
+            (new Regex(@"^(.+)  ·  (\d+) people$"), "{1}  ·  {2} pessoas", "{1}  ·  {2} personas"),
+            (new Regex(@"^(.+)  ·  (\d+)/(\d+) players  ·  in progress$"), "{1}  ·  {2}/{3} jogadores  ·  em andamento", "{1}  ·  {2}/{3} jugadores  ·  en curso"),
+            (new Regex(@"^(.+)  ·  (\d+)/(\d+) players$"), "{1}  ·  {2}/{3} jogadores", "{1}  ·  {2}/{3} jugadores"),
+            (new Regex(@"^Couldn\x27t reach the table at (.+)$"), "Não foi possível alcançar a mesa em {1}", "No se pudo alcanzar la mesa en {1}"),
+            (new Regex(@"^Can\x27t listen for LAN games: (.+)$"), "Não dá para procurar partidas na LAN: {1}", "No se pueden buscar partidas en LAN: {1}"),
+            (new Regex(@"^(.+) is ready: (.+)$"), "{1} está pronto: {2}", "{1} está listo: {2}"),
+            (new Regex(@"^(.+) left the table\.$"), "{1} saiu da mesa.", "{1} dejó la mesa."),
+            (new Regex(@"^Couldn\x27t open port (\d+): (.+)$"), "Não foi possível abrir a porta {1}: {2}", "No se pudo abrir el puerto {1}: {2}"),
+            (new Regex(@"^Hosting on (.+)$"), "Hospedando em {1}", "Organizando en {1}"),
+            (new Regex(@"^(.+): done\.$"), "{1}: concluído.", "{1}: listo."),
+            (new Regex(@"^(.+) failed\. See the output below\.$"), "{1} falhou. Veja a saída abaixo.", "{1} falló. Mira la salida abajo."),
+            (new Regex(@"^<b>Setup:</b>  (.+)$"), "<b>Configuração:</b>  {1}", "<b>Configuración:</b>  {1}"),
+            (new Regex(@"^<b>Forge folder:</b>  (.+)$"), "<b>Pasta do Forge:</b>  {1}", "<b>Carpeta de Forge:</b>  {1}"),
+            (new Regex(@"^<b>Forge program:</b>  (.+)$"), "<b>Programa do Forge:</b>  {1}", "<b>Programa de Forge:</b>  {1}"),
+            (new Regex(@"^<b>Bridge:</b>  (.+)$"), "<b>Ponte:</b>  {1}", "<b>Puente:</b>  {1}"),
+            (new Regex(@"^<b>MTG United folder:</b>  (.+)$"), "<b>Pasta do MTG United:</b>  {1}", "<b>Carpeta de MTG United:</b>  {1}"),
+            (new Regex(@"^Java:  not found \(install Java 17\+\)$"), "Java:  não encontrado (instale o Java 17+)", "Java:  no encontrado (instala Java 17+)"),
+            (new Regex(@"^Use (.*[\\/].*)$"), "Usar {1}", "Usar {1}"),
+            (new Regex(@"^STEP (\d+) OF (\d+)$"), "PASSO {1} DE {2}", "PASO {1} DE {2}"),
+            (new Regex(@"^— Turn (\d+): (.+) —$"), "— Turno {1}: {2} —", "— Turno {1}: {2} —"),
+            (new Regex(@"^(.+) drew a card\.$"), "{1} comprou uma carta.", "{1} robó una carta."),
+            (new Regex(@"^(.+) drew (\d+) cards\.$"), "{1} comprou {2} cartas.", "{1} robó {2} cartas."),
+            (new Regex(@"^(.+) tried to draw from an empty library\.$"), "{1} tentou comprar de um grimório vazio.", "{1} intentó robar de una biblioteca vacía."),
+            (new Regex(@"^(.+) shuffled their library\.$"), "{1} embaralhou o grimório.", "{1} barajó su biblioteca."),
+            (new Regex(@"^(.+) milled (\d+)\.$"), "{1} moeu {2}.", "{1} molió {2}."),
+            (new Regex(@"^(.+) token left the battlefield\.$"), "A ficha {1} saiu do campo de batalha.", "La ficha {1} dejó el campo de batalla."),
+            (new Regex(@"^(.+) untapped everything\.$"), "{1} desvirou tudo.", "{1} enderezó todo."),
+            (new Regex(@"^(.+) created a (.+) token\.$"), "{1} criou uma ficha {2}.", "{1} creó una ficha {2}."),
+            (new Regex(@"^(.+) mulliganed\.$"), "{1} fez mulligan.", "{1} hizo mulligan."),
+            (new Regex(@"^(.+) exiled their graveyard\.$"), "{1} exilou o cemitério.", "{1} exilió su cementerio."),
+            (new Regex(@"^(.+) rolled a d(\d+): (\d+)$"), "{1} rolou um d{2}: {3}", "{1} tiró un d{2}: {3}"),
+            (new Regex(@"^(.+) flipped a coin: (heads|tails)$"), "{1} jogou uma moeda: {2}", "{1} lanzó una moneda: {2}"),
+            (new Regex(@"^(.+) flipped (heads|tails)$"), "{1} tirou {2}", "{1} sacó {2}"),
+            (new Regex(@"^Random player: (.+)$"), "Jogador aleatório: {1}", "Jugador aleatorio: {1}"),
+            (new Regex(@"^(.+) revealed (.+) from the top of their library\.$"), "{1} revelou {2} do topo do grimório.", "{1} reveló {2} de la parte superior de su biblioteca."),
+            (new Regex(@"^(.+) revealed (.+)\.$"), "{1} revelou {2}.", "{1} reveló {2}."),
+            (new Regex(@"^(.+) reveals$"), "{1} revela", "{1} revela"),
+            (new Regex(@"^(.+) undid the last action\.$"), "{1} desfez a última ação.", "{1} deshizo la última acción."),
+            (new Regex(@"^(.+) scries (\d+)\.$"), "{1} vidência {2}.", "{1} adivina {2}."),
+            (new Regex(@"^(.+) surveils (\d+)\.$"), "{1} investiga {2}.", "{1} vigila {2}."),
+            (new Regex(@"^(.+) looked at the top (\d+) cards of their library\.$"), "{1} olhou as {2} cartas do topo do grimório.", "{1} miró las {2} cartas superiores de su biblioteca."),
+            (new Regex(@"^(.+) searched their library\.$"), "{1} procurou no grimório.", "{1} buscó en su biblioteca."),
+            (new Regex(@"^(.+): (.+) transformed into (.+)\.$"), "{1}: {2} transformou-se em {3}.", "{1}: {2} se transformó en {3}."),
+            (new Regex(@"^(.+): (.+) transformed back into (.+)\.$"), "{1}: {2} voltou a ser {3}.", "{1}: {2} volvió a ser {3}."),
+            (new Regex(@"^(.+) put a note on (.+)\.$"), "{1} pôs uma anotação em {2}.", "{1} puso una nota en {2}."),
+            (new Regex(@"^(.+) removed the note from (.+)\.$"), "{1} tirou a anotação de {2}.", "{1} quitó la nota de {2}."),
+            (new Regex(@"^(.+) removed (.+) from the game\.$"), "{1} removeu {2} do jogo.", "{1} quitó {2} del juego."),
+            (new Regex(@"^(.+) gave control of (.+) to (.+)\.$"), "{1} deu o controle de {2} para {3}.", "{1} dio el control de {2} a {3}."),
+            (new Regex(@"^(.+): life set to (-?\d+)$"), "{1}: vida definida para {2}", "{1}: vida fijada en {2}"),
+            (new Regex(@"^(.+): ([+-]?\d+) life \((-?\d+)\)$"), "{1}: {2} de vida ({3})", "{1}: {2} de vida ({3})"),
+            (new Regex(@"^(.+): poison (\d+)$"), "{1}: veneno {2}", "{1}: veneno {2}"),
+            (new Regex(@"^(.+): (.+) played$"), "{1}: {2} jogada", "{1}: {2} jugada"),
+            (new Regex(@"^(.+): (.+) → (.+)$"), "{1}: {2} → {3}", "{1}: {2} → {3}"),
+            (new Regex(@"^Sit here \(play as (.+)\)$"), "Sentar aqui (jogar como {1})", "Sentarse aquí (jugar como {1})"),
+            (new Regex(@"^(.+) HOW MANY\?$"), "{1} QUANTAS?", "{1} ¿CUÁNTAS?"),
+            (new Regex(@"^Top (\d+) of your library \(top first\)$"), "{1} do topo do seu grimório (topo primeiro)", "{1} superiores de tu biblioteca (la de arriba primero)"),
+            (new Regex(@"^Scry (\d+) · top first · right-click: To deck bottom \(Y\), or leave it on top$"), "Vidência {1} · topo primeiro · botão direito: Para o fundo (Y), ou deixe no topo", "Adivinar {1} · arriba primero · clic derecho: Al fondo (Y), o déjala arriba"),
+            (new Regex(@"^Surveil (\d+) · top first · right-click: Discard \(D\) to the graveyard, or leave it on top$"), "Investigar {1} · topo primeiro · botão direito: Descartar (D) no cemitério, ou deixe no topo", "Vigilar {1} · arriba primero · clic derecho: Descartar (D) al cementerio, o déjala arriba"),
+            (new Regex(@"^NOTE · (.+)$"), "ANOTAÇÃO · {1}", "NOTA · {1}"),
+            (new Regex(@"^Bot (\d+)$"), "Bot {1}", "Bot {1}"),
         };
 
         static void EnsureTable()
@@ -633,6 +757,196 @@ Lost connection to the Forge bridge. Reconnecting...|Conexão com a ponte do For
 Starting game... (Forge is shuffling up)|Iniciando partida... (o Forge está embaralhando)|Iniciando partida... (Forge está barajando)
 Forge isn't set up yet: open the Forge tab to install it or point to your Forge.|O Forge ainda não está configurado: abra a aba Forge para instalá-lo ou apontar o seu.|Forge aún no está configurado: abre la pestaña Forge para instalarlo o indicar el tuyo.
 That folder doesn't look like Forge: it needs a 'res' folder and Forge's .jar file.|Essa pasta não parece ser do Forge: ela precisa de uma pasta 'res' e do .jar do Forge.|Esa carpeta no parece de Forge: necesita una carpeta 'res' y el .jar de Forge.
+# ---------------------------------------------------------------- limited (draft / sealed)
+DRAFT / SEALED|DRAFT / SELADO|DRAFT / SELLADO
+Draft|Draft|Draft
+Sealed|Selado|Sellado
+PACKS|PACOTES|SOBRES
+PACK 1|PACOTE 1|SOBRE 1
+PACK 2|PACOTE 2|SOBRE 2
+PACK 3|PACOTE 3|SOBRE 3
+bots|bots|bots
+seats|lugares|asientos
+8 is a classic draft table|8 é uma mesa clássica de draft|8 es una mesa clásica de draft
+6 packs each|6 pacotes cada|6 sobres cada uno
+Choose a set or cube|Escolha uma coleção ou cubo|Elige una colección o cubo
+Same as pack 1|Igual ao pacote 1|Igual que el sobre 1
+Set code (e.g. MKM, DSK, FDN)|Código da coleção (ex.: MKM, DSK, FDN)|Código de la colección (p. ej. MKM, DSK, FDN)
+LOAD FROM SCRYFALL|CARREGAR DO SCRYFALL|CARGAR DE SCRYFALL
+A real set (type its code)|Uma coleção oficial (digite o código)|Una colección oficial (escribe su código)
+Cube from the clipboard (one card per line)|Cubo da área de transferência (uma carta por linha)|Cubo del portapapeles (una carta por línea)
+Copy a cube list (one card per line) first.|Copie antes uma lista de cubo (uma carta por linha).|Copia primero una lista de cubo (una carta por línea).
+Type the set's code first.|Digite antes o código da coleção.|Escribe primero el código de la colección.
+Loading the set from Scryfall|Carregando a coleção do Scryfall|Cargando la colección de Scryfall
+Choose what the packs are made of.|Escolha de que são feitos os pacotes.|Elige de qué están hechos los sobres.
+A pack needs at least 15 cards to choose from.|Um pacote precisa de pelo menos 15 cartas para escolher.|Un sobre necesita al menos 15 cartas para elegir.
+The cube is small for this many players: some packs will be short.|O cubo é pequeno para tantos jogadores: alguns pacotes virão incompletos.|El cubo es pequeño para tantos jugadores: algunos sobres saldrán incompletos.
+Three packs; take a card and pass the rest (left, right, left). Then build 40 cards from what you took.|Três pacotes; pegue uma carta e passe o resto (esquerda, direita, esquerda). Depois monte 40 cartas com o que pegou.|Tres sobres; toma una carta y pasa el resto (izquierda, derecha, izquierda). Luego construye 40 cartas con lo que tomaste.
+Everyone opens six packs and builds 40 cards from them.|Todos abrem seis pacotes e montam 40 cartas com eles.|Todos abren seis sobres y construyen 40 cartas con ellos.
+Filter: name, type, rarity|Filtro: nome, tipo, raridade|Filtro: nombre, tipo, rareza
+ALL SHOWN IN|INCLUIR AS VISÍVEIS|INCLUIR LAS VISIBLES
+ALL SHOWN OUT|EXCLUIR AS VISÍVEIS|EXCLUIR LAS VISIBLES
+cards in packs|cartas nos pacotes|cartas en los sobres
+Draft complete|Draft concluído|Draft completado
+Pack|Pacote|Sobre
+Pick|Escolha|Elección
+passing|passando para a|pasando a la
+left|esquerda|izquierda
+right|direita|derecha
+Waiting for the next pack|Esperando o próximo pacote|Esperando el siguiente sobre
+Build your deck|Monte seu deck|Construye tu mazo
+YOUR PICKS|SUAS ESCOLHAS|TUS ELECCIONES
+YOUR CARDS|SUAS CARTAS|TUS CARTAS
+Leave the draft?|Sair do draft?|¿Salir del draft?
+Your picks so far are lost.|As escolhas feitas até agora serão perdidas.|Las elecciones hechas hasta ahora se perderán.
+Leave|Sair|Salir
+Keep drafting|Continuar o draft|Seguir con el draft
+OPENED CARDS|CARTAS ABERTAS|CARTAS ABIERTAS
+Limited|Limitado|Limitado
+Draft and sealed: open packs from a real set, a custom set or a cube, then build 40 cards from what you got.|Draft e selado: abra pacotes de uma coleção oficial, de uma coleção custom ou de um cubo e monte 40 cartas com o que saiu.|Draft y sellado: abre sobres de una colección oficial, una colección custom o un cubo, y construye 40 cartas con lo que salió.
+Draft / Sealed|Draft / Selado|Draft / Sellado
+WITH FRIENDS (LAN)|COM AMIGOS (LAN)|CON AMIGOS (LAN)
+MY CUBES|MEUS CUBOS|MIS CUBOS
+No cubes yet. Import a .txt list or paste one (one card per line).|Nenhum cubo ainda. Importe uma lista .txt ou cole uma (uma carta por linha).|Aún no hay cubos. Importa una lista .txt o pega una (una carta por línea).
+Import a cube|Importar um cubo|Importar un cubo
+PASTE A LIST|COLAR UMA LISTA|PEGAR UNA LISTA
+FROM A DECK|DE UM DECK|DE UN MAZO
+KEEP A DECK AS A CUBE|USAR UM DECK COMO CUBO|USAR UN MAZO COMO CUBO
+Delete this cube?|Excluir este cubo?|¿Eliminar este cubo?
+Cube saved|Cubo salvo|Cubo guardado
+No deck with 45 or more cards.|Nenhum deck com 45 cartas ou mais.|Ningún mazo con 45 cartas o más.
+NEW · LIMITED|NOVO · LIMITADO|NUEVO · LIMITADO
+Draft and Sealed|Draft e Selado|Draft y Sellado
+Open packs from an official set, your custom sets or a cube. Draft against bots or with friends on your network, then build 40 cards from what you opened.|Abra pacotes de uma coleção oficial, das suas coleções custom ou de um cubo. Faça draft contra bots ou com amigos na sua rede e monte 40 cartas com o que abriu.|Abre sobres de una colección oficial, tus colecciones custom o un cubo. Haz draft contra bots o con amigos en tu red y construye 40 cartas con lo que abriste.
+<b>Draft:</b> three packs of 15. Take one card, pass the rest; bots fill the empty seats.|<b>Draft:</b> três pacotes de 15. Pegue uma carta e passe o resto; bots completam os lugares vazios.|<b>Draft:</b> tres sobres de 15. Toma una carta y pasa el resto; los bots ocupan los asientos vacíos.
+<b>Sealed:</b> six packs each, all yours.|<b>Selado:</b> seis pacotes para cada um, todos seus.|<b>Sellado:</b> seis sobres para cada uno, todos tuyos.
+Packs can come from an official set (by its code), a custom set from Magic Set Editor, or one of your cubes. Then build 40 cards from what you opened and play them.|Os pacotes podem vir de uma coleção oficial (pelo código), de uma coleção custom do Magic Set Editor ou de um dos seus cubos. Depois monte 40 cartas com o que abriu e jogue.|Los sobres pueden venir de una colección oficial (por su código), de una colección custom de Magic Set Editor o de uno de tus cubos. Luego construye 40 cartas con lo que abriste y juega.
+<b>With friends:</b> host a LAN table and press DRAFT / SEALED in the lobby.|<b>Com amigos:</b> abra uma mesa LAN e aperte DRAFT / SELADO no lobby.|<b>Con amigos:</b> abre una mesa LAN y pulsa DRAFT / SELLADO en el lobby.
+<b>1. Set up.</b> Press Draft / Sealed. For each pack choose what it's made of: an official set (type its code, like MKM; cards and rarities come from Scryfall), one of your custom sets, or a cube. CARDS… picks which cards can be opened.|<b>1. Prepare.</b> Aperte Draft / Selado. Para cada pacote escolha de onde ele vem: uma coleção oficial (digite o código, como MKM; cartas e raridades vêm do Scryfall), uma das suas coleções custom ou um cubo. CARTAS… escolhe quais cartas podem sair.|<b>1. Prepara.</b> Pulsa Draft / Sellado. Para cada sobre elige de dónde sale: una colección oficial (escribe su código, como MKM; cartas y rarezas vienen de Scryfall), una de tus colecciones custom o un cubo. CARTAS… elige qué cartas pueden salir.
+<b>2. Packs.</b> Sets with rarities open like real boosters: 1 rare (sometimes a mythic), 3 uncommons, 10 commons. Cubes give 15 different cards, and each cube card is opened once per event.|<b>2. Pacotes.</b> Coleções com raridade abrem como boosters de verdade: 1 rara (às vezes mítica), 3 incomuns, 10 comuns. Cubos dão 15 cartas diferentes, e cada carta do cubo sai uma vez só por evento.|<b>2. Sobres.</b> Las colecciones con rareza se abren como sobres de verdad: 1 rara (a veces mítica), 3 infrecuentes, 10 comunes. Los cubos dan 15 cartas distintas, y cada carta del cubo sale una sola vez por evento.
+<b>3. Draft.</b> Click a card, click it again (or PICK) to take it. Packs go left, right, left. Bots pick good cards and stay in their colours.|<b>3. Draft.</b> Clique numa carta e clique de novo (ou em ESCOLHA) para pegá-la. Os pacotes vão para a esquerda, direita, esquerda. Os bots pegam boas cartas e ficam nas suas cores.|<b>3. Draft.</b> Haz clic en una carta y otra vez (o en ELECCIÓN) para tomarla. Los sobres van a la izquierda, derecha, izquierda. Los bots eligen buenas cartas y se quedan en sus colores.
+<b>4. Build.</b> BUILD YOUR DECK opens the builder with only the cards you opened (the diamonds show how many) plus all the basic lands you want. Make 40 cards, then play it against Forge or at the table.|<b>4. Monte.</b> MONTE SEU DECK abre o editor só com as cartas que você abriu (os losangos mostram quantas) e quantos terrenos básicos quiser. Faça 40 cartas e jogue contra o Forge ou na mesa.|<b>4. Construye.</b> CONSTRUYE TU MAZO abre el editor solo con las cartas que abriste (los rombos muestran cuántas) y todas las tierras básicas que quieras. Haz 40 cartas y juega contra Forge o en la mesa.
+<b>Cubes</b> are lists, one card per line. Import a .txt, paste one, or keep any deck of 45+ cards as a cube.|<b>Cubos</b> são listas, uma carta por linha. Importe um .txt, cole uma lista ou use qualquer deck de 45+ cartas como cubo.|<b>Los cubos</b> son listas, una carta por línea. Importa un .txt, pega una o usa cualquier mazo de 45+ cartas como cubo.
+# ---------------------------------------------------------------- translation pass 2
+that card|essa carta|esa carta
+out|fora|fuera
+heads|cara|cara
+tails|coroa|cruz
+its back|o verso|su reverso
+it|ela|ella
+→ bottom of library|→ fundo do grimório|→ fondo de la biblioteca
+→ top of library|→ topo do grimório|→ parte superior de la biblioteca
+→ battlefield|→ campo de batalha|→ campo de batalla
+→ graveyard|→ cemitério|→ cementerio
+→ exile|→ exílio|→ exilio
+→ hand|→ mão|→ mano
+→ command|→ zona de comando|→ zona de mando
+Someone|Alguém|Alguien
+Set code (e.g. MKM, DSK, FDN):|Código da coleção (ex.: MKM, DSK, FDN):|Código de la colección (p. ej. MKM, DSK, FDN):
+A real set (type its code)…|Uma coleção oficial (digite o código)…|Una colección oficial (escribe su código)…
+Clipboard|Área de transferência|Portapapeles
+No packs or no players.|Sem pacotes ou sem jogadores.|No hay sobres o no hay jugadores.
+Scryfall sent something unreadable.|O Scryfall mandou algo ilegível.|Scryfall envió algo ilegible.
+In Magic Set Editor use File → Export → Cockatrice, then import the .xml here. Card images from the export are found and copied automatically. Custom cards appear in deck builder searches and play at the kitchen table (Forge rules games use real cards only).|No Magic Set Editor use Arquivo → Exportar → Cockatrice e importe o .xml aqui. As imagens das cartas exportadas são encontradas e copiadas automaticamente. As cartas custom aparecem nas buscas do editor de decks e na mesa da cozinha (partidas com as regras do Forge usam só cartas reais).|En Magic Set Editor usa Archivo → Exportar → Cockatrice e importa el .xml aquí. Las imágenes exportadas se encuentran y copian automáticamente. Las cartas custom aparecen en las búsquedas del editor de mazos y en la mesa de cocina (las partidas con reglas de Forge usan solo cartas reales).
+<color=#f7a540>Forge isn't running: start it in the Forge tab to host.</color>|<color=#f7a540>O Forge não está rodando: inicie-o na aba Forge para hospedar.</color>|<color=#f7a540>Forge no está en marcha: inícialo en la pestaña Forge para organizar.</color>
+<size=15>Friends open PLAY ON LAN → JOIN A TABLE (Forge mode) and pick you, or type this address.</size>|<size=15>Os amigos abrem JOGAR NA LAN → ENTRAR NUMA MESA (modo Forge) e escolhem você, ou digitam este endereço.</size>|<size=15>Tus amigos abren JUGAR EN LAN → UNIRSE A UNA MESA (modo Forge) y te eligen, o escriben esta dirección.</size>
+<size=15>Other players open JOIN A TABLE and pick you from the list, or type this address.</size>|<size=15>Os outros abrem ENTRAR NUMA MESA e escolhem você na lista, ou digitam este endereço.</size>|<size=15>Los demás abren UNIRSE A UNA MESA y te eligen de la lista, o escriben esta dirección.</size>
+1.  The host|1.  O anfitrião|1.  El anfitrión
+Import custom sets from Magic Set Editor and playtest them at a free table, like Cockatrice: alone with several seats, or with friends over your local network. No rules engine and no Forge needed.|Importe coleções custom do Magic Set Editor e teste-as numa mesa livre, como no Cockatrice: sozinho com vários lugares ou com amigos pela rede local. Sem motor de regras e sem precisar do Forge.|Importa colecciones custom de Magic Set Editor y pruébalas en una mesa libre, como en Cockatrice: solo con varios asientos o con amigos en tu red local. Sin motor de reglas y sin Forge.
+<b>No rules engine.</b> Unlike Forge games, the table doesn't know the rules: you play the cards like on a real table. That's what lets it use cards that don't exist anywhere else.|<b>Sem motor de regras.</b> Diferente das partidas do Forge, a mesa não conhece as regras: você joga as cartas como numa mesa de verdade. É isso que permite usar cartas que não existem em nenhum outro lugar.|<b>Sin motor de reglas.</b> A diferencia de las partidas de Forge, la mesa no conoce las reglas: juegas las cartas como en una mesa de verdad. Eso permite usar cartas que no existen en ningún otro sitio.
+<b>Start a table:</b> on Home, set the mode to KITCHEN TABLE, pick your deck and press Play. Each other seat gets a deck (CHOOSE THEIR DECKS picks them, great for goldfishing a matchup). Ctrl + click a seat's nameplate to play from their side.|<b>Começar uma mesa:</b> no Início, ponha o modo em MESA DA COZINHA, escolha seu deck e aperte Jogar. Cada outro lugar recebe um deck (ESCOLHER OS DECKS DELES escolhe, ótimo para testar um confronto). Ctrl + clique na placa de nome de um lugar para jogar pelo lado dele.|<b>Empezar una mesa:</b> en Inicio, pon el modo en MESA DE COCINA, elige tu mazo y pulsa Jugar. Cada otro asiento recibe un mazo (ELEGIR SUS MAZOS los elige, ideal para probar un enfrentamiento). Ctrl + clic en la placa de un asiento para jugar desde su lado.
+<b>Moving cards:</b> drag cards anywhere on your battlefield, into your hand, onto a pile, or to another player. Drag a pile to take its top card. Click to tap, double-click a hand card to play it, right-click anything for every action. Hold Alt to zoom, Q / E to turn a card, F to transform double-faced cards. Ctrl + Z undoes.|<b>Mover cartas:</b> arraste cartas para qualquer lugar do seu campo de batalha, para a mão, para uma pilha ou para outro jogador. Arraste uma pilha para pegar a carta do topo. Clique para virar, clique duas vezes numa carta da mão para jogá-la, botão direito em qualquer coisa mostra todas as ações. Segure Alt para ampliar, Q / E para girar uma carta, F para transformar cartas de duas faces. Ctrl + Z desfaz.|<b>Mover cartas:</b> arrastra cartas a cualquier parte de tu campo de batalla, a tu mano, a una pila o a otro jugador. Arrastra una pila para tomar la carta de arriba. Clic para girar, doble clic en una carta de la mano para jugarla, clic derecho en cualquier cosa para todas las acciones. Mantén Alt para ampliar, Q / E para girar una carta, F para transformar cartas de dos caras. Ctrl + Z deshace.
+<b>With friends:</b> PLAY ON LAN (HOST / JOIN) on Home. Everyone on the same network; custom sets are copied to the others automatically, so everybody plays with the same cards.|<b>Com amigos:</b> JOGAR NA LAN (HOSPEDAR / ENTRAR) no Início. Todos na mesma rede; as coleções custom são copiadas para os outros automaticamente, então todos jogam com as mesmas cartas.|<b>Con amigos:</b> JUGAR EN LAN (ORGANIZAR / UNIRSE) en Inicio. Todos en la misma red; las colecciones custom se copian a los demás automáticamente, así que todos juegan con las mismas cartas.
+<b>Decks:</b> build them in Decks like any other. Set the format (Commander, 60 or 40 cards) and the card pool (your custom sets, real cards, or both).|<b>Decks:</b> monte-os em Decks como qualquer outro. Defina o formato (Commander, 60 ou 40 cartas) e o pool de cartas (suas coleções custom, cartas reais ou ambas).|<b>Mazos:</b> constrúyelos en Mazos como cualquier otro. Elige el formato (Commander, 60 o 40 cartas) y el pool de cartas (tus colecciones custom, cartas reales o ambas).
+<b>1.</b>  In Magic Set Editor, open your set and choose <b>File → Export → Cockatrice</b>. Keep the card images it exports in the same folder as the .xml (or a folder inside it).|<b>1.</b>  No Magic Set Editor, abra sua coleção e escolha <b>Arquivo → Exportar → Cockatrice</b>. Deixe as imagens exportadas na mesma pasta do .xml (ou numa pasta dentro dela).|<b>1.</b>  En Magic Set Editor, abre tu colección y elige <b>Archivo → Exportar → Cockatrice</b>. Deja las imágenes exportadas en la misma carpeta que el .xml (o en una carpeta dentro).
+<b>2.</b>  Press <b>Import a set</b> below and choose that .xml file. MTG United copies the cards and finds their images by name.|<b>2.</b>  Aperte <b>Importar uma coleção</b> abaixo e escolha esse .xml. O MTG United copia as cartas e encontra as imagens pelo nome.|<b>2.</b>  Pulsa <b>Importar una colección</b> abajo y elige ese .xml. MTG United copia las cartas y encuentra sus imágenes por nombre.
+<b>3.</b>  In Decks, open a deck, set <b>POOL</b> to your set, and build. Search works with Scryfall words too (t:creature c:r mv<=3).|<b>3.</b>  Em Decks, abra um deck, ponha o <b>POOL</b> na sua coleção e monte. A busca também aceita palavras do Scryfall (t:creature c:r mv<=3).|<b>3.</b>  En Mazos, abre un mazo, pon el <b>POOL</b> en tu colección y construye. La búsqueda también acepta palabras de Scryfall (t:creature c:r mv<=3).
+<b>4.</b>  Play it here at the kitchen table. Tokens and double-faced cards from the set work: right-click a card to create its tokens, press F to transform.|<b>4.</b>  Jogue aqui na mesa da cozinha. Fichas e cartas de duas faces da coleção funcionam: botão direito numa carta cria as fichas dela, F transforma.|<b>4.</b>  Juega aquí en la mesa de cocina. Las fichas y cartas de dos caras de la colección funcionan: clic derecho en una carta crea sus fichas, F transforma.
+<color=#9aa0aa>No custom sets yet.</color>|<color=#9aa0aa>Nenhuma coleção custom ainda.</color>|<color=#9aa0aa>Aún no hay colecciones custom.</color>
+<color=#5fd47a>●</color>  Connected and ready|<color=#5fd47a>●</color>  Conectado e pronto|<color=#5fd47a>●</color>  Conectado y listo
+<color=#e55>●</color>  Not installed. Set it up in the Forge tab|<color=#e55>●</color>  Não instalado. Configure na aba Forge|<color=#e55>●</color>  No instalado. Configúralo en la pestaña Forge
+<color=#f7a540>●</color>  Starting (loading cards)...|<color=#f7a540>●</color>  Iniciando (carregando cartas)...|<color=#f7a540>●</color>  Iniciando (cargando cartas)...
+<color=#9aa0aa>●</color>  Installed, not running|<color=#9aa0aa>●</color>  Instalado, parado|<color=#9aa0aa>●</color>  Instalado, detenido
+<color=#5fd47a>●</color>  Running and connected|<color=#5fd47a>●</color>  Rodando e conectado|<color=#5fd47a>●</color>  En marcha y conectado
+<color=#e55>●</color>  Not installed|<color=#e55>●</color>  Não instalado|<color=#e55>●</color>  No instalado
+<color=#f7a540>your turn</color>|<color=#f7a540>seu turno</color>|<color=#f7a540>tu turno</color>
+Using MTG United's copy of Forge.|Usando a cópia do Forge do MTG United.|Usando la copia de Forge de MTG United.
+Space / Enter|Espaço / Enter|Espacio / Enter
+Space|Espaço|Espacio
+` or 0|` ou 0|` o 0
+(when the mouse isn't over a card or pile)|(quando o mouse não está sobre uma carta ou pilha)|(cuando el ratón no está sobre una carta o pila)
+(the card under the mouse, or every selected card)|(a carta sob o mouse, ou todas as cartas selecionadas)|(la carta bajo el ratón, o todas las cartas seleccionadas)
+(the mouse over your library, graveyard, exile...)|(o mouse sobre seu grimório, cemitério, exílio...)|(el ratón sobre tu biblioteca, cementerio, exilio...)
+A draft / sealed deck uses the cards you opened, plus basic lands.|Um deck de draft / selado usa as cartas que você abriu, mais terrenos básicos.|Un mazo de draft / sellado usa las cartas que abriste, más tierras básicas.
+   ·   <color=#f7a540>no commander yet</color>|   ·   <color=#f7a540>sem comandante ainda</color>|   ·   <color=#f7a540>aún sin comandante</color>
+MTG United plays Commander with the rules engine of Forge, the open-source Magic program. This is where you set it up.|O MTG United joga Commander com o motor de regras do Forge, o programa de Magic de código aberto. É aqui que você o configura.|MTG United juega Commander con el motor de reglas de Forge, el programa de Magic de código abierto. Aquí lo configuras.
+ACTIONS|AÇÕES|ACCIONES
+New here? Press ""How to set up Forge"" (top right) for a step-by-step guide. Already have Forge? Use ""Use my Forge..."" or ""Find Forge"" so nothing is downloaded twice. Otherwise ""Install Forge"" downloads about 500 MB and builds it (a few minutes).|Primeira vez? Aperte ""Como configurar o Forge"" (canto superior direito) para um guia passo a passo. Já tem o Forge? Use ""Usar meu Forge..."" ou ""Encontrar o Forge"" para não baixar nada duas vezes. Senão, ""Instalar Forge"" baixa cerca de 500 MB e compila (alguns minutos).|¿Primera vez? Pulsa ""Cómo configurar Forge"" (arriba a la derecha) para una guía paso a paso. ¿Ya tienes Forge? Usa ""Usar mi Forge..."" o ""Buscar Forge"" para no descargar nada dos veces. Si no, ""Instalar Forge"" descarga unos 500 MB y lo compila (unos minutos).
+MTG United builds its bridge against your Forge and reads its card data through a link. Your Forge folder and your desktop Forge settings are never changed.|O MTG United compila a ponte para o seu Forge e lê os dados das cartas por um link. A pasta do seu Forge e as configurações do Forge desktop nunca são alteradas.|MTG United compila su puente para tu Forge y lee los datos de las cartas mediante un enlace. Tu carpeta de Forge y los ajustes de Forge de escritorio nunca se modifican.
+•  <b>""Doesn't compile against this Forge version""</b>: your Forge is too different from the one MTG United was made for. Use <b>Install Forge</b> instead.|•  <b>""Não compila com esta versão do Forge""</b>: seu Forge é muito diferente daquele para o qual o MTG United foi feito. Use <b>Instalar Forge</b>.|•  <b>""No compila con esta versión de Forge""</b>: tu Forge es muy distinto del que MTG United espera. Usa <b>Instalar Forge</b>.
+(Forge isn't running: only custom sets searched)|(o Forge não está rodando: só coleções custom foram buscadas)|(Forge no está en marcha: solo se buscaron colecciones custom)
+the host picks the format|o anfitrião escolhe o formato|el anfitrión elige el formato
+in a game|em partida|en partida
+in progress|em andamento|en curso
+host|anfitrião|anfitrión
+Working... you can keep using the menus; output is shown below.|Trabalhando... você pode continuar usando os menus; a saída aparece abaixo.|Trabajando... puedes seguir usando los menús; la salida se muestra abajo.
+1. Install Java (JDK 21)|1. Instalar o Java (JDK 21)|1. Instalar Java (JDK 21)
+No Forge installs found.|Nenhuma instalação do Forge encontrada.|No se encontró ninguna instalación de Forge.
+MTG United is the table: the cards, animations, sounds and menus.|O MTG United é a mesa: as cartas, animações, sons e menus.|MTG United es la mesa: las cartas, animaciones, sonidos y menús.
+The rules of Magic (tens of thousands of cards, the stack, combat, every Commander rule) and the AI opponents come from <b>Forge</b>, a free, open-source Magic program. MTG United runs Forge in the background through a small helper called the <b>bridge</b>, and draws what Forge decides.|As regras do Magic (dezenas de milhares de cartas, a pilha, o combate, todas as regras de Commander) e os oponentes da IA vêm do <b>Forge</b>, um programa de Magic gratuito e de código aberto. O MTG United roda o Forge em segundo plano por meio de um pequeno ajudante chamado <b>ponte</b>, e desenha o que o Forge decide.|Las reglas de Magic (decenas de miles de cartas, la pila, el combate, todas las reglas de Commander) y los oponentes de la IA vienen de <b>Forge</b>, un programa de Magic gratuito y de código abierto. MTG United ejecuta Forge en segundo plano mediante un pequeño ayudante llamado <b>puente</b>, y dibuja lo que Forge decide.
+So before your first game, Forge has to be on your computer once.|Então, antes da primeira partida, o Forge precisa estar no seu computador uma vez.|Así que, antes de tu primera partida, Forge tiene que estar en tu ordenador una vez.
+•  <b>Java 17 or newer (the JDK)</b>. Forge is written in Java. If the Forge tab says Java is ""not found"", open a terminal and run:|•  <b>Java 17 ou mais novo (o JDK)</b>. O Forge é escrito em Java. Se a aba Forge disser que o Java ""não foi encontrado"", abra um terminal e rode:|•  <b>Java 17 o más nuevo (el JDK)</b>. Forge está escrito en Java. Si la pestaña Forge dice que Java ""no se encuentra"", abre una terminal y ejecuta:
+   (or press <b>Install Java</b> below), then restart MTG United.|   (ou aperte <b>Instalar Java</b> abaixo), depois reinicie o MTG United.|   (o pulsa <b>Instalar Java</b> abajo), luego reinicia MTG United.
+•  <b>Git</b>, only if MTG United installs Forge for you (it downloads Forge's source). <b>Install Git</b> below does it.|•  <b>Git</b>, só se o MTG United for instalar o Forge para você (ele baixa o código do Forge). <b>Instalar Git</b> abaixo faz isso.|•  <b>Git</b>, solo si MTG United instala Forge por ti (descarga el código de Forge). <b>Instalar Git</b> abajo lo hace.
+•  <b>Disk space</b>: about 1.5 GB if MTG United installs Forge for you; almost nothing if you already have Forge.|•  <b>Espaço em disco</b>: cerca de 1,5 GB se o MTG United instalar o Forge para você; quase nada se você já tem o Forge.|•  <b>Espacio en disco</b>: unos 1,5 GB si MTG United instala Forge por ti; casi nada si ya tienes Forge.
+•  <b>Internet</b> for the first install, and for card images while you play.|•  <b>Internet</b> para a primeira instalação e para as imagens das cartas enquanto você joga.|•  <b>Internet</b> para la primera instalación y para las imágenes de las cartas mientras juegas.
+If Forge is already installed (or unzipped) on your PC, you don't need to download it again.|Se o Forge já está instalado (ou descompactado) no seu PC, você não precisa baixá-lo de novo.|Si Forge ya está instalado (o descomprimido) en tu PC, no hace falta descargarlo otra vez.
+•  <b>Find Forge</b> looks in the usual places (Program Files, Desktop, Downloads, Documents, Games...).|•  <b>Encontrar o Forge</b> procura nos lugares de sempre (Arquivos de Programas, Área de Trabalho, Downloads, Documentos, Jogos...).|•  <b>Buscar Forge</b> mira en los sitios habituales (Archivos de programa, Escritorio, Descargas, Documentos, Juegos...).
+•  <b>Use my Forge...</b> lets you pick the folder yourself: the one that contains <b>forge.exe</b> (or Forge's .jar) and a <b>res</b> folder.|•  <b>Usar meu Forge...</b> deixa você escolher a pasta: a que contém o <b>forge.exe</b> (ou o .jar do Forge) e uma pasta <b>res</b>.|•  <b>Usar mi Forge...</b> te deja elegir la carpeta: la que contiene <b>forge.exe</b> (o el .jar de Forge) y una carpeta <b>res</b>.
+Press <b>Install Forge</b>. MTG United will:|Aperte <b>Instalar Forge</b>. O MTG United vai:|Pulsa <b>Instalar Forge</b>. MTG United va a:
+   1.  download Forge's source at the version it was made for (about 500 MB, mostly card scripts);|   1.  baixar o código do Forge na versão para a qual foi feito (cerca de 500 MB, quase tudo scripts de cartas);|   1.  descargar el código de Forge en la versión para la que fue hecho (unos 500 MB, casi todo scripts de cartas);
+   2.  build Forge's rules engine (a few minutes the first time);|   2.  compilar o motor de regras do Forge (alguns minutos na primeira vez);|   2.  compilar el motor de reglas de Forge (unos minutos la primera vez);
+   3.  build the bridge.|   3.  compilar a ponte.|   3.  compilar el puente.
+You can watch every step in the <b>Output</b> box at the bottom of this tab. Everything goes into MTG United's own folder.|Você pode acompanhar cada passo na caixa <b>Saída</b> no fim desta aba. Tudo vai para a pasta do próprio MTG United.|Puedes ver cada paso en el cuadro <b>Salida</b> al final de esta pestaña. Todo va a la carpeta del propio MTG United.
+When setup finishes, the bridge starts by itself. The dot at the top of this tab (and on Home) tells you where it is:|Quando a configuração termina, a ponte inicia sozinha. A bolinha no topo desta aba (e no Início) mostra como ela está:|Cuando termina la configuración, el puente arranca solo. El punto arriba de esta pestaña (y en Inicio) indica cómo está:
+   <color=#5fd47a>●</color>  Running and connected: ready, press Play on Home.|   <color=#5fd47a>●</color>  Rodando e conectado: pronto, aperte Jogar no Início.|   <color=#5fd47a>●</color>  En marcha y conectado: listo, pulsa Jugar en Inicio.
+   <color=#f7a540>●</color>  Starting: Forge is loading every card, about 30 to 60 seconds.|   <color=#f7a540>●</color>  Iniciando: o Forge está carregando todas as cartas, cerca de 30 a 60 segundos.|   <color=#f7a540>●</color>  Iniciando: Forge está cargando todas las cartas, unos 30 a 60 segundos.
+   <color=#9aa0aa>●</color>  Installed, not running: press Start bridge.|   <color=#9aa0aa>●</color>  Instalado, parado: aperte Iniciar ponte.|   <color=#9aa0aa>●</color>  Instalado, detenido: pulsa Iniciar puente.
+   <color=#e55>●</color>  Not installed: go back a step.|   <color=#e55>●</color>  Não instalado: volte um passo.|   <color=#e55>●</color>  No instalado: vuelve un paso.
+•  <b>Java not found</b>: install the JDK (step 2) and restart MTG United.|•  <b>Java não encontrado</b>: instale o JDK (passo 2) e reinicie o MTG United.|•  <b>Java no encontrado</b>: instala el JDK (paso 2) y reinicia MTG United.
+•  <b>Stuck or crashing</b>: <b>Open log</b> shows the bridge's log; <b>Restart bridge</b> often helps; <b>Reinstall</b> rebuilds everything.|•  <b>Travado ou fechando</b>: <b>Abrir log</b> mostra o log da ponte; <b>Reiniciar ponte</b> costuma resolver; <b>Reinstalar</b> refaz tudo.|•  <b>Bloqueado o cerrándose</b>: <b>Abrir registro</b> muestra el registro del puente; <b>Reiniciar puente</b> suele ayudar; <b>Reinstalar</b> lo reconstruye todo.
+•  <b>Updating MTG United</b>: press <b>Update</b> afterwards so the bridge is rebuilt with the new version.|•  <b>Atualizando o MTG United</b>: aperte <b>Atualizar</b> depois, para a ponte ser recompilada com a nova versão.|•  <b>Actualizando MTG United</b>: pulsa <b>Actualizar</b> después para que el puente se recompile con la nueva versión.
+•  <b>Uninstall</b> removes only MTG United's parts. With ""Keep settings & log"" on, your bridge settings survive.|•  <b>Desinstalar</b> remove só as partes do MTG United. Com ""Manter configurações e log"" ligado, as configurações da ponte continuam.|•  <b>Desinstalar</b> quita solo las partes de MTG United. Con ""Conservar ajustes y registro"" activado, los ajustes del puente se mantienen.
+""4 Lightning Bolt"" lines; the sideboard after a blank line (commander there for Commander decks).|Linhas como ""4 Lightning Bolt""; o sideboard depois de uma linha em branco (o comandante fica lá em decks de Commander).|Líneas como ""4 Lightning Bolt""; el banquillo después de una línea en blanco (el comandante va ahí en mazos de Commander).
+Export → Copy. The [Commander] category becomes the commander; maybeboard is left out.|Exportar → Copiar. A categoria [Commander] vira o comandante; o maybeboard fica de fora.|Exportar → Copiar. La categoría [Commander] se convierte en el comandante; el maybeboard se deja fuera.
+<color=#f7a540>Your clipboard is empty: copy a deck list first.</color>|<color=#f7a540>Sua área de transferência está vazia: copie uma lista de deck primeiro.</color>|<color=#f7a540>Tu portapapeles está vacío: copia primero una lista de mazo.</color>
+this card targets that one|esta carta mira aquela|esta carta apunta a aquella
+Roll d6|Rolar d6|Tirar d6
+Roll d20|Rolar d20|Tirar d20
+Flip a coin|Jogar uma moeda|Lanzar una moneda
+Choose a random player|Escolher um jogador aleatório|Elegir un jugador aleatorio
+Mill X|Moer X|Moler X
+Shuffle all into library|Embaralhar tudo no grimório|Barajar todo en la biblioteca
+Turn left|Girar para a esquerda|Girar a la izquierda
+Turn right|Girar para a direita|Girar a la derecha
++1/+1 counter|Marcador +1/+1|Contador +1/+1
+−1/−1 counter|Marcador −1/−1|Contador −1/−1
+Add a counter|Adicionar um marcador|Añadir un contador
+Remove a counter|Remover um marcador|Quitar un contador
+Copy (token)|Copiar (ficha)|Copiar (ficha)
+Gone|Saiu|Fuera
++1 poison|+1 veneno|+1 veneno
+−1 poison|−1 veneno|−1 veneno
+Set life to 20|Vida em 20|Vida a 20
+Set life to 40|Vida em 40|Vida a 40
+Name|Nome|Nombre
+Installing Forge|Instalando o Forge|Instalando Forge
+Reinstalling Forge|Reinstalando o Forge|Reinstalando Forge
+Updating Forge|Atualizando o Forge|Actualizando Forge
+Setting up your Forge|Configurando o seu Forge|Configurando tu Forge
+Uninstalling|Desinstalando|Desinstalando
+Installing Java|Instalando o Java|Instalando Java
+Installing Git|Instalando o Git|Instalando Git
 # ---------------------------------------------------------------- errors
 Something went wrong|Algo deu errado|Algo salió mal
 Details saved in Options → Error log.|Detalhes salvos em Opções → Log de erros.|Detalles guardados en Opciones → Registro de errores.

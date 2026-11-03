@@ -23,7 +23,7 @@ namespace MTGUnited.EditorTools
         const string ScenePath = "Assets/MTGUnited/Main.unity";
         const string ProductName = "MTG United";
         /// <summary>The release being built (shown on the main menu, in the zip's name and in the guide).</summary>
-        public const string Version = "0.1.2";
+        public const string Version = AppInfo.Version;   // change it in Scripts/AppInfo.cs
 
         static string ProjectDir => Directory.GetParent(Application.dataPath).FullName;           // unity/MTGUnited
         static string RepoDir => Directory.GetParent(ProjectDir).Parent.FullName;                // repo root

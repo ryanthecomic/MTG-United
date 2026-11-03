@@ -1,5 +1,29 @@
 # MTG United changelog
 
+## 0.1.3
+
+**Limited: draft and sealed**
+- New Limited tab (and a carousel slide with the Gelatinous Cube): start a draft or sealed against bots, read how it
+  works, and keep your cubes (import a .txt, paste a list, keep a deck as a cube, export, delete).
+- DRAFT / SEALED is also in the LAN lobby when hosting (everyone at the table, bots fill the empty seats).
+- Packs from an official set (type its code; cards and rarities come from Scryfall), a custom set from
+  Magic Set Editor, or a cube (a saved cube, the clipboard or one of your decks). Each draft pack can come from
+  a different source. CARDS… chooses which of the set's cards can be opened.
+- Draft: three packs of 15, pick and pass (left, right, left); bots stick to their colours. Sealed: six
+  packs each. Then BUILD YOUR DECK opens the builder with only the cards you opened, plus basic lands; diamonds
+  above each card show how many you opened and how many are in the deck, like Arena.
+- At a LAN table, the deck you build becomes your deck in the host's lobby.
+
+**Translation**
+- Much more of the interface is in Português (Brasil) and Español: the Forge tab and its setup guide, the
+  Kitchen Table guide and log, LAN lobbies, deck builder hints, notices and shortcuts.
+
+**Forge setup (also in the 0.1.2 hotfix)**
+- Setup no longer needs the `jar` tool, and picks Forge's desktop jar (not the adventure editor).
+- Works with older Forge releases too (tested back to 2.0.09).
+- No more "port already in use" from a second bridge; Uninstall stops the bridge before removing files.
+- A found Forge gets a refresh button next to the green one to update it.
+
 ## 0.1.2
 
 **Forge**

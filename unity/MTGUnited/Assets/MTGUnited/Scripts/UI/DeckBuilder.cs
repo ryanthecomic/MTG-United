@@ -290,6 +290,12 @@ namespace MTGUnited
             FadeIn.Play(gameObject, Motion.Travel, 0.94f);   // the deck box opens into the editor
             textDialog.gameObject.SetActive(false);
             Remember();
+            if (d.IsLimitedPool)
+            {
+                // The opened cards' details travel with the deck (real cards may not be in the catalog yet).
+                foreach (var pc in d.PoolCards) CardCatalog.Remember(pc.ToInfo());
+                if (model.Total == 0) scope = Scope.All;   // a fresh pool: show what was opened
+            }
             Refresh();
             CardCatalog.Ensure(model.AllNames(), Refresh);
         }
@@ -361,7 +367,7 @@ namespace MTGUnited
 
         void Duplicate()
         {
-            var copy = new SavedDeck { Name = CurrentName + " (copy)", Format = deck.Format, Pool = deck.Pool, Cover = deck.Cover };
+            var copy = new SavedDeck { Name = CurrentName + " (copy)", Format = deck.Format, Pool = deck.Pool, Cover = deck.Cover, LimitedPool = deck.LimitedPool, PoolCards = deck.PoolCards };
             model.WriteTo(copy);
             DeckStore.Save(copy);
             DeckAdded?.Invoke(copy);
@@ -415,6 +421,7 @@ namespace MTGUnited
             query = text.Trim();
             if (query.Length > 0 && scope == Scope.Deck) scope = Scope.All;   // typing means "find cards"
             if (query.Length > 0 && columnsLayout) SetLayout(false);
+            if (LimitedMode) { Refresh(); return; }   // a draft / sealed pool is filtered right here, nothing to search
             searchAt = Time.unscaledTime + (ScryfallSearch.LooksLikeSyntax(query) ? 0.6f : 0.25f);   // debounce: one request after typing pauses
             if (query.Length == 0) { results.Clear(); searching = false; Refresh(); }
         }
@@ -610,8 +617,40 @@ namespace MTGUnited
             get { var p = Pool(); return p.Count > 0 && !p.Contains("REAL"); }
         }
 
+        // ---------------------------------------------------------------- draft / sealed pool
+
+        /// <summary>A draft or sealed deck: only the opened cards (as many copies as were opened) plus basic lands.</summary>
+        bool LimitedMode => deck != null && deck.IsLimitedPool;
+
+        static readonly (string name, string color)[] Basics = { ("Plains", "W"), ("Island", "U"), ("Swamp", "B"), ("Mountain", "R"), ("Forest", "G") };
+
+        Dictionary<string, int> LimitedCounts()
+        {
+            var counts = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
+            foreach (var (n, name) in DeckModel.From(new SavedDeck { List = deck.LimitedPool }).Cards) counts[name] = (counts.TryGetValue(name, out int k) ? k : 0) + n;
+            return counts;
+        }
+
+        List<CardInfo> LimitedResults()
+        {
+            var list = new List<CardInfo>();
+            var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            foreach (var name in LimitedCounts().Keys)
+                if (seen.Add(name)) list.Add(InfoFor(name));
+            list.Sort((a, b) => a.Cmc != b.Cmc ? a.Cmc.CompareTo(b.Cmc) : string.Compare(a.Name, b.Name, StringComparison.OrdinalIgnoreCase));
+            foreach (var (name, color) in Basics)
+            {
+                var basic = CardCatalog.Get(name) ?? new CardInfo { Name = name, Type = "Basic Land — " + name, Land = true, Basic = true, Colors = "", Text = "({T}: Add {" + color + "}.)" };
+                CardCatalog.Remember(basic);   // so the deck's counts and colours know it offline
+                list.Add(basic);
+            }
+            if (query.Length > 0) list = list.Where(c => c.Name.IndexOf(query, StringComparison.OrdinalIgnoreCase) >= 0 || (c.Type ?? "").IndexOf(query, StringComparison.OrdinalIgnoreCase) >= 0).ToList();
+            return list;
+        }
+
         List<CardInfo> PoolResults()
         {
+            if (LimitedMode) return LimitedResults();
             var pool = Pool();
             if (query.Length == 0 && WholeSetView)
             {
@@ -627,6 +666,7 @@ namespace MTGUnited
 
         string PoolLabel()
         {
+            if (LimitedMode) return "OPENED CARDS";
             var p = Pool();
             if (p.Count == 0) return "ALL";
             if (p.Count == 1) return p.Contains("REAL") ? "REAL CARDS" : p.First();
@@ -644,6 +684,7 @@ namespace MTGUnited
         /// <summary>Tick sets in or out of the pool (stays open so several can be toggled).</summary>
         void PoolMenu(Vector2 at)
         {
+            if (LimitedMode) { gc.Toasts.Show("A draft / sealed deck uses the cards you opened, plus basic lands."); ShowPool(); return; }
             var pool = Pool();
             var items = new List<(string, Action)> { ("CARD POOL", null) };
             void Toggle(string code)
@@ -668,6 +709,11 @@ namespace MTGUnited
         void AddCard(CardInfo c, RectTransform from = null)
         {
             if (c == null) return;
+            if (LimitedMode && !c.Basic)
+            {
+                LimitedCounts().TryGetValue(c.Name, out int opened);
+                if (model.CountOf(c.Name) >= opened) { gc.Toasts.Show(opened == 1 ? "You opened only one " + c.Name + "." : "You opened " + opened + " " + c.Name + "."); return; }
+            }
             bool unlimited = c.Basic || (c.Text ?? "").IndexOf("any number of cards named", StringComparison.OrdinalIgnoreCase) >= 0;
             if (DeckFormat.Singleton(Format) && model.Contains(c.Name) && !unlimited)
             {
@@ -950,6 +996,8 @@ namespace MTGUnited
         void UpdateHint()
         {
             if (columnsLayout) hintText.text = "Click a card for − / +  ·  drag it out to remove one  ·  right-click to zoom";
+            else if (scope == Scope.All && LimitedMode)
+                hintText.text = "Your opened cards (" + LimitedCounts().Values.Sum() + ") and basic lands  ·  click to add  ·  build 40 cards";
             else if (scope == Scope.All && query.Length == 0 && WholeSetView)
                 hintText.text = "All " + PoolResults().Count + " cards of " + PoolLabel() + "  ·  click to add  ·  type to filter";
             else if (scope == Scope.All)
@@ -981,6 +1029,7 @@ namespace MTGUnited
             if (FiltersOn) shown = shown.Where(t => PassesFilter(t.info)).ToList();
 
             while (gridPool.Count < shown.Count) gridPool.Add(Tile.Create(gridContent, TileW, TileH, true));
+            var opened = LimitedMode ? LimitedCounts() : null;
             for (int i = 0; i < gridPool.Count; i++)
             {
                 var tile = gridPool[i];
@@ -992,6 +1041,14 @@ namespace MTGUnited
                     () => { if (scope == Scope.All) AddCard(ci, tile.Root); else RemoveCard(ci.Name); },
                     () => Inspect(ci), h => Hover(h ? ci : null, false));
                 tile.Drag.Set(this, ci, scope == Scope.Deck, (RectTransform)gridScroll.transform);
+                if (LimitedMode && scope == Scope.All)
+                {
+                    // Opened copies as diamonds (lit = in the deck); the x2 badge would say the same thing twice.
+                    int owned = info.Basic ? -1 : (opened != null && opened.TryGetValue(info.Name, out int k) ? k : 0);
+                    tile.SetPips(owned, count);
+                    if (!info.Basic) tile.HideBadge();
+                }
+                else tile.SetPips(0, 0);
                 tile.Root.gameObject.SetActive(true);
             }
         }
@@ -1184,6 +1241,9 @@ namespace MTGUnited
             Image frame, marker, crown;
             Text fallback, badge;
             PointerEvents pe;
+            RectTransform pipRow;
+            readonly List<Image> pips = new List<Image>();
+            Text infinite;
             string boundName;
             Action click, right;
             Action<bool> hover;
@@ -1243,6 +1303,56 @@ namespace MTGUnited
                 t.Drag = t.frame.gameObject.AddComponent<CardDragSource>();
                 return t;
             }
+
+            /// <summary>
+            /// Arena's diamonds above a card in limited: one per copy you opened, lit for each copy in the deck,
+            /// hollow for those still free. Basic lands are unlimited (∞). owned 0 hides them.
+            /// </summary>
+            public void SetPips(int owned, int used)
+            {
+                if (pipRow == null)
+                {
+                    pipRow = UIKit.Rect("Pips", Root);
+                    pipRow.anchorMin = pipRow.anchorMax = new Vector2(0.5f, 1); pipRow.pivot = new Vector2(0.5f, 1);
+                    pipRow.sizeDelta = new Vector2(Root.sizeDelta.x, 20); pipRow.anchoredPosition = new Vector2(0, -2);
+                    infinite = UIKit.Label("Inf", pipRow, "∞", 22, new Color(1f, 0.82f, 0.35f), TextAnchor.MiddleCenter, FontStyle.Bold);
+                    infinite.rectTransform.Stretch(0, -4, 0, -4);
+                    infinite.raycastTarget = false;
+                }
+                bool on = owned != 0;
+                pipRow.gameObject.SetActive(on);
+                if (marker != null) marker.gameObject.SetActive(!on);
+                if (!on) return;
+                infinite.gameObject.SetActive(owned < 0);
+                int n = owned < 0 ? 0 : Mathf.Min(owned, 10);
+                const float size = 16, gap = 3;
+                while (pips.Count < n)
+                {
+                    var r = UIKit.Rect("Pip", pipRow);
+                    r.anchorMin = r.anchorMax = new Vector2(0.5f, 0.5f);
+                    r.sizeDelta = new Vector2(size, size);
+                    var img = r.gameObject.AddComponent<Image>();
+                    img.sprite = Icons.Diamond;
+                    img.raycastTarget = false;
+                    var ol = r.gameObject.AddComponent<UnityEngine.UI.Outline>();
+                    ol.effectDistance = new Vector2(1f, -1f);
+                    pips.Add(img);
+                }
+                float x0 = -(n - 1) * (size + gap) / 2f;
+                for (int i = 0; i < pips.Count; i++)
+                {
+                    var img = pips[i];
+                    img.gameObject.SetActive(i < n);
+                    if (i >= n) continue;
+                    img.rectTransform.anchoredPosition = new Vector2(x0 + i * (size + gap), 0);
+                    bool lit = i < used;
+                    // Lit: in the deck (gold). Hollow: opened but not used (dark with a gold rim).
+                    img.color = lit ? new Color(1f, 0.82f, 0.35f) : new Color(0.16f, 0.14f, 0.1f, 0.95f);
+                    img.GetComponent<UnityEngine.UI.Outline>().effectColor = lit ? new Color(0, 0, 0, 0.6f) : new Color(1f, 0.82f, 0.35f, 0.75f);
+                }
+            }
+
+            public void HideBadge() => badge.transform.parent.gameObject.SetActive(false);
 
             public void Bind(CardInfo info, int count, bool inDeck, bool commander, Action onClick, Action onRight, Action<bool> onHover)
             {

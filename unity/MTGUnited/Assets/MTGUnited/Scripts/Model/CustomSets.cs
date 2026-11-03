@@ -11,6 +11,8 @@ namespace MTGUnited
     public class CustomCard
     {
         public string Name, Set, ManaCost = "", Type = "", Colors = "", PT = "", Loyalty = "", Text = "", PicUrl, ImagePath;
+        /// <summary>common / uncommon / rare / mythic (from the export's &lt;set rarity="..."&gt;; empty if it has none).</summary>
+        public string Rarity = "";
         public int Cmc;
         public bool Token;
         /// <summary>Code of the imported set this card belongs to (may differ from <see cref="Set"/>, the card's own set field).</summary>
@@ -239,6 +241,7 @@ namespace MTGUnited
                 c.Set = setEl != null && !string.IsNullOrWhiteSpace(setEl.InnerText) ? setEl.InnerText.Trim() : set.Code;
                 c.SetCode = set.Code;   // the set it was imported with (what the card pool filters on)
                 c.PicUrl = setEl?.Attributes?["picurl"]?.Value ?? setEl?.Attributes?["picURL"]?.Value;
+                c.Rarity = (setEl?.Attributes?["rarity"]?.Value ?? Text(src, "rarity") ?? "").Trim().ToLowerInvariant();
                 foreach (XmlNode r in n.SelectNodes("related|reverse-related"))
                 {
                     if (string.IsNullOrWhiteSpace(r.InnerText)) continue;

@@ -1411,7 +1411,7 @@ namespace MTGUnited
             PileView("Exile", me.Exile, false);
             PileView("Command", me.Command, false);
             int from = Mathf.Max(0, State.Log.Count - 18);
-            logText.text = string.Join("\n", State.Log.GetRange(from, State.Log.Count - from));
+            logText.text = string.Join("\n", State.Log.GetRange(from, State.Log.Count - from).Select(Loc.T));   // line by line: a long log would skip translation
         }
 
         void PileView(string zone, List<int> ids, bool faceDown)

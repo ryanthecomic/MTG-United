@@ -66,6 +66,9 @@ namespace MTGUnited
             l.players = l.List(l.hostView, new Rect(40, 126, 920, 340));
             var openBtn = UIKit.Button("Open", l.hostView, "OPEN TABLE", new Color(0.16f, 0.3f, 0.72f), l.HostNow, 17);
             ((RectTransform)openBtn.transform).Place(700, 488, 260, 44);
+            // Hosting: draft or sealed with the people at the table (bots fill the empty seats), then play.
+            var limited = UIKit.Button("Limited", l.hostView, "DRAFT / SEALED", new Color(0.55f, 0.3f, 0.12f), () => LimitedSetup.Instance.Open(true), 17);
+            ((RectTransform)limited.transform).Place(700, 488, 260, 44);
             l.startButton = UIKit.Pill("Start", l.hostView, "Start game", new Color(0.95f, 0.43f, 0.1f), l.StartGame, 700, 26, 260, 76, 30);
 
             // ---------------------------------------------------------------- join
@@ -201,6 +204,7 @@ namespace MTGUnited
                 maxText.transform.parent.Find("Plus")?.gameObject.SetActive(!inLobby);
                 maxText.gameObject.SetActive(!inLobby);
                 hostView.Find("Open")?.gameObject.SetActive(!hosting && !inLobby);
+                hostView.Find("Limited")?.gameObject.SetActive(hosting);
                 startButton.gameObject.SetActive(hosting);
                 startButton.interactable = hosting && net.Lobby.Count >= 2;
 

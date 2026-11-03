@@ -98,7 +98,7 @@ namespace MTGUnited
             foreach (var tex in all)
             {
                 string n = tex.name.ToLowerInvariant();
-                if (n == "forge" || n == "kitchen" || n == "github") continue;
+                if (n == "forge" || n == "kitchen" || n == "github" || n == "limited") continue;
                 var s = UIKit.Rect("Picture " + tex.name, hero).Stretch();
                 s.gameObject.AddComponent<Image>().color = Color.black;
                 string caption = SlideCaption(tex.name);

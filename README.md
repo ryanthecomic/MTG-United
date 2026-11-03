@@ -121,6 +121,7 @@ used under Wizards' Fan Content Policy:
 * *Jodah, the Unifier* (Dominaria United): **Ryan Pancoast** (Options and menus, GitHub slide)
 * *Urabrask's Forge* (Phyrexia: All Will Be One): **Lie Setiawan** (Forge slide)
 * *Trivia Contest* (Unfinity): **Caroline Gariba** (Kitchen Table slide)
+* *Gelatinous Cube* (Adventures in the Forgotten Realms): **Olivier Bernard** (Limited slide and tab)
 
 The README pictures in `docs/images/` use the same art; `tools/readme-images/make.py` regenerates them.
 

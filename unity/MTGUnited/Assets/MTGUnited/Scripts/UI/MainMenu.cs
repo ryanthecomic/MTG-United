@@ -90,6 +90,7 @@ namespace MTGUnited
             pages["profile"] = BuildProfile(content);
             pages["forge"] = ForgePage.Create(content, gc);
             pages["kitchen"] = BuildKitchen(content);
+            pages["limited"] = BuildLimited(content);
             BuildPlayCluster(frame);
             builder = DeckBuilder.Create(content, gc);
             builder.DeckAdded = d => { decks.Insert(0, d); RebuildDeckGrid(); };
@@ -174,13 +175,13 @@ namespace MTGUnited
             edge.rectTransform.sizeDelta = new Vector2(0, 2); edge.rectTransform.anchoredPosition = Vector2.zero;
             edge.raycastTarget = false;
 
-            string[] ids = { "home", "profile", "decks", "forge", "kitchen" };
-            string[] labels = { "Home", "Profile", "Decks", "Forge", "Table" };
-            Sprite[] icons = { Icons.Home, Icons.Person, Icons.Decks, Icons.Anvil, Icons.Fork };
+            string[] ids = { "home", "profile", "decks", "limited", "forge", "kitchen" };
+            string[] labels = { "Home", "Profile", "Decks", "Limited", "Forge", "Table" };
+            Sprite[] icons = { Icons.Home, Icons.Person, Icons.Decks, Icons.Grid, Icons.Anvil, Icons.Fork };
             // Wordmark in the top-left corner, tabs after it.
             var logo = UIKit.Label("Logo", bar, "MTG UNITED", 30, new Color(0.95f, 0.75f, 0.45f), TextAnchor.MiddleLeft, FontStyle.Bold).Outline(1.5f).Titled();
             logo.rectTransform.Place(28, 22, 260, 50);
-            var version = UIKit.Label("Version", bar, "v" + Application.version, 12, new Color(1f, 1f, 1f, 0.35f), TextAnchor.LowerLeft);
+            var version = UIKit.Label("Version", bar, "v" + AppInfo.Version, 12, new Color(1f, 1f, 1f, 0.35f), TextAnchor.LowerLeft);
             version.rectTransform.Place(31, 4, 200, 20);
             float x = 290;
             for (int i = 0; i < ids.Length; i++)
@@ -294,6 +295,7 @@ namespace MTGUnited
 
             slides.Add(forge); slides.Add(kt);
             BuildGitHubSlide(hero.rectTransform);
+            slides.Insert(1, BuildLimitedSlide(hero.rectTransform));   // right after GitHub
             BuildImageSlides(hero.rectTransform);
             SlideImage(forge, "forge", ForgeArt, 0.62f, mark.gameObject);      // Urabrask's Forge
             SlideImage(kt, "kitchen", KitchenArt, 0.72f, kmark.gameObject);   // Trivia Contest (her face in view)
@@ -642,7 +644,19 @@ namespace MTGUnited
             if (selectedDeckId != deck.Id) SelectDeck(deck.Id);
         }
 
-        void OpenBuilder(SavedDeck deck)
+        /// <summary>A deck built from a draft / sealed pool: listed, selected and opened in the builder.</summary>
+        public void OpenLimitedDeck(SavedDeck deck, Action<SavedDeck> after)
+        {
+            if (!decks.Contains(deck)) decks.Insert(0, deck);
+            selectedDeckId = deck.Id;
+            PlayerPrefs.SetString("selectedDeck", selectedDeckId);
+            Show();
+            SelectTab("decks");
+            RebuildDeckGrid();
+            OpenBuilder(deck, after);
+        }
+
+        void OpenBuilder(SavedDeck deck, Action<SavedDeck> after = null)
         {
             if (deck == null) { gc.Toasts.Show("Select a deck first, or create one with +."); return; }
             pages["decks"].gameObject.SetActive(false);
@@ -663,6 +677,7 @@ namespace MTGUnited
                 RebuildDeckGrid();
                 RefreshPlayCluster();
                 if (currentTab == "decks") pages["decks"].gameObject.SetActive(true);
+                if (after != null && !string.IsNullOrEmpty(d.Id)) after(d);
             });
             lastBuilt = deck.Id;
         }

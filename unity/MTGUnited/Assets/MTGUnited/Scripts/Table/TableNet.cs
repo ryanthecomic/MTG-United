@@ -309,6 +309,34 @@ namespace MTGUnited
             t.Start();
         }
 
+        // ---------------------------------------------------------------- draft / sealed over LAN
+
+        /// <summary>Host: one player's view of the draft (their pack, their picks, who's still picking).</summary>
+        public void SendLimitedView(int seat, Dictionary<string, object> view)
+        {
+            if (Mode != Role.Host || seat < 0 || seat >= Lobby.Count || Lobby[seat].Conn < 0) return;
+            SendTo(Lobby[seat].Conn, new Dictionary<string, object> { { "t", "limited" }, { "v", view } });
+        }
+
+        /// <summary>Client: I take this card.</summary>
+        public void SendLimitedPick(string card)
+        {
+            if (Mode == Role.Client) server?.Send(new Dictionary<string, object> { { "t", "lpick" }, { "card", card } });
+        }
+
+        /// <summary>The deck I'll play (after a draft): the host updates its lobby; a client tells the host.</summary>
+        public void SetMyDeck(SavedDeck d)
+        {
+            if (d == null) return;
+            if (Mode == Role.Host && Lobby.Count > 0)
+            {
+                Lobby[0].DeckName = d.Name; Lobby[0].Deck = d.List; Lobby[0].Format = d.Format;
+                BroadcastLobby();
+            }
+            else if (Mode == Role.Client)
+                server?.Send(new Dictionary<string, object> { { "t", "deck" }, { "deckName", d.Name }, { "deck", d.List }, { "format", d.Format } });
+        }
+
         public void SendAction(Dictionary<string, object> act)
         {
             if (Mode == Role.Client) server?.Send(new Dictionary<string, object> { { "t", "act" }, { "a", act } });
@@ -389,6 +417,21 @@ namespace MTGUnited
                     gc.Table.ApplyRemote(a);
                     break;
                 case "setfile": ReceiveSetFile(m); break;
+                case "lpick":
+                {
+                    int who = Lobby.FindIndex(p => p.Conn == conn);
+                    if (who >= 0) LimitedSession.Instance?.RemotePick(who, m.Str("card"));
+                    break;
+                }
+                case "deck":
+                {
+                    int who = Lobby.FindIndex(p => p.Conn == conn);
+                    if (who < 0) break;
+                    Lobby[who].DeckName = m.Str("deckName"); Lobby[who].Deck = m.Str("deck"); Lobby[who].Format = m.Str("format");
+                    gc.Toasts.Show(Lobby[who].Name + " is ready: " + Lobby[who].DeckName);
+                    BroadcastLobby();
+                    break;
+                }
                 case "_closed":
                     int i = Lobby.FindIndex(p => p.Conn == conn);
                     lock (conns) conns.Remove(conn);
@@ -422,6 +465,10 @@ namespace MTGUnited
                     }
                     break;
                 case "setfile": ReceiveSetFile(m); break;
+                case "limited":
+                    var lv = m.Obj("v");
+                    if (lv != null) LimitedSession.Instance?.ShowView(LimitedView.From(lv), true);
+                    break;
                 case "start":
                     MySeatId = m.Int("seat", 2);
                     Started = true;

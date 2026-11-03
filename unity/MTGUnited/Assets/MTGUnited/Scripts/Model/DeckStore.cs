@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.IO;
+using System.Linq;
 using UnityEngine;
 
 namespace MTGUnited
@@ -19,6 +20,11 @@ namespace MTGUnited
         public string Cover = "";
         /// <summary>Starred decks are listed first.</summary>
         public bool Favorite;
+        /// <summary>Draft / sealed deck: the cards opened ("2 Name" lines). The builder offers only these (plus basic lands).</summary>
+        public string LimitedPool = "";
+        /// <summary>Details of the pool's cards (cost, type, colours...) so the builder can filter them offline.</summary>
+        public List<LimitedCard> PoolCards = new List<LimitedCard>();
+        public bool IsLimitedPool => !string.IsNullOrWhiteSpace(LimitedPool);
 
         /// <summary>The card whose art represents this deck: the chosen cover, else the commander.</summary>
         public string ArtCard => !string.IsNullOrWhiteSpace(Cover) ? Cover.Trim() : CommanderName;
@@ -107,6 +113,8 @@ namespace MTGUnited
                         Pool = d.Str("pool", ""),
                         Cover = d.Str("cover", ""),
                         Favorite = d.Bool("favorite"),
+                        LimitedPool = d.Str("limitedPool", ""),
+                        PoolCards = d.Arr("poolCards").OfType<Dictionary<string, object>>().Select(LimitedCard.FromJson).ToList(),
                         Updated = (long)(d.TryGetValue("updated", out var u) && u is double ud ? ud : 0),
                     });
                 }
@@ -140,6 +148,11 @@ namespace MTGUnited
                 { "name", deck.Name }, { "commander", deck.Commander }, { "list", deck.List }, { "updated", deck.Updated },
                 { "format", deck.Format ?? DeckFormat.Commander }, { "pool", deck.Pool ?? "" }, { "cover", deck.Cover ?? "" }, { "favorite", deck.Favorite },
             };
+            if (deck.IsLimitedPool)
+            {
+                d["limitedPool"] = deck.LimitedPool;
+                d["poolCards"] = deck.PoolCards.Select(c => (object)c.ToJson()).ToList();
+            }
             File.WriteAllText(Path.Combine(Dir, deck.Id + ".json"), Json.Write(d));
         }
 

@@ -72,6 +72,49 @@ namespace MTGUnited
             }
         }
 
+        /// <summary>
+        /// Every card that can appear in a booster of a real set, with its rarity (for drafting / sealed).
+        /// Pages through Scryfall's results; basic lands are left out (they're free in Limited).
+        /// </summary>
+        public static IEnumerator FetchSet(string code, Action<List<(CardInfo info, string rarity)>, string> done)
+        {
+            var list = new List<(CardInfo, string)>();
+            foreach (string extra in new[] { " is:booster", "" })   // older sets aren't tagged "booster": then every card
+            {
+                string url = "https://api.scryfall.com/cards/search?order=set&unique=cards&q=" + UnityWebRequest.EscapeURL("e:" + code + " -t:basic game:paper" + extra);
+                while (!string.IsNullOrEmpty(url) && list.Count < 1200)
+                {
+                    using (var req = UnityWebRequest.Get(url))
+                    {
+                        req.SetRequestHeader("Accept", "application/json");
+                        req.timeout = 20;
+                        yield return req.SendWebRequest();
+                        if (req.result != UnityWebRequest.Result.Success)
+                        {
+                            if (req.responseCode == 404) break;   // nothing (with this filter)
+                            done(list, ReadError(req.downloadHandler?.text) ?? req.error);
+                            yield break;
+                        }
+                        Dictionary<string, object> root;
+                        try { root = Json.ParseObject(req.downloadHandler.text); }
+                        catch { done(list, "Scryfall sent something unreadable."); yield break; }
+                        foreach (var o in root.Arr("data"))
+                        {
+                            if (!(o is Dictionary<string, object> c)) continue;
+                            var info = FromScryfall(c);
+                            if (info == null) continue;
+                            CardCatalog.Remember(info);
+                            list.Add((info, c.Str("rarity")));
+                        }
+                        url = root.Bool("has_more") ? root.Str("next_page") : null;
+                    }
+                    yield return new WaitForSecondsRealtime(0.1f);   // Scryfall asks for ~10 requests a second at most
+                }
+                if (list.Count > 0) break;
+            }
+            done(list, list.Count == 0 ? "Scryfall has no cards for set \"" + code + "\"." : null);
+        }
+
         static string ReadError(string body)
         {
             try { var d = Json.ParseObject(body); var s = d.Str("details"); return string.IsNullOrEmpty(s) ? null : s; }
