@@ -275,7 +275,9 @@ function Checkout-Forge($commit) {
         Pop-Location
     }
     Push-Location $ForgeDir
-    $head = (git rev-parse HEAD 2>$null)
+    # A newly initialized checkout has no HEAD yet; show-ref handles that case without
+    # printing Git's "unknown revision" error under PowerShell's native stderr handling.
+    $head = (git show-ref --hash HEAD 2>$null | Select-Object -First 1)
     if ($head -ne $commit) {
         Step "Getting Forge $($commit.Substring(0,10))"
         git fetch --depth 1 origin $commit | Out-Host
