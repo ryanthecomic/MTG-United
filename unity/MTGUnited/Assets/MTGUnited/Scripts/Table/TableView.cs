@@ -812,7 +812,13 @@ namespace MTGUnited
             var cv = CardView.Create(cardLayer, id);
             cv.Clicked = OnClick;
             cv.RightClicked = OnRightClick;
-            cv.HoverStart = v => { hovered = v; if (!AltZoom.Active && v.Data != null && !v.Data.Hidden) gc.Preview.Request(v.Data, v.CurrentPos.x < 960); };
+            cv.HoverStart = v =>
+            {
+                hovered = v;
+                // While aiming an arrow, the arrow is the feedback: don't pop the big preview on every card passed over.
+                if (pointFrom >= 0) { gc.Preview.Hide(); return; }
+                if (!AltZoom.Active && v.Data != null && !v.Data.Hidden) gc.Preview.Request(v.Data, v.CurrentPos.x < 960);
+            };
             cv.HoverEnd = v => { if (hovered == v) hovered = null; gc.Preview.Hide(); };
             cv.DragBegan = OnDragBegan;
             cv.DragMoved = OnDragMoved;
@@ -907,6 +913,7 @@ namespace MTGUnited
         void StartPointing(int cardId)
         {
             pointFrom = cardId;
+            gc.Preview.Hide();   // aiming: no hover pop-up while the arrow is out
             Sound.Play(Sfx.UiClick, 0.5f);
             gc.Toasts.Show(Loc.T("Click the card or player it points at (Esc to cancel)."));
         }

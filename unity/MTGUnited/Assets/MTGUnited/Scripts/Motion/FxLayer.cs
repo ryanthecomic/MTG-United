@@ -21,6 +21,10 @@ namespace MTGUnited
         readonly List<Line> lines = new List<Line>();
         int linesUsed;
 
+        class LineLabel { public Text text; }
+        readonly List<LineLabel> labels = new List<LineLabel>();
+        int labelsUsed;
+
         public static FxLayer Create(Transform parent)
         {
             var rt = UIKit.Rect("Fx", parent).Stretch();
@@ -56,30 +60,49 @@ namespace MTGUnited
 
         // ------------------------------------------------------------------ lines
 
-        /// <summary>Call once per frame-update batch: BeginLines, any number of AddLine, EndLines.</summary>
-        public void BeginLines() { linesUsed = 0; }
+        /// <summary>Call once per frame-update batch: BeginLines, any number of AddLine / AddLabel, EndLines.</summary>
+        public void BeginLines() { linesUsed = 0; labelsUsed = 0; }
 
-        public void AddLine(Vector2 from, Vector2 to, Color color, float width, bool arrowHead)
+        /// <summary>
+        /// A straight line (optionally arrow-headed) between two board points. <paramref name="progress"/> &lt; 1 grows
+        /// it from <paramref name="from"/> towards <paramref name="to"/>, so a new block arrow draws itself in.
+        /// </summary>
+        public void AddLine(Vector2 from, Vector2 to, Color color, float width, bool arrowHead, float progress = 1f)
         {
+            progress = Mathf.Clamp01(progress);
+            if (progress <= 0.001f) { return; }
+            Vector2 end = Vector2.Lerp(from, to, progress);
             if (linesUsed >= lines.Count) lines.Add(MakeLine());
             var l = lines[linesUsed++];
-            Vector2 d = to - from;
+            Vector2 d = end - from;
             float len = d.magnitude;
             if (len < 1f) { l.body.gameObject.SetActive(false); l.head.gameObject.SetActive(false); return; }
             float ang = Mathf.Atan2(d.y, d.x) * Mathf.Rad2Deg;
             l.body.gameObject.SetActive(true);
-            l.body.anchoredPosition = (from + to) * 0.5f;
+            l.body.anchoredPosition = (from + end) * 0.5f;
             l.body.sizeDelta = new Vector2(len, width);
             l.body.localEulerAngles = new Vector3(0, 0, ang);
             l.bodyImg.color = color;
             l.head.gameObject.SetActive(arrowHead);
             if (arrowHead)
             {
-                l.head.anchoredPosition = to;
+                l.head.anchoredPosition = end;
                 l.head.sizeDelta = new Vector2(width * 4f, width * 4f);
                 l.head.localEulerAngles = new Vector3(0, 0, ang + 45f);
                 l.headImg.color = color;
             }
+        }
+
+        /// <summary>A small persistent label (blocker order numbers). Cleared with EndLines like the lines.</summary>
+        public void AddLabel(Vector2 at, string text, Color color)
+        {
+            if (labelsUsed >= labels.Count) labels.Add(MakeLabel());
+            var l = labels[labelsUsed++];
+            l.text.gameObject.SetActive(true);
+            l.text.transform.SetAsLastSibling();
+            l.text.text = text;
+            l.text.color = color;
+            l.text.rectTransform.anchoredPosition = at;
         }
 
         public void EndLines()
@@ -89,6 +112,17 @@ namespace MTGUnited
                 lines[i].body.gameObject.SetActive(false);
                 lines[i].head.gameObject.SetActive(false);
             }
+            for (int i = labelsUsed; i < labels.Count; i++) labels[i].text.gameObject.SetActive(false);
+        }
+
+        LineLabel MakeLabel()
+        {
+            var t = UIKit.Label("LineLabel", root, "", 15, Color.white, TextAnchor.MiddleCenter, FontStyle.Bold).Outline(2f);
+            t.rectTransform.anchorMin = t.rectTransform.anchorMax = Vector2.zero;
+            t.rectTransform.sizeDelta = new Vector2(44, 24);
+            t.horizontalOverflow = HorizontalWrapMode.Overflow;
+            t.raycastTarget = false;
+            return new LineLabel { text = t };
         }
 
         Line MakeLine()

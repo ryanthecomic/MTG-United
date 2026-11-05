@@ -300,6 +300,7 @@ final class StateSerializer {
             final JsonArray blockers = new JsonArray();
             for (final CardView b : snapshot(cv.getBlockers(attacker))) { blockers.add(b.getId()); }
             a.add("blockers", blockers);
+            a.addProperty("blocked", blockers.size() > 0);   // convenience for clients staging block declarations
             arr.add(a);
         }
         return arr;

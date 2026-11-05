@@ -470,6 +470,15 @@ namespace MTGUnited
             shakeUntil = Motion.Now + Motion.Impact;
         }
 
+        /// <summary>Rejected action (illegal block, Forge refusal): red flash plus a short shake. Reduce Motion skips the shake.</summary>
+        public void Reject()
+        {
+            flashColor = new Color(1f, 0.32f, 0.28f);
+            flash.From = 0.7f; flash.To = 0; flash.Start = Motion.Now; flash.Duration = Motion.Short; flash.Curve = Ease.Out;
+            shakeAmp = Motion.ReduceMotion ? 0f : 6f;
+            shakeUntil = Motion.Now + Motion.Impact;
+        }
+
         /// <summary>Combat pose offset (attack forward / block forward) in board pixels.</summary>
         public void SetPose(Vector2 offset, float duration, float delay = 0f)
         {

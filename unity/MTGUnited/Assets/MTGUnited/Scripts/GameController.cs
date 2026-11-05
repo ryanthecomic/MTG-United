@@ -329,6 +329,12 @@ namespace MTGUnited
                 if (Menu.IsOpen && Menu.Builder != null && Menu.Builder.IsOpen) { Menu.Builder.Escape(); return; }
                 if (Table.IsOpen && !Menu.IsOpen) { if (!Table.CloseTopDialog()) GameMenu.Open(); return; }   // kitchen table: Esc opens the menu
             }
+
+            // Nothing was covering the board, so Esc can drop a half-finished block aim before it reaches the prompt.
+            if (Input.GetKeyDown(KeyCode.Escape) && BoardView != null
+                && !Dialog.IsOpen && !Menu.IsOpen && !GameMenu.IsOpen && !ZoneViewer.IsOpen
+                && !Options.IsOpen && !Inspector.IsOpen && BoardView.CancelAiming()) return;
+
             if (!InGame || Menu.IsOpen || Dialog.IsOpen || Options.IsOpen || GameMenu.IsOpen) return;
 
             if (Input.GetKeyDown(KeyCode.Space) || Input.GetKeyDown(KeyCode.Return) || Input.GetKeyDown(KeyCode.KeypadEnter)) Hud.PressPrimary();
@@ -415,7 +421,11 @@ namespace MTGUnited
                         ? msg.Str("text") : msg.Str("title") + ": " + msg.Str("text"), msg.Bool("error"));
                     break;
                 case "flash":
+                    BoardView?.OnActionRejected();   // Forge rejected the click: shake the blocker and retract its arrow
                     Hud.Flash();
+                    break;
+                case "ok":
+                    BoardView?.CancelAiming();       // confirming a prompt ends any half-finished block aim
                     break;
                 case "alert":
                     break;
@@ -468,7 +478,12 @@ namespace MTGUnited
 
         // ------------------------------------------------------------------ actions
 
-        public void Send(string type, params object[] kv) => Bridge.Send(type, kv);
+        public void Send(string type, params object[] kv)
+        {
+            // Cancel/undo abandon an uncommitted block assignment; drop the optimistic arrows with it.
+            if (BoardView != null && (type == "cancel" || type == "undo")) BoardView.ClearBlockStaging();
+            Bridge.Send(type, kv);
+        }
 
         public void ClickCard(int id) => Send("card", "id", id);
         public void ClickPlayer(int id) => Send("player", "id", id);

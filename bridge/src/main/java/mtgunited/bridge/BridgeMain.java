@@ -275,8 +275,8 @@ public final class BridgeMain {
             case "cancel" -> c.selectButtonCancel();
             case "card" -> {
                 final CardView cv = gui.findCard(msg.get("id").getAsInt());
-                if (cv == null) { Log.warn("Unknown card " + msg.get("id")); return; }
-                if (!c.selectCard(cv, null, null)) {
+                if (cv == null) { Log.warn("Unknown card " + msg.get("id")); }
+                else if (!c.selectCard(cv, null, null)) {
                     gui.flashIncorrectAction();
                 }
             }
@@ -298,6 +298,9 @@ public final class BridgeMain {
             case "concede" -> concede(gui);
             default -> Log.warn("Unknown message type '" + t + "'");
         }
+        // Combat is declared one click at a time and Forge doesn't always fire a GUI event for each card, so push the
+        // state ourselves: without this the client has no idea a block was assigned until some later update.
+        gui.markDirty();
     }
 
     private static void concede() { concede(gui); }

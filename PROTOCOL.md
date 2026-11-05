@@ -41,9 +41,12 @@ player clicks something.
   } ],
   "stack": [ { "id": 5, "text": "...", "isAbility": false, "isTrigger": false, "sourceCard": 31,
                "source": card, "activatingPlayer": 2, "targetCards": [..], "targetPlayers": [..] } ],
-  "combat": [ { "attacker": 40, "defender": {"kind": "player", "id": 1}, "blockers": [52] } ]
+  "combat": [ { "attacker": 40, "defender": {"kind": "player", "id": 1}, "blockers": [52], "blocked": true } ]
 }
 ```
+
+A **combat** entry lists one attacker with its `defender` (`player` or `card`), the `blockers` assigned to it, and
+`blocked` (true when `blockers` is not empty; older bridges omit it).
 
 A **card** object has these fields: `id`, `hidden`, `name`, `oracleName`, `set`, `imageKey`,
 `manaCost`, `typeLine`, `text`, `colors`, `owner`, `controller`, `zone`, `tapped`, `sick`,

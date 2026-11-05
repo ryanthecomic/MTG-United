@@ -59,6 +59,17 @@ namespace MTGUnited
         CardView hoverCandidate; float hoverSince;
         bool previewShown;
 
+        // ---------------------------------------------------------------- block declaration staging
+        // Blocker -> attacker pairs clicked during the declare-blockers step. Drawn (and posed) immediately, before the
+        // bridge's next state arrives; committed blocks from GameState.Combat take over once Forge confirms them.
+        readonly Dictionary<int, int> stagedBlocks = new Dictionary<int, int>();
+        readonly Dictionary<int, float> stagedAt = new Dictionary<int, float>();
+        int aimedBlocker = -1;                             // my creature the pointer is aiming from, or -1
+        int pendingBlocker = -1, pendingAttacker = -1;     // last pair sent, waiting for Forge to accept or reject it
+        float pendingAt;
+        const float PendingBlockTimeout = 2f;  // how long a just-sent pair waits for Forge before we stop expecting a reply
+        const float BlockStageTimeout = 60f;   // safety net if Forge never confirms or rejects a staged pair
+
         public static BoardView Create(RectTransform board, GameController gc)
         {
             var rt = UIKit.Rect("BoardView", board).Stretch();
@@ -100,6 +111,7 @@ namespace MTGUnited
         {
             prev = last;
             last = s;
+            SyncBlockStaging(s);
             // Where every card was before this update (effects aim at cards that may be leaving).
             posBefore.Clear();
             foreach (var kv in cards) posBefore[kv.Key] = kv.Value.CurrentPos;
@@ -199,8 +211,8 @@ namespace MTGUnited
                 if (!cards.TryGetValue(kv.Key, out var cv))
                 {
                     cv = CardView.Create(cardLayer, kv.Key);
-                    cv.Clicked = c => gc.ClickCard(c.CardId);
-                    cv.RightClicked = c => { HidePreview(); gc.Inspector.Show(c.Data); };
+                    cv.Clicked = OnBoardClick;
+                    cv.RightClicked = OnBoardRightClick;
                     cv.HoverStart = OnHoverStart;
                     cv.HoverEnd = OnHoverEnd;
                     cv.DragBegan = OnDragBegan;
@@ -506,7 +518,13 @@ namespace MTGUnited
             for (int i = 0; i < attackers.Count; i++)
             {
                 var (cmb, cv) = attackers[i];
-                CardView blocker = cmb.Blockers.Select(b => cards.TryGetValue(b, out var bc) ? bc : null).FirstOrDefault(b => b != null);
+                var blockers = cmb.Blockers
+                    .Select(b => cards.TryGetValue(b, out var bc) && bc != null && !bc.IsExiting ? bc : null)
+                    .Where(b => b != null)
+                    .ToList();
+                CardView blocker = blockers.Count > 0
+                    ? blockers.OrderBy(b => (b.CurrentPos - cv.CurrentPos).sqrMagnitude).First()
+                    : null;
                 Vector2 target = blocker != null ? blocker.CurrentPos
                     : cmb.DefenderKind == "player" ? PanelCenter(cmb.DefenderId)
                     : cards.TryGetValue(cmb.DefenderId, out var pw) ? pw.CurrentPos : PanelCenter(cmb.DefenderId);
@@ -516,10 +534,15 @@ namespace MTGUnited
                 int defenderId = cmb.DefenderKind == "player" ? cmb.DefenderId : -1;
                 cv.Lunge(target, step * i, () =>
                 {
-                    // Impact: both cards flash, the target shakes. Deathtouch hits in sickly green-black.
+                    // Impact: every blocker flashes and shakes (gang blocks included), the attacker takes the hits back.
                     Color? tint = deathtouch ? new Color(0.35f, 0.75f, 0.3f) : (Color?)null;
-                    Sound.Play(Sfx.Impact, blocker != null ? 0.9f : 1f, deathtouch ? 0.8f : 1f);
-                    if (blocker != null && blocker != null && !blocker.IsExiting) { blocker.Hit(attackerView.Data?.Power ?? 1, tint); attackerView.Hit(blocker.Data?.Power ?? 0); }
+                    Sound.Play(Sfx.Impact, blockers.Count > 0 ? 0.9f : 1f, deathtouch ? 0.8f : 1f);
+                    if (blockers.Count > 0)
+                    {
+                        int atkPower = attackerView.Data?.Power ?? 1;
+                        foreach (var b in blockers) if (b != null && !b.IsExiting) b.Hit(atkPower, tint);
+                        attackerView.Hit(blocker.Data?.Power ?? 0);
+                    }
                     else if (defenderId >= 0 && panels.TryGetValue(defenderId, out var dp)) dp.Impact();
                 });
             }
@@ -632,13 +655,23 @@ namespace MTGUnited
         }
 
         /// <summary>Combat poses: attackers step toward the opponent (tilt.attack), blockers step forward to meet them.</summary>
-        Vector2 PoseFor(CardData d, Placement pl, GameState s)
+        Vector2 PoseFor(CardData d, Placement pl, GameState s) => PoseFor(d, pl.Size, s);
+
+        Vector2 PoseFor(CardData d, Vector2 size, GameState s)
         {
             if (d == null || d.Zone != "Battlefield") return Vector2.zero;
             float dir = d.Controller == s.Me ? 1f : -1f;   // my side faces up, opponents face down
-            if (d.Attacking) return new Vector2(0, dir * pl.Size.y * Motion.AttackForward);
-            if (s.IsBlocking(d.Id)) return new Vector2(0, dir * pl.Size.y * 0.15f);
+            if (d.Attacking) return new Vector2(0, dir * size.y * Motion.AttackForward);
+            if (IsBlockingNow(d.Id, s)) return new Vector2(0, dir * size.y * 0.15f);
             return Vector2.zero;
+        }
+
+        /// <summary>Blocking once Forge says so, or immediately for a pair the player just clicked.</summary>
+        bool IsBlockingNow(int cardId, GameState s)
+        {
+            if (s == null) return false;
+            if (s.IsBlocking(cardId)) return true;
+            return s.Phase == "COMBAT_DECLARE_BLOCKERS" && stagedBlocks.ContainsKey(cardId);
         }
 
         // =================================================================================== per frame
@@ -689,7 +722,8 @@ namespace MTGUnited
             DrawCombatLines();
 
             // Large preview after the hover delay; right-click opens the full-size inspector instead.
-            if (hoverCandidate != null && !previewShown && hoverCandidate.Data != null)
+            // While aiming a block the arrow is the feedback, so don't cover the board with a preview.
+            if (hoverCandidate != null && !previewShown && hoverCandidate.Data != null && aimedBlocker < 0)
             {
                 float wait = UiScale.PreviewDelay;   // Options > card preview delay (1.5 s by default)
                 if (Motion.Now - hoverSince >= wait)
@@ -717,27 +751,331 @@ namespace MTGUnited
             }
             if (s != null)
             {
+                bool declareBlocks = s.Phase == "COMBAT_DECLARE_BLOCKERS";
+                // One blocker -> attacker map, so committed and just-clicked blocks draw the same way.
+                var blocks = new Dictionary<int, int>();
+                foreach (var c in s.Combat)
+                    foreach (var b in c.Blockers) blocks[b] = c.Attacker;
+                if (declareBlocks)
+                    foreach (var kv in stagedBlocks) blocks[kv.Key] = kv.Value;
+
+                var perAttacker = new Dictionary<int, List<int>>();
+                foreach (var kv in blocks)
+                {
+                    if (!perAttacker.TryGetValue(kv.Value, out var list)) perAttacker[kv.Value] = list = new List<int>();
+                    list.Add(kv.Key);
+                }
+
                 foreach (var c in s.Combat)
                 {
                     if (!cards.TryGetValue(c.Attacker, out var atk)) continue;
                     Vector2 from = atk.CurrentPos;
-                    // Faint arrow from attacker to its defender.
                     Vector2 to = c.DefenderKind == "player" ? PanelCenter(c.DefenderId)
                         : cards.TryGetValue(c.DefenderId, out var pw) ? pw.CurrentPos : PanelCenter(c.DefenderId);
-                    if (c.Blockers.Count == 0)
+                    int count = perAttacker.TryGetValue(c.Attacker, out var blockers) ? blockers.Count : 0;
+
+                    if (count == 0)
                     {
+                        // Faint arrow from the unblocked attacker to its defender — the contrast to a blue block arrow.
                         Vector2 dirv = (to - from).normalized;
                         fx.AddLine(from + dirv * atk.TargetSize.y * 0.5f, to - dirv * 40f, new Color(0.89f, 0.34f, 0.18f, 0.35f), 4f, true);
+                        continue;
                     }
-                    // Solid connector from each blocker to the attacker.
-                    foreach (var b in c.Blockers)
+
+                    // Solid blocker -> attacker arrow, growing in over ~120 ms on the click that assigned it.
+                    for (int i = 0; i < count; i++)
                     {
-                        if (!cards.TryGetValue(b, out var blk)) continue;
-                        fx.AddLine(blk.CurrentPos, from, new Color(0.29f, 0.5f, 0.76f, 0.85f), 4f, false);
+                        int blockerId = blockers[i];
+                        if (!cards.TryGetValue(blockerId, out var blk)) continue;
+                        bool staged = stagedBlocks.TryGetValue(blockerId, out var stagedAttacker) && stagedAttacker == c.Attacker;
+                        float growth = staged && !Motion.ReduceMotion
+                            ? Mathf.Clamp01((Motion.Now - (stagedAt.TryGetValue(blockerId, out var t0) ? t0 : 0f)) / 0.12f)
+                            : 1f;
+                        var col = staged ? new Color(0.42f, 0.64f, 0.95f, 0.95f) : new Color(0.29f, 0.5f, 0.76f, 0.85f);
+                        fx.AddLine(blk.CurrentPos, from, col, staged ? 5f : 4f, true, growth);
+                        if (count > 1)
+                            fx.AddLabel(Vector2.Lerp(blk.CurrentPos, from, 0.28f) + new Vector2(0, 14), (i + 1).ToString(), col);
+                    }
+                }
+
+                // Aiming a block: an arrow from my creature to the attacker under the pointer. Green means the block is
+                // legal, red that it isn't, blue that the pointer is not over an attacker yet (the arrow follows the
+                // cursor, so the gesture reads like dragging the blocker onto its target).
+                if (declareBlocks && aimedBlocker >= 0
+                    && cards.TryGetValue(aimedBlocker, out var aimer) && aimer.Data != null)
+                {
+                    bool overAttacker = hoverCandidate != null && hoverCandidate.Data != null
+                                        && IsAttackerTarget(hoverCandidate.Data, s);
+                    Vector2 to = overAttacker ? hoverCandidate.CurrentPos : ToBoard(Input.mousePosition);
+                    bool legal = overAttacker && CanBlockNow(aimer.Data, hoverCandidate.Data, s);
+                    var aimCol = overAttacker
+                        ? (legal ? new Color(0.35f, 0.92f, 0.48f, 0.95f) : new Color(0.95f, 0.3f, 0.25f, 0.95f))
+                        : new Color(0.55f, 0.75f, 1f, 0.75f);
+                    Vector2 delta = to - aimer.CurrentPos;
+                    Vector2 dir = delta.sqrMagnitude > 1f ? delta.normalized : Vector2.up;
+                    Vector2 from = aimer.CurrentPos + dir * aimer.TargetSize.y * 0.42f;
+                    fx.AddLine(from, to, aimCol, overAttacker ? 6f : 4f, true);
+                }
+
+                // Hovering one of my untapped, non-attacking creatures during declare blockers: thin amber arrows to
+                // every attacker it could block, so the legal choices are visible before clicking.
+                if (declareBlocks && aimedBlocker < 0 && hoverCandidate != null && hoverCandidate.Data != null
+                    && hoverCandidate.Data.Zone == "Battlefield" && hoverCandidate.Data.Controller == s.Me
+                    && hoverCandidate.Data.IsCreature && !hoverCandidate.Data.Attacking && !hoverCandidate.Data.Tapped
+                    && !blocks.ContainsKey(hoverCandidate.CardId))
+                {
+                    var amber = new Color(1f, 0.78f, 0.32f, 0.38f);
+                    foreach (var c in s.Combat)
+                    {
+                        if (!DefendsMe(c, s)) continue;
+                        if (cards.TryGetValue(c.Attacker, out var atk) && CanBlock(hoverCandidate.Data, atk.Data))
+                            fx.AddLine(hoverCandidate.CurrentPos, atk.CurrentPos, amber, 2.5f, true);
                     }
                 }
             }
             fx.EndLines();
+        }
+
+        /// <summary>Cheap client-side evasion check for the candidate arrows; Forge still decides what is legal.</summary>
+        static bool CanBlock(CardData blocker, CardData attacker)
+        {
+            if (blocker == null || attacker == null) return true;
+            bool flying = attacker.HasKeyword("FLYING");
+            return !flying || blocker.HasKeyword("FLYING") || blocker.HasKeyword("REACH");
+        }
+
+        /// <summary>True when an attacker is coming at me (or my planeswalker/battle), so my creatures can block it.</summary>
+        static bool DefendsMe(CombatData c, GameState s)
+        {
+            if (c.DefenderKind == "player") return c.DefenderId == s.Me;
+            return s.CardsById.TryGetValue(c.DefenderId, out var def) && def.Controller == s.Me;
+        }
+
+        // ------------------------------------------------------------------ block declaration staging
+
+        void OnBoardClick(CardView cv)
+        {
+            if (TryBlockClick(cv)) return;
+            gc.ClickCard(cv.CardId);
+        }
+
+        void OnBoardRightClick(CardView cv)
+        {
+            if (aimedBlocker >= 0) { CancelAim(); return; }   // right-click drops the aim instead of opening the inspector
+            HidePreview();
+            gc.Inspector.Show(cv.Data);
+        }
+
+        /// <summary>
+        /// Blocker-first blocking: click one of my creatures to aim, then click the attacker it should block.
+        /// Returns true when the click was handled here and must not also go to Forge as-is.
+        /// </summary>
+        bool TryBlockClick(CardView cv)
+        {
+            var s = last;
+            if (s == null || cv == null || cv.Data == null) return false;
+            if (s.Phase != "COMBAT_DECLARE_BLOCKERS")
+            {
+                if (aimedBlocker >= 0) CancelAim();
+                return false;
+            }
+            var d = cv.Data;
+            if (d.Zone != "Battlefield") return false;
+            bool mine = d.Controller == s.Me;
+
+            if (mine && d.IsCreature && !d.Attacking)
+            {
+                if (aimedBlocker == d.Id) { CancelAim(); return true; }          // clicked the aiming creature again
+                if (TryGetBlockAssignment(d.Id, s, out int oldAttacker)) { UndoBlock(d.Id, oldAttacker); return true; }
+                if (d.Tapped || d.PhasedOut) { ShakeCard(d.Id); return true; }   // can't block: feedback, no Forge round-trip
+                StartAim(cv);
+                return true;
+            }
+
+            if (aimedBlocker >= 0)
+            {
+                // Resolve the aim on any battlefield click: a legal attacker blocks, everything else shakes.
+                if (IsAttackerTarget(d, s)) AttemptBlock(aimedBlocker, d.Id);
+                else ShakeCard(aimedBlocker);
+                return true;
+            }
+
+            // No aim: a lone attacker click is not useful to Forge (it needs the whole pair), and every other
+            // battlefield click has nothing to do during this step. Swallow them so a stray click doesn't flash.
+            return true;
+        }
+
+        void StartAim(CardView cv)
+        {
+            if (aimedBlocker >= 0 && aimedBlocker != cv.CardId) RefreshBlockCard(aimedBlocker);
+            aimedBlocker = cv.CardId;
+            HidePreview();
+            cv.Pulse();
+            RefreshBlockCard(cv.CardId);
+            Sound.Play(Sfx.UiClick, 0.55f);
+        }
+
+        /// <summary>Drops the aiming arrow; returns true when there was something to drop.</summary>
+        public bool CancelAiming()
+        {
+            if (aimedBlocker < 0) return false;
+            CancelAim();
+            return true;
+        }
+
+        void CancelAim()
+        {
+            int id = aimedBlocker;
+            aimedBlocker = -1;
+            if (id >= 0) RefreshBlockCard(id);
+            Sound.Play(Sfx.UiClick, 0.3f);
+        }
+
+        /// <summary>
+        /// Sends the pair in Forge's order (the attacker click sets InputBlock's currentAttacker, then the blocker click
+        /// assigns it) while the client keeps the blocker-first feel.
+        /// </summary>
+        void AttemptBlock(int blockerId, int attackerId)
+        {
+            var s = last;
+            if (s == null || !s.CardsById.TryGetValue(blockerId, out var blocker)
+                || !s.CardsById.TryGetValue(attackerId, out var attacker)) { CancelAim(); return; }
+
+            if (!CanBlockNow(blocker, attacker, s))
+            {
+                ShakeCard(blockerId);   // obvious illegality: no round-trip, the arrow flashes red and the creature shakes
+                return;
+            }
+
+            gc.ClickCard(attackerId);
+            gc.ClickCard(blockerId);
+
+            stagedBlocks[blockerId] = attackerId;
+            stagedAt[blockerId] = Motion.Now;
+            pendingBlocker = blockerId;
+            pendingAttacker = attackerId;
+            pendingAt = Motion.Now;
+            aimedBlocker = -1;
+
+            Sound.Play(Sfx.Block, 0.85f);
+            RefreshBlockCard(blockerId);
+            RefreshBlockCard(attackerId);
+        }
+
+        /// <summary>Clicking an assigned blocker again removes the block, in the same attacker-then-blocker order Forge uses.</summary>
+        void UndoBlock(int blockerId, int attackerId)
+        {
+            gc.ClickCard(attackerId);
+            gc.ClickCard(blockerId);
+            stagedBlocks.Remove(blockerId);
+            stagedAt.Remove(blockerId);
+            if (pendingBlocker == blockerId) { pendingBlocker = -1; pendingAttacker = -1; }
+            Sound.Play(Sfx.Untap, 0.55f);
+            RefreshBlockCard(blockerId);
+            RefreshBlockCard(attackerId);
+        }
+
+        bool TryGetBlockAssignment(int blockerId, GameState s, out int attackerId)
+        {
+            foreach (var c in s.Combat)
+                if (c.Blockers.Contains(blockerId)) { attackerId = c.Attacker; return true; }
+            if (s.Phase == "COMBAT_DECLARE_BLOCKERS" && stagedBlocks.TryGetValue(blockerId, out attackerId)) return true;
+            attackerId = -1;
+            return false;
+        }
+
+        static bool IsAttackerTarget(CardData d, GameState s) =>
+            d != null && d.Zone == "Battlefield" && d.Attacking && d.Controller != s.Me;
+
+        /// <summary>
+        /// Client-side pre-check for the obvious illegal blocks (evasion, tapped, wrong zone or controller). Anything
+        /// more exotic is left to Forge, whose rejection still flashes and shakes the blocker.
+        /// </summary>
+        static bool CanBlockNow(CardData blocker, CardData attacker, GameState s)
+        {
+            if (blocker == null || attacker == null || s == null) return false;
+            if (blocker.Zone != "Battlefield" || attacker.Zone != "Battlefield") return false;
+            if (!blocker.IsCreature || blocker.Controller != s.Me) return false;
+            if (blocker.Tapped || blocker.Attacking || blocker.PhasedOut) return false;
+            if (!attacker.Attacking || attacker.PhasedOut) return false;
+            var c = s.CombatFor(attacker.Id);
+            if (c == null || !DefendsMe(c, s)) return false;
+            return CanBlock(blocker, attacker);   // flying / reach
+        }
+
+        void ShakeCard(int id)
+        {
+            if (cards.TryGetValue(id, out var cv)) cv.Reject();
+        }
+
+        void RefreshBlockCard(int id)
+        {
+            if (last == null || !cards.TryGetValue(id, out var cv) || cv.Data == null) return;
+            cv.SetPose(PoseFor(cv.Data, cv.TargetSize, last), Motion.Short);
+            cv.SetHighlight(HighlightFor(cv.Data, last), false);
+            cv.SetTag(TagFor(cv.Data, last, out var color), color);
+        }
+
+        /// <summary>Drops staged pairs Forge didn't keep, or that no longer make sense in the current step.</summary>
+        void SyncBlockStaging(GameState s)
+        {
+            if (s == null || s.Phase != "COMBAT_DECLARE_BLOCKERS")
+            {
+                stagedBlocks.Clear();
+                stagedAt.Clear();
+                aimedBlocker = -1;
+                pendingBlocker = -1; pendingAttacker = -1;
+                return;
+            }
+
+            // Aiming only makes sense while the creature is still mine and on the battlefield.
+            if (aimedBlocker >= 0
+                && (!s.CardsById.TryGetValue(aimedBlocker, out var aim) || aim.Zone != "Battlefield"
+                    || aim.Controller != s.Me || !aim.IsCreature))
+                aimedBlocker = -1;
+
+            // A pending pair Forge has already confirmed no longer needs the safety window.
+            if (pendingBlocker >= 0
+                && s.CombatFor(pendingAttacker)?.Blockers.Contains(pendingBlocker) == true)
+            { pendingBlocker = -1; pendingAttacker = -1; }
+            if (pendingBlocker >= 0 && Motion.Now - pendingAt > PendingBlockTimeout)
+            { pendingBlocker = -1; pendingAttacker = -1; }
+
+            foreach (var id in stagedBlocks.Keys.ToList())
+            {
+                int attacker = stagedBlocks[id];
+                bool committed = s.CombatFor(attacker)?.Blockers.Contains(id) == true;
+                bool valid = s.CardsById.TryGetValue(id, out var b) && b.Zone == "Battlefield"
+                            && s.CombatFor(attacker) != null
+                            && Motion.Now - (stagedAt.TryGetValue(id, out var t) ? t : 0f) <= BlockStageTimeout;
+                if (committed || !valid)
+                {
+                    stagedBlocks.Remove(id);
+                    stagedAt.Remove(id);
+                }
+            }
+        }
+
+        /// <summary>Cancel / undo: forget the pairs, the aim and the pair waiting for Forge.</summary>
+        public void ClearBlockStaging()
+        {
+            stagedBlocks.Clear();
+            stagedAt.Clear();
+            aimedBlocker = -1;
+            pendingBlocker = -1; pendingAttacker = -1;
+        }
+
+        /// <summary>Forge rejected a click: retract the optimistic pair and shake the blocker that tried to block.</summary>
+        public void OnActionRejected()
+        {
+            // Only a pair this client just sent is retracted. Forge also flashes for unrelated clicks, and those must
+            // not knock down an optimistic arrow that is still waiting for confirmation.
+            if (pendingBlocker < 0) return;
+            int shakeId = pendingBlocker;
+            stagedBlocks.Remove(pendingBlocker);
+            stagedAt.Remove(pendingBlocker);
+            pendingBlocker = -1; pendingAttacker = -1;
+            ShakeCard(shakeId);
         }
 
         // =================================================================================== hover
@@ -991,10 +1329,11 @@ namespace MTGUnited
         {
             if (c == null) return Highlight.None;
             var p = s.Prompt;
+            // Blocking outranks "selected/eligible" during combat: the shield is the answer to "is this creature blocking?".
+            if (c.Attacking) return Highlight.Attacking;
+            if (IsBlockingNow(c.Id, s)) return Highlight.Blocking;
             if (p.ChosenCards.Contains(c.Id)) return Highlight.Selected;
             if (p.SelectableCards.Contains(c.Id) && p.SelMax > 0) return Highlight.Eligible;
-            if (c.Attacking) return Highlight.Attacking;
-            if (s.IsBlocking(c.Id)) return Highlight.Blocking;
             if (p.ActionableCards.Contains(c.Id) || p.SelectableCards.Contains(c.Id)) return Highlight.Playable;
             return Highlight.None;
         }
@@ -1003,8 +1342,46 @@ namespace MTGUnited
         {
             color = new Color(0.25f, 0.25f, 0.3f, 0.9f);
             if (c == null || c.Zone != "Battlefield") return null;
+
+            // Declare blockers: the whole point is to see who is blocking and who still could. The arrows are the
+            // primary signal; this chip is the readable backup when arrows overlap.
+            if (s.Phase == "COMBAT_DECLARE_BLOCKERS")
+            {
+                bool mine = c.Controller == s.Me;
+                if (mine && c.IsCreature)
+                {
+                    if (IsBlockingNow(c.Id, s)) { color = BlockTagColor; return "BLOCKING"; }
+                    if (c.Id == aimedBlocker) { color = AimTagColor; return "AIMING"; }
+                    if (s.Prompt.SelectableCards.Contains(c.Id) || s.Prompt.ActionableCards.Contains(c.Id))
+                    { color = CanBlockTagColor; return "CAN BLOCK"; }
+                    if (!c.Attacking) { color = new Color(0.22f, 0.22f, 0.27f, 0.85f); return "NOT BLOCKING"; }
+                }
+                else if (!mine && c.Attacking)
+                {
+                    int n = BlockersOn(c.Id, s);
+                    if (n > 0) { color = BlockTagColor; return n == 1 ? "BLOCKED" : n + " BLOCKERS"; }
+                }
+            }
+
             if (c.Sick && c.IsCreature && c.Controller == s.Me && s.ActivePlayer == s.Me && !c.Attacking) return "Summoning sick";
             return null;
+        }
+
+        static readonly Color BlockTagColor = new Color(0.29f, 0.5f, 0.8f, 0.95f);
+        static readonly Color CanBlockTagColor = new Color(0.78f, 0.56f, 0.16f, 0.95f);
+        static readonly Color AimTagColor = new Color(0.42f, 0.64f, 0.95f, 0.95f);
+
+        /// <summary>Blockers committed by Forge plus the pair the player has clicked but not confirmed yet.</summary>
+        int BlockersOn(int attackerId, GameState s)
+        {
+            var c = s.CombatFor(attackerId);
+            int n = c?.Blockers.Count ?? 0;
+            if (s.Phase == "COMBAT_DECLARE_BLOCKERS")
+            {
+                foreach (var kv in stagedBlocks)
+                    if (kv.Value == attackerId && (c == null || !c.Blockers.Contains(kv.Key))) n++;
+            }
+            return n;
         }
 
         PlayerPanel PanelFor(PlayerData p, bool isMe)

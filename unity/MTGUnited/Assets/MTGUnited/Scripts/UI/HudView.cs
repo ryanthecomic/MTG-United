@@ -33,7 +33,8 @@ namespace MTGUnited
         {
             ("UNTAP", "Untap"), ("UPKEEP", "Upkeep"), ("DRAW", "Draw"), ("MAIN1", "Main 1"),
             ("COMBAT_BEGIN", "Combat"), ("COMBAT_DECLARE_ATTACKERS", "Attack"), ("COMBAT_DECLARE_BLOCKERS", "Block"),
-            ("COMBAT_DAMAGE", "Damage"), ("COMBAT_END", "End cbt"), ("MAIN2", "Main 2"), ("END_OF_TURN", "End"), ("CLEANUP", "Cleanup"),
+            ("COMBAT_FIRST_STRIKE_DAMAGE", "First"), ("COMBAT_DAMAGE", "Damage"),
+            ("COMBAT_END", "End cbt"), ("MAIN2", "Main 2"), ("END_OF_TURN", "End"), ("CLEANUP", "Cleanup"),
         };
 
         public static HudView Create(RectTransform board, GameController gc)

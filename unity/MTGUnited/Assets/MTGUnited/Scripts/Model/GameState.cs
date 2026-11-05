@@ -270,6 +270,8 @@ namespace MTGUnited
         public string DefenderKind;
         public int DefenderId = -1;
         public List<int> Blockers = new List<int>();
+        /// <summary>True once at least one blocker is committed (mirrors the bridge's `blocked` field).</summary>
+        public bool Blocked;
 
         public static CombatData From(Dictionary<string, object> d)
         {
@@ -280,6 +282,7 @@ namespace MTGUnited
                 DefenderKind = def?.Str("kind"),
                 DefenderId = def?.Int("id", -1) ?? -1,
                 Blockers = d.IntList("blockers"),
+                Blocked = d.Bool("blocked"),
             };
         }
     }

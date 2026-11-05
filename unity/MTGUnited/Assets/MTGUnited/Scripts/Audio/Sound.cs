@@ -7,7 +7,7 @@ namespace MTGUnited
     public enum Sfx
     {
         UiClick, Draw, LandPlay, Cast, Resolve, Ability, Tap, Untap, Die, Exile, Discard, ToLibrary, Token,
-        Counter, Attack, Impact, LifeLoss, LifeGain, Priority, TurnStart, Victory, Defeat, Popup, DrawMany, CardSlide, CardPlace,
+        Counter, Attack, Block, Impact, LifeLoss, LifeGain, Priority, TurnStart, Victory, Defeat, Popup, DrawMany, CardSlide, CardPlace,
     }
 
     /// <summary>
@@ -211,6 +211,11 @@ namespace MTGUnited
                 case Sfx.Attack: return Clip(s, 0.4f, (t, i) =>
                     Tone(t, Lerp(95, 50, t / 0.4f), 0.28f) * 0.9f + LowPass(Noise(), 0.15f) * Env(t, 0.002f, 0.06f) * 0.5f
                     + (t > 0.13f ? Tone(t - 0.13f, Lerp(90, 55, (t - 0.13f) / 0.27f), 0.2f) * 0.6f : 0f));
+                // Block assigned: a soft metallic catch, lower than the attack swing.
+                case Sfx.Block: return Clip(s, 0.18f, (t, i) =>
+                    LowPass(Noise(), 0.07f) * Env(t, 0.001f, 0.02f) * 0.5f
+                    + Tone(t, Lerp(520, 340, t / 0.18f), 0.09f) * 0.45f
+                    + Tone(t, Lerp(1040, 780, t / 0.18f), 0.06f) * 0.15f);
                 case Sfx.Impact: return Clip(s, 0.24f, (t, i) =>
                     Noise() * Env(t, 0.001f, 0.05f) * 0.6f + Tone(t, Lerp(160, 70, t / 0.24f), 0.15f) * 0.8f);
                 case Sfx.LifeLoss: return Clip(s, 0.28f, (t, i) => Tone(t, Lerp(220, 110, t / 0.28f), 0.2f) * 0.5f + LowPass(Noise(), 0.1f) * Env(t, 0.002f, 0.05f) * 0.3f);
