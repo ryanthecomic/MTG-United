@@ -127,6 +127,9 @@ The README pictures in `docs/images/` use the same art; `tools/readme-images/mak
 
 ## Licensing
 
+This repository is licensed under the [GNU General Public License v3.0](LICENSE) (or, at your
+option, any later version).
+
 Forge is licensed under GPL-3.0. The bridge links against Forge, so if you **distribute** the
 bridge, it must be under a GPL-3.0-compatible license. Keeping this repository GPL-3.0 is the
 simplest way to do that. Private use has no restrictions. Card images belong to Wizards of the

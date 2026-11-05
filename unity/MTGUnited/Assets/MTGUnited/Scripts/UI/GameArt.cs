@@ -15,14 +15,16 @@ namespace MTGUnited
         static Texture2D tableBg, cardBack, cursor;
         static VideoClip menuVideo;
         static Font titleFont;
-        const string PreferredTitleFont = "NightGeorgia (DEMO)";
+        // Title font, tried in order by file name (without extension); the first one found in
+        // Resources/Visuals/Fonts wins. Beleren is the Magic-style display face behind every heading.
+        static readonly string[] PreferredTitleFonts = { "beleren-bold_P1.01", "NightGeorgia (DEMO)" };
 
         public static Texture2D TableBackground { get { Load(); return tableBg; } }
         public static Texture2D CardBack { get { Load(); return cardBack; } }
         public static Texture2D CursorTexture { get { Load(); return cursor; } }
         public static VideoClip MenuVideo { get { Load(); return menuVideo; } }
 
-        /// <summary>First font file (.ttf/.otf) found in Resources/Visuals/Fonts, used for titles. Null if none.</summary>
+        /// <summary>Title font (Beleren when installed), used by every <see cref="Titled"/> label. Null if none.</summary>
         public static Font TitleFont { get { Load(); return titleFont; } }
 
         /// <summary>Switches a label to the title font when one is installed; otherwise leaves it unchanged.</summary>
@@ -45,8 +47,12 @@ namespace MTGUnited
             menuVideo = Resources.Load<VideoClip>(Root + "Videos/MenuLoopVP8");
             if (menuVideo == null) menuVideo = Resources.Load<VideoClip>(Root + "Videos/MenuLoop");
             if (menuVideo == null) menuVideo = Resources.Load<VideoClip>(Root + "Videos/TableBG");
-            // Preferred title font by file name (without extension); otherwise the first font in the folder.
-            titleFont = Resources.Load<Font>(Root + "Fonts/" + PreferredTitleFont);
+            // Preferred title fonts in order; otherwise the first font in the folder.
+            foreach (var name in PreferredTitleFonts)
+            {
+                titleFont = Resources.Load<Font>(Root + "Fonts/" + name);
+                if (titleFont != null) break;
+            }
             if (titleFont == null)
             {
                 var fonts = Resources.LoadAll<Font>(Root + "Fonts");
